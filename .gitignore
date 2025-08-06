@@ -1,0 +1,11 @@
+*
+!.envrc
+!.gitignore
+!flake.nix
+!flake.lock
+
+# Rust
+!Cargo.toml
+!Cargo.lock
+!src
+!src/**
