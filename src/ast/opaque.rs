@@ -8,13 +8,13 @@ use datafusion::{
     common::{DFSchema, DFSchemaRef},
 };
 
-// Global counter for generating unique field names
-static FIELD_COUNTER: AtomicUsize = AtomicUsize::new(0);
+// Global counter for generating unique identifiers
+static ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-/// Generate a globally unique field name
-pub fn generate_unique_field_name() -> String {
-    let field_id = FIELD_COUNTER.fetch_add(1, Ordering::SeqCst);
-    format!("__field_{}", field_id)
+/// Generate a globally unique identifier with a descriptive prefix
+pub fn generate_unique_id(prefix: &str) -> String {
+    let id = ID_COUNTER.fetch_add(1, Ordering::SeqCst);
+    format!("__{prefix}_{id}")
 }
 
 #[derive(Debug, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -57,7 +57,7 @@ impl AbstractSchema {
         let fields = types
             .into_iter()
             .map(|dtype| AbstractField {
-                name: generate_unique_field_name(),
+                name: generate_unique_id("field"),
                 data_type: dtype,
                 nullable: true,
             })

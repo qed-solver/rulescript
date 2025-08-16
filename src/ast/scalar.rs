@@ -2,14 +2,16 @@ use std::sync::Arc;
 
 use datafusion::{
     arrow::datatypes::DataType,
+    common::Column,
     error::{DataFusionError, Result},
     logical_expr::{
         ColumnarValue, Expr, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
         expr::ScalarFunction,
     },
+    scalar::ScalarValue,
 };
 
-use crate::ast::opaque::{AbstractDataType, generate_unique_field_name};
+use crate::ast::opaque::{AbstractDataType, generate_unique_id};
 
 /// Abstract function that can take a configurable number of inputs
 /// This integrates with DataFusion's scalar function system
@@ -43,11 +45,11 @@ impl AbstractFunction {
     pub fn with_input_count(name: String, input_count: usize) -> Self {
         let input_types = (0..input_count)
             .map(|_| AbstractDataType {
-                id: generate_unique_field_name(),
+                id: generate_unique_id("input"),
             })
             .collect();
         let return_type = AbstractDataType {
-            id: generate_unique_field_name(),
+            id: generate_unique_id("return"),
         };
 
         Self::new(name, input_types, return_type)
@@ -135,54 +137,14 @@ impl ScalarPattern {
     /// Create a pattern for a column reference
     pub fn column(name: String) -> Self {
         Self {
-            expr: Expr::Column(datafusion::common::Column::from_name(name)),
+            expr: Expr::Column(Column::from_name(name)),
         }
     }
 
     /// Create a pattern for a literal value
-    pub fn literal(value: datafusion::scalar::ScalarValue) -> Self {
+    pub fn literal(value: ScalarValue) -> Self {
         Self {
             expr: Expr::Literal(value, None),
-        }
-    }
-
-    /// Extract AbstractFunction from this pattern if it represents one
-    pub fn as_abstract_function(
-        &self,
-    ) -> Option<(String, &[AbstractDataType], &AbstractDataType, &[Expr])> {
-        if let Expr::ScalarFunction(func) = &self.expr {
-            if let Some(abs_func) = func
-                .func
-                .inner()
-                .as_any()
-                .downcast_ref::<AbstractFunction>()
-            {
-                return Some((
-                    abs_func.name.clone(),
-                    &abs_func.input_types,
-                    &abs_func.return_type,
-                    &func.args,
-                ));
-            }
-        }
-        None
-    }
-
-    /// Check if this pattern represents a column reference
-    pub fn as_column(&self) -> Option<&str> {
-        if let Expr::Column(col) = &self.expr {
-            Some(&col.name)
-        } else {
-            None
-        }
-    }
-
-    /// Check if this pattern represents a literal
-    pub fn as_literal(&self) -> Option<&datafusion::scalar::ScalarValue> {
-        if let Expr::Literal(val, _) = &self.expr {
-            Some(val)
-        } else {
-            None
         }
     }
 }

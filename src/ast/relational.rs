@@ -2,7 +2,7 @@ use std::{cmp::Ordering, fmt, sync::Arc};
 
 use datafusion::{
     common::DFSchemaRef,
-    error::Result,
+    error::{DataFusionError, Result},
     logical_expr::{Extension, LogicalPlan, UserDefinedLogicalNodeCore},
     prelude::Expr,
 };
@@ -90,7 +90,7 @@ impl UserDefinedLogicalNodeCore for SourcePattern {
 
     fn with_exprs_and_inputs(&self, _exprs: Vec<Expr>, _inputs: Vec<LogicalPlan>) -> Result<Self> {
         // Source pattern should not be modified by optimizer
-        Err(datafusion::error::DataFusionError::Plan(
+        Err(DataFusionError::Plan(
             "SourcePattern should not be modified by optimizer".to_string(),
         ))
     }
@@ -112,14 +112,5 @@ impl RelationalPattern {
         });
 
         Self { plan }
-    }
-
-    // Extract our custom SourcePattern if this pattern represents one
-    pub fn as_source_pattern(&self) -> Option<&SourcePattern> {
-        if let LogicalPlan::Extension(ext) = &self.plan {
-            ext.node.as_any().downcast_ref::<SourcePattern>()
-        } else {
-            None
-        }
     }
 }
