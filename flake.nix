@@ -4,7 +4,6 @@
     flake-utils.url = "github:numtide/flake-utils";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     nixpkgs-python.url = "github:cachix/nixpkgs-python";
-    nix-ai-tools.url = "github:numtide/nix-ai-tools";
   };
 
   outputs = inputs @ {
@@ -12,7 +11,6 @@
     devenv,
     flake-utils,
     nixpkgs,
-    nix-ai-tools,
     ...
   }:
     flake-utils.lib.eachDefaultSystem (system: let
@@ -20,7 +18,6 @@
         inherit system;
         config.allowUnfree = true;
       };
-      ai-tools = nix-ai-tools.packages.${system};
     in {
       packages = {
         devenv-up = self.devShells.${system}.default.config.procfileScript;
@@ -36,9 +33,8 @@
               nix.enable = true;
               rust.enable = true;
             };
-            packages = with ai-tools;
-            with pkgs; [
-              crush
+            packages = with pkgs; [
+              claude-code
               cvc5
             ];
           }
