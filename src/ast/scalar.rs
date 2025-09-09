@@ -5,7 +5,7 @@ use datafusion::{
     common::Column,
     error::{DataFusionError, Result},
     logical_expr::{
-        ColumnarValue, Expr, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
+        ColumnarValue, Expr, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
         expr::ScalarFunction,
     },
     scalar::ScalarValue,
@@ -97,7 +97,7 @@ impl ScalarUDFImpl for AbstractFunction {
         Ok(self.return_type.to_datafusion_type())
     }
 
-    fn invoke_with_args(&self, _args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+    fn invoke(&self, _args: &[ColumnarValue]) -> Result<ColumnarValue> {
         // Abstract functions shouldn't be executed - they're for pattern matching
         Err(DataFusionError::NotImplemented(format!(
             "AbstractFunction '{}' is for pattern matching, not execution",
@@ -144,7 +144,7 @@ impl ScalarPattern {
     /// Create a pattern for a literal value
     pub fn literal(value: ScalarValue) -> Self {
         Self {
-            expr: Expr::Literal(value, None),
+            expr: Expr::Literal(value),
         }
     }
 }

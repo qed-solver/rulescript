@@ -34,8 +34,8 @@
               rust.enable = true;
             };
             packages = with pkgs; [
-              claude-code
               cvc5
+              opencode
             ];
           }
         ];
