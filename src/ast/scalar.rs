@@ -11,23 +11,23 @@ use datafusion::{
     scalar::ScalarValue,
 };
 
-use crate::ast::opaque::{AbstractDataType, generate_unique_id};
+use crate::ast::opaque::{Type, generate_unique_id};
 
-/// Abstract function that can take a configurable number of inputs
+/// Function that can take a configurable number of inputs
 /// This integrates with DataFusion's scalar function system
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct AbstractFunction {
+pub struct Function {
     pub name: String,
-    pub input_types: Vec<AbstractDataType>,
-    pub return_type: AbstractDataType,
+    pub input_types: Vec<Type>,
+    pub return_type: Type,
     signature: Signature,
 }
 
-impl AbstractFunction {
+impl Function {
     pub fn new(
         name: String,
-        input_types: Vec<AbstractDataType>,
-        return_type: AbstractDataType,
+        input_types: Vec<Type>,
+        return_type: Type,
     ) -> Self {
         // Create signature based on input types - all abstract types map to Binary
         let datafusion_types = vec![DataType::Binary; input_types.len()];
@@ -44,11 +44,11 @@ impl AbstractFunction {
     /// Convenience constructor for functions with a specific number of inputs (all same type)
     pub fn with_input_count(name: String, input_count: usize) -> Self {
         let input_types = (0..input_count)
-            .map(|_| AbstractDataType {
+            .map(|_| Type {
                 id: generate_unique_id("input"),
             })
             .collect();
-        let return_type = AbstractDataType {
+        let return_type = Type {
             id: generate_unique_id("return"),
         };
 
@@ -64,7 +64,7 @@ impl AbstractFunction {
     pub fn call(&self, args: Vec<Expr>) -> Expr {
         if args.len() != self.input_types.len() {
             panic!(
-                "AbstractFunction '{}' expects {} arguments, got {}",
+                "Function '{}' expects {} arguments, got {}",
                 self.name,
                 self.input_types.len(),
                 args.len()
@@ -79,7 +79,7 @@ impl AbstractFunction {
     }
 }
 
-impl ScalarUDFImpl for AbstractFunction {
+impl ScalarUDFImpl for Function {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -98,9 +98,9 @@ impl ScalarUDFImpl for AbstractFunction {
     }
 
     fn invoke(&self, _args: &[ColumnarValue]) -> Result<ColumnarValue> {
-        // Abstract functions shouldn't be executed - they're for pattern matching
+        // Functions shouldn't be executed - they're for pattern matching
         Err(DataFusionError::NotImplemented(format!(
-            "AbstractFunction '{}' is for pattern matching, not execution",
+            "Function '{}' is for pattern matching, not execution",
             self.name
         )))
     }
@@ -108,29 +108,29 @@ impl ScalarUDFImpl for AbstractFunction {
 
 /// Scalar pattern that wraps DataFusion's Expr
 #[derive(Debug, Clone)]
-pub struct ScalarPattern {
+pub struct Scalar {
     pub expr: Expr,
 }
 
-impl ScalarPattern {
-    /// Create a pattern for an abstract function call with specific types
-    pub fn abstract_function(
+impl Scalar {
+    /// Create a pattern for a function call with specific types
+    pub fn function(
         name: String,
-        input_types: Vec<AbstractDataType>,
-        return_type: AbstractDataType,
+        input_types: Vec<Type>,
+        return_type: Type,
         args: Vec<Expr>,
     ) -> Self {
-        let abs_func = AbstractFunction::new(name, input_types, return_type);
+        let func = Function::new(name, input_types, return_type);
         Self {
-            expr: abs_func.call(args),
+            expr: func.call(args),
         }
     }
 
-    /// Create a pattern for an abstract function call with input count (generates abstract types)
-    pub fn abstract_function_with_count(name: String, input_count: usize, args: Vec<Expr>) -> Self {
-        let abs_func = AbstractFunction::with_input_count(name, input_count);
+    /// Create a pattern for a function call with input count (generates types)
+    pub fn function_with_count(name: String, input_count: usize, args: Vec<Expr>) -> Self {
+        let func = Function::with_input_count(name, input_count);
         Self {
-            expr: abs_func.call(args),
+            expr: func.call(args),
         }
     }
 

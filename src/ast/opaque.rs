@@ -4,7 +4,7 @@ use std::sync::{
 };
 
 use datafusion::{
-    arrow::datatypes::{DataType, Field, Schema},
+    arrow::datatypes::{DataType, Field as ArrowField, Schema as ArrowSchema},
     common::{DFSchema, DFSchemaRef},
 };
 
@@ -18,11 +18,11 @@ pub fn generate_unique_id(prefix: &str) -> String {
 }
 
 #[derive(Debug, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct AbstractDataType {
+pub struct Type {
     pub id: String,
 }
 
-impl AbstractDataType {
+impl Type {
     // Convert abstract type to Binary for DataFusion integration
     pub fn to_datafusion_type(&self) -> DataType {
         DataType::Binary
@@ -30,16 +30,16 @@ impl AbstractDataType {
 }
 
 #[derive(Debug, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct AbstractField {
+pub struct Field {
     pub name: String,
-    pub data_type: AbstractDataType,
+    pub data_type: Type,
     pub nullable: bool,
 }
 
-impl AbstractField {
+impl Field {
     // Convert abstract field to Arrow field for DataFusion integration
-    pub fn to_arrow_field(&self) -> Field {
-        Field::new(
+    pub fn to_arrow_field(&self) -> ArrowField {
+        ArrowField::new(
             &self.name,
             self.data_type.to_datafusion_type(),
             self.nullable,
@@ -48,15 +48,15 @@ impl AbstractField {
 }
 
 #[derive(Debug, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct AbstractSchema {
-    pub fields: Vec<AbstractField>,
+pub struct Schema {
+    pub fields: Vec<Field>,
 }
 
-impl AbstractSchema {
-    pub fn from_abstract_types(types: Vec<AbstractDataType>) -> Self {
+impl Schema {
+    pub fn from_types(types: Vec<Type>) -> Self {
         let fields = types
             .into_iter()
-            .map(|dtype| AbstractField {
+            .map(|dtype| Field {
                 name: generate_unique_id("field"),
                 data_type: dtype,
                 nullable: true,
@@ -71,9 +71,9 @@ impl AbstractSchema {
 
     // Convert abstract schema to DataFusion schema
     pub fn to_datafusion_schema(&self) -> DFSchemaRef {
-        let arrow_fields: Vec<Field> = self.fields.iter().map(|f| f.to_arrow_field()).collect();
+        let arrow_fields: Vec<ArrowField> = self.fields.iter().map(|f| f.to_arrow_field()).collect();
 
-        let arrow_schema = Schema::new(arrow_fields);
+        let arrow_schema = ArrowSchema::new(arrow_fields);
         Arc::new(
             DFSchema::try_from(arrow_schema)
                 .expect("Failed to create DFSchema from abstract schema"),

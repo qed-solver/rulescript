@@ -3,6 +3,7 @@
 !.gitignore
 !flake.nix
 !flake.lock
+!README.md
 
 # Rust
 !Cargo.toml

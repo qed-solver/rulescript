@@ -7,63 +7,63 @@ use datafusion::{
     prelude::Expr,
 };
 
-use crate::ast::opaque::AbstractSchema;
+use crate::ast::opaque::Schema;
 
 // Source pattern that can be used as a variant in DataFusion's LogicalPlan
 #[derive(Debug, Clone)]
-pub struct SourcePattern {
+pub struct Source {
     pub table_name: String,
-    pub abstract_schema: AbstractSchema,
+    pub schema: Schema,
     // Cache the converted DataFusion schema
     df_schema: DFSchemaRef,
 }
 
-impl SourcePattern {
-    pub fn new(table_name: String, abstract_schema: AbstractSchema) -> Self {
-        let df_schema = abstract_schema.to_datafusion_schema();
+impl Source {
+    pub fn new(table_name: String, schema: Schema) -> Self {
+        let df_schema = schema.to_datafusion_schema();
         Self {
             table_name,
-            abstract_schema,
+            schema,
             df_schema,
         }
     }
 }
 
 // Manually implement required traits for UserDefinedLogicalNodeCore
-impl PartialEq for SourcePattern {
+impl PartialEq for Source {
     fn eq(&self, other: &Self) -> bool {
-        self.table_name == other.table_name && self.abstract_schema == other.abstract_schema
+        self.table_name == other.table_name && self.schema == other.schema
     }
 }
 
-impl Eq for SourcePattern {}
+impl Eq for Source {}
 
-impl PartialOrd for SourcePattern {
+impl PartialOrd for Source {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for SourcePattern {
+impl Ord for Source {
     fn cmp(&self, other: &Self) -> Ordering {
         match self.table_name.cmp(&other.table_name) {
-            Ordering::Equal => self.abstract_schema.cmp(&other.abstract_schema),
+            Ordering::Equal => self.schema.cmp(&other.schema),
             ord => ord,
         }
     }
 }
 
-impl std::hash::Hash for SourcePattern {
+impl std::hash::Hash for Source {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.table_name.hash(state);
-        self.abstract_schema.hash(state);
-        // Don't hash df_schema as it's derived from abstract_schema
+        self.schema.hash(state);
+        // Don't hash df_schema as it's derived from schema
     }
 }
 
-impl UserDefinedLogicalNodeCore for SourcePattern {
+impl UserDefinedLogicalNodeCore for Source {
     fn name(&self) -> &str {
-        "SourcePattern"
+        "Source"
     }
 
     fn inputs(&self) -> Vec<&LogicalPlan> {
@@ -82,33 +82,33 @@ impl UserDefinedLogicalNodeCore for SourcePattern {
     fn fmt_for_explain(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "SourcePattern: {} [fields: {}]",
+            "Source: {} [fields: {}]",
             self.table_name,
-            self.abstract_schema.field_count()
+            self.schema.field_count()
         )
     }
 
     fn with_exprs_and_inputs(&self, _exprs: Vec<Expr>, _inputs: Vec<LogicalPlan>) -> Result<Self> {
         // Source pattern should not be modified by optimizer
         Err(DataFusionError::Plan(
-            "SourcePattern should not be modified by optimizer".to_string(),
+            "Source should not be modified by optimizer".to_string(),
         ))
     }
 }
 
 // A relational pattern is just a wrapper around a DataFusion LogicalPlan
 #[derive(Debug, Clone)]
-pub struct RelationalPattern {
+pub struct Rel {
     pub plan: LogicalPlan,
 }
 
-impl RelationalPattern {
-    // Create a source pattern using our custom SourcePattern node
-    pub fn source(table_name: String, abstract_schema: AbstractSchema) -> Self {
-        let source_pattern = SourcePattern::new(table_name, abstract_schema);
+impl Rel {
+    // Create a source pattern using our custom Source node
+    pub fn source(table_name: String, schema: Schema) -> Self {
+        let source = Source::new(table_name, schema);
 
         let plan = LogicalPlan::Extension(Extension {
-            node: Arc::new(source_pattern),
+            node: Arc::new(source),
         });
 
         Self { plan }

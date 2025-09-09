@@ -1,7 +1,10 @@
 pub mod ast;
+pub mod rule;
 
 pub use ast::{
-    opaque::{AbstractDataType, AbstractField, AbstractSchema},
-    relational::{RelationalPattern, SourcePattern},
-    scalar::{AbstractFunction, ScalarPattern},
+    opaque::{Type, Field, Schema},
+    relational::{Rel, Source},
+    scalar::{Function, Scalar},
 };
+
+pub use rule::RewriteRule;
