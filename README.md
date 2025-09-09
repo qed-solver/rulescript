@@ -34,8 +34,9 @@ RuleScript is a domain-specific language (DSL) for expressing database query rew
 #### Rule Structure
 ```rust
 trait RewriteRule {
-    fn pattern() -> Rel;      // What to match
-    fn replacement() -> Rel;  // How to transform
+    fn pattern(&self) -> Rel;      // What to match
+    fn replacement(&self) -> Rel;  // How to transform
+    fn name(&self) -> &str;        // Optional rule name for debugging
 }
 ```
 
@@ -54,48 +55,66 @@ source.filter(inner).filter(outer) → source.filter(inner AND outer)
 
 ### ✅ Implemented (Rust)
 - Core AST types: `Type`, `Field`, `Schema`, `Function`, `Rel`, `Scalar`  
-- DataFusion integration via custom `Source` nodes
-- `RewriteRule` trait interface
-- Abstract type system with unique IDs
+- DataFusion integration via custom `Source` nodes using `UserDefinedLogicalNodeCore`
+- `RewriteRule` trait interface with instance methods
+- Abstract type system with global unique ID generation
+- Working FilterMerge example demonstrating complete rule construction
+- Abstract functions that integrate with DataFusion's UDF system for pattern matching
 
-### 🚧 Architecture Principles
+### ✅ Architecture Principles
 
-**Minimal API Surface**: RuleScript exposes DataFusion's native APIs through thin wrappers with public fields. Users can directly construct rules using DataFusion's existing constructors (e.g., `LogicalPlan::Filter`, `Expr::BinaryExpr`) without needing custom builders.
+**Minimal API Surface**: RuleScript exposes DataFusion's native APIs through thin wrappers with public fields. Users construct rules using DataFusion's `LogicalPlanBuilder` and existing expression constructors.
 
-**Example FilterMerge Construction**:
+**Working FilterMerge Example** (see `examples/filter_merge.rs`):
 ```rust
-use datafusion::logical_expr::{LogicalPlan, Expr, Filter};
-use rulescript::{Rel, RewriteRule};
+use datafusion::logical_expr::{BinaryExpr, Operator, builder::LogicalPlanBuilder};
+use rulescript::{Field, Function, Rel, RewriteRule, Schema, Type};
 
 impl RewriteRule for FilterMergeRule {
-    fn pattern() -> Rel {
-        Rel {
-            plan: LogicalPlan::Filter(Filter {
-                predicate: outer_predicate, // Expr constructed directly
-                input: Arc::new(LogicalPlan::Filter(Filter {
-                    predicate: inner_predicate, 
-                    input: source_plan,
-                }))
-            })
-        }
+    fn pattern(&self) -> Rel {
+        // Create abstract schema and source
+        let schema = Schema { 
+            fields: vec![Field {
+                name: "col".to_string(),
+                data_type: Type::Generic { id: "T".to_string() },
+                nullable: false,
+            }]
+        };
+        let source_rel = Rel::source("table".to_string(), schema);
+        
+        // Create abstract predicates P(col) and Q(col)
+        let inner_predicate = Function::boolean_predicate("P".to_string(), 1)
+            .call(vec![col("col")]);
+        let outer_predicate = Function::boolean_predicate("Q".to_string(), 1)
+            .call(vec![col("col")]);
+        
+        // Pattern: source.filter(P).filter(Q)
+        let inner_filter = LogicalPlanBuilder::from(source_rel.plan)
+            .filter(inner_predicate).unwrap().build().unwrap();
+        let outer_filter = LogicalPlanBuilder::from(inner_filter)
+            .filter(outer_predicate).unwrap().build().unwrap();
+            
+        Rel { plan: outer_filter }
     }
     
-    fn replacement() -> Rel {
-        Rel {
-            plan: LogicalPlan::Filter(Filter {
-                predicate: Expr::BinaryExpr(BinaryExpr {
-                    left: Box::new(inner_predicate),
-                    op: Operator::And,
-                    right: Box::new(outer_predicate),
-                }),
-                input: source_plan,
-            })
-        }
+    fn replacement(&self) -> Rel {
+        // Same setup...
+        // Replacement: source.filter(P AND Q) 
+        let combined = Expr::BinaryExpr(BinaryExpr {
+            left: Box::new(inner_predicate),
+            op: Operator::And, 
+            right: Box::new(outer_predicate),
+        });
+        // Build merged filter plan...
     }
 }
 ```
 
-**Key Insight**: Since all wrapper structs have public fields and DataFusion provides rich constructors, users can compose rules directly without additional convenience APIs. Focus remains on verification and code generation pipelines.
+**Key Features**:
+- Abstract functions (`P`, `Q`) represent uninterpreted predicates
+- Custom `Source` nodes integrate seamlessly with DataFusion's optimizer
+- Rule construction uses familiar DataFusion patterns
+- Ready for verification and code generation pipelines
 
 ### 🎯 Ultimate Goals
 
@@ -119,10 +138,21 @@ RuleScript Rule Definition
 
 ## Next Steps
 
-1. **Immediate**: Add missing builder methods for FilterMerge rule
-2. **Short-term**: Implement rule verification pipeline
+1. **Immediate**: Add more rule examples (ProjectionPushdown, JoinReordering)
+2. **Short-term**: Implement rule verification pipeline using SMT solvers  
 3. **Medium-term**: DataFusion adapter for code generation
 4. **Long-term**: Generic rule interpreter and additional target engines
+
+## Running the Example
+
+```bash
+# View the working FilterMerge rule implementation
+cargo run --example filter_merge
+
+# Output shows pattern vs replacement:
+# Pattern: Filter: Q(col) Filter: P(col) Source: table [fields: 1] 
+# Replacement: Filter: P(col) AND Q(col) Source: table [fields: 1]
+```
 
 ## Related Work
 - **QED**: Query equivalence verification solver

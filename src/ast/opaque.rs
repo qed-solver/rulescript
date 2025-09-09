@@ -18,14 +18,21 @@ pub fn generate_unique_id(prefix: &str) -> String {
 }
 
 #[derive(Debug, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Type {
-    pub id: String,
+pub enum Type {
+    /// Built-in boolean type for predicates
+    Boolean,
+    /// Generic abstract type that can represent any concrete type
+    Generic { id: String },
 }
-
-impl Type {
-    // Convert abstract type to Binary for DataFusion integration
-    pub fn to_datafusion_type(&self) -> DataType {
-        DataType::Binary
+impl From<&Type> for DataType {
+    fn from(abstract_type: &Type) -> Self {
+        match abstract_type {
+            Type::Boolean => DataType::Boolean,
+            Type::Generic { .. } => {
+                // Generic abstract types map to Binary for pattern matching
+                DataType::Binary
+            }
+        }
     }
 }
 
@@ -39,11 +46,7 @@ pub struct Field {
 impl Field {
     // Convert abstract field to Arrow field for DataFusion integration
     pub fn to_arrow_field(&self) -> ArrowField {
-        ArrowField::new(
-            &self.name,
-            self.data_type.to_datafusion_type(),
-            self.nullable,
-        )
+        ArrowField::new(&self.name, (&self.data_type).into(), self.nullable)
     }
 }
 

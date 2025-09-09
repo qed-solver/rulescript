@@ -39,13 +39,27 @@ impl Function {
     /// Convenience constructor for functions with a specific number of inputs (all same type)
     pub fn with_input_count(name: String, input_count: usize) -> Self {
         let input_types = (0..input_count)
-            .map(|_| Type {
+            .map(|_| Type::Generic {
                 id: generate_unique_id("input"),
             })
             .collect();
-        let return_type = Type {
+        let return_type = Type::Generic {
             id: generate_unique_id("return"),
         };
+
+        Self::new(name, input_types, return_type)
+    }
+
+    /// Create a boolean predicate function (for use in filters/joins)
+    pub fn boolean_predicate(name: String, input_count: usize) -> Self {
+        let input_types = (0..input_count)
+            .map(|_| Type::Generic {
+                id: generate_unique_id("input"),
+            })
+            .collect();
+
+        // Use direct boolean enum variant
+        let return_type = Type::Boolean;
 
         Self::new(name, input_types, return_type)
     }
@@ -88,8 +102,8 @@ impl ScalarUDFImpl for Function {
     }
 
     fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
-        // Convert abstract return type to DataFusion type
-        Ok(self.return_type.to_datafusion_type())
+        // Convert abstract return type to DataFusion type (handles Bool -> Boolean automatically)
+        Ok((&self.return_type).into())
     }
 
     fn invoke(&self, _args: &[ColumnarValue]) -> Result<ColumnarValue> {
