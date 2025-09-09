@@ -5,8 +5,7 @@ use datafusion::{
     common::Column,
     error::{DataFusionError, Result},
     logical_expr::{
-        ColumnarValue, Expr, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
-        expr::ScalarFunction,
+        ColumnarValue, Expr, ScalarUDF, ScalarUDFImpl, Signature, Volatility, expr::ScalarFunction,
     },
     scalar::ScalarValue,
 };
@@ -24,11 +23,7 @@ pub struct Function {
 }
 
 impl Function {
-    pub fn new(
-        name: String,
-        input_types: Vec<Type>,
-        return_type: Type,
-    ) -> Self {
+    pub fn new(name: String, input_types: Vec<Type>, return_type: Type) -> Self {
         // Create signature based on input types - all abstract types map to Binary
         let datafusion_types = vec![DataType::Binary; input_types.len()];
         let signature = Signature::exact(datafusion_types, Volatility::Immutable);

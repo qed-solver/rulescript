@@ -58,11 +58,44 @@ source.filter(inner).filter(outer) → source.filter(inner AND outer)
 - `RewriteRule` trait interface
 - Abstract type system with unique IDs
 
-### 🚧 Missing for FilterMerge
-1. **Relational builders**: `Rel.filter(predicate)` 
-2. **Predicate creation**: `Rel.pred("name")` for abstract predicates
-3. **Logical operators**: `Scalar.and(left, right)`
-4. **DataFusion constructors**: Direct `LogicalPlan::Filter` creation
+### 🚧 Architecture Principles
+
+**Minimal API Surface**: RuleScript exposes DataFusion's native APIs through thin wrappers with public fields. Users can directly construct rules using DataFusion's existing constructors (e.g., `LogicalPlan::Filter`, `Expr::BinaryExpr`) without needing custom builders.
+
+**Example FilterMerge Construction**:
+```rust
+use datafusion::logical_expr::{LogicalPlan, Expr, Filter};
+use rulescript::{Rel, RewriteRule};
+
+impl RewriteRule for FilterMergeRule {
+    fn pattern() -> Rel {
+        Rel {
+            plan: LogicalPlan::Filter(Filter {
+                predicate: outer_predicate, // Expr constructed directly
+                input: Arc::new(LogicalPlan::Filter(Filter {
+                    predicate: inner_predicate, 
+                    input: source_plan,
+                }))
+            })
+        }
+    }
+    
+    fn replacement() -> Rel {
+        Rel {
+            plan: LogicalPlan::Filter(Filter {
+                predicate: Expr::BinaryExpr(BinaryExpr {
+                    left: Box::new(inner_predicate),
+                    op: Operator::And,
+                    right: Box::new(outer_predicate),
+                }),
+                input: source_plan,
+            })
+        }
+    }
+}
+```
+
+**Key Insight**: Since all wrapper structs have public fields and DataFusion provides rich constructors, users can compose rules directly without additional convenience APIs. Focus remains on verification and code generation pipelines.
 
 ### 🎯 Ultimate Goals
 

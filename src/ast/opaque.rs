@@ -71,7 +71,8 @@ impl Schema {
 
     // Convert abstract schema to DataFusion schema
     pub fn to_datafusion_schema(&self) -> DFSchemaRef {
-        let arrow_fields: Vec<ArrowField> = self.fields.iter().map(|f| f.to_arrow_field()).collect();
+        let arrow_fields: Vec<ArrowField> =
+            self.fields.iter().map(|f| f.to_arrow_field()).collect();
 
         let arrow_schema = ArrowSchema::new(arrow_fields);
         Arc::new(

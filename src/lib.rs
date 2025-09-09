@@ -2,7 +2,7 @@ pub mod ast;
 pub mod rule;
 
 pub use ast::{
-    opaque::{Type, Field, Schema},
+    opaque::{Field, Schema, Type},
     relational::{Rel, Source},
     scalar::{Function, Scalar},
 };
