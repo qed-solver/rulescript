@@ -1,78 +1,57 @@
-# RuleScript: Extensible Rule Language for Query Optimizers
+# RuleScript
 
-## Overview
+A Rust DSL for building database query rewrite rules with uninterpreted symbols. RuleScript provides a minimal, pragmatic API that wraps DataFusion's native query planning while enabling rule verification and code generation.
 
-RuleScript is a domain-specific language (DSL) for expressing database query rewrite rules that can be automatically verified for correctness and used to generate implementations for extensible query optimizers.
+## Engineering Philosophy
 
-## Key Concepts from the Paper
+**Rapid Development First**: We prioritize minimal viable implementations that work. No unit tests until final stages. No boilerplate code. Direct exposure of DataFusion's APIs with thin wrappers.
 
-### Problem Statement
-- Modern query optimizers use hundreds of rewrite rules (e.g., Apache Calcite has 100+, CockroachDB has 200+)
-- Implementing these rules correctly is error-prone and costly
-- Need for automated verification and code generation for rewrite rules
+## What It Does
 
-### RuleScript Approach
-1. **Declarative Rule Definition**: Rules expressed as `pattern → replacement` transformations
-2. **Uninterpreted Symbols**: Use abstract types and functions to represent families of concrete queries
-3. **Automatic Verification**: Translate rules to QED solver for correctness proofs
-4. **Code Generation**: Generate implementations for target query engines via adapters
+RuleScript lets you express query optimizer rewrite rules like "merge two filters into one" using abstract patterns:
 
-### Core Language Features
-
-#### Patterns
-- `Plan(id, [Field(name, type)])` - Abstract query plans with typed schemas
-- `Filter(predicate, source)` - Filter operations
-- `Join(type, condition, left, right)` - Join operations  
-- `Project(expressions, source)` - Projection operations
-- `Union`, `Aggregate`, `Distinct` - Set operations
-
-#### Uninterpreted Symbols
-- **Abstract Types**: `Type { id: String }` - Variables representing any data type
-- **Abstract Functions**: `Function(name, input_types, return_type)` - Variables representing any function
-- **Abstract Predicates**: Functions with boolean return type (e.g., filter conditions, join predicates)
-
-#### Rule Structure
 ```rust
-trait RewriteRule {
-    fn pattern(&self) -> Rel;      // What to match
-    fn replacement(&self) -> Rel;  // How to transform
-    fn name(&self) -> &str;        // Optional rule name for debugging
-}
+// Pattern: source.filter(P).filter(Q) → source.filter(P AND Q)
+let pattern = source.filter(P).filter(Q);
+let replacement = source.filter(P.and(Q));
 ```
 
-### Example: FilterMerge Rule
-**Intent**: Merge two consecutive filters into one with AND condition
+The `P` and `Q` are uninterpreted predicates - they can represent ANY boolean expression. This means one rule definition covers infinite concrete cases.
+
+## Current State
+
+### Working
+- **Core AST** wrapping DataFusion's `LogicalPlan` and `Expr`
+- **Abstract types** mapping to Binary in DataFusion (uniform representation)
+- **Abstract functions** as UDFs for pattern matching (not execution)
+- **Custom `Source` nodes** via DataFusion's `UserDefinedLogicalNodeCore`
+- **FilterMerge example** demonstrating complete rule construction
+
+### Architecture
 ```
-source.filter(inner).filter(outer) → source.filter(inner AND outer)
+src/
+  ast/
+    opaque.rs    - Abstract types/fields/schemas with ID generation
+    relational.rs - Source pattern integrating with DataFusion
+    scalar.rs    - Abstract functions as DataFusion UDFs
+  rule.rs        - RewriteRule trait
 ```
 
-**Using Abstract Predicates**:
-- `inner` and `outer` are uninterpreted boolean functions
-- Verification proves correctness for ALL possible instantiations
-- Code generation handles pattern matching and transformation
+### Key Design Decisions
+- Using DataFusion's native types where possible
+- Custom nodes only for terminal patterns (`Source`)
+- All abstract types map to Binary for uniformity
+- Functions are UDFs that error on execution (pattern-only)
+- Public fields for direct manipulation
 
-## Current Implementation Status
+## Example Usage
 
-### ✅ Implemented (Rust)
-- Core AST types: `Type`, `Field`, `Schema`, `Function`, `Rel`, `Scalar`  
-- DataFusion integration via custom `Source` nodes using `UserDefinedLogicalNodeCore`
-- `RewriteRule` trait interface with instance methods
-- Abstract type system with global unique ID generation
-- Working FilterMerge example demonstrating complete rule construction
-- Abstract functions that integrate with DataFusion's UDF system for pattern matching
-
-### ✅ Architecture Principles
-
-**Minimal API Surface**: RuleScript exposes DataFusion's native APIs through thin wrappers with public fields. Users construct rules using DataFusion's `LogicalPlanBuilder` and existing expression constructors.
-
-**Working FilterMerge Example** (see `examples/filter_merge.rs`):
 ```rust
 use datafusion::logical_expr::{BinaryExpr, Operator, builder::LogicalPlanBuilder};
 use rulescript::{Field, Function, Rel, RewriteRule, Schema, Type};
 
 impl RewriteRule for FilterMergeRule {
     fn pattern(&self) -> Rel {
-        // Create abstract schema and source
         let schema = Schema { 
             fields: vec![Field {
                 name: "col".to_string(),
@@ -80,82 +59,90 @@ impl RewriteRule for FilterMergeRule {
                 nullable: false,
             }]
         };
-        let source_rel = Rel::source("table".to_string(), schema);
         
-        // Create abstract predicates P(col) and Q(col)
-        let inner_predicate = Function::boolean_predicate("P".to_string(), 1)
-            .call(vec![col("col")]);
-        let outer_predicate = Function::boolean_predicate("Q".to_string(), 1)
-            .call(vec![col("col")]);
+        let source = Rel::source("table".to_string(), schema);
+        let P = Function::boolean_predicate("P".to_string(), 1);
+        let Q = Function::boolean_predicate("Q".to_string(), 1);
         
         // Pattern: source.filter(P).filter(Q)
-        let inner_filter = LogicalPlanBuilder::from(source_rel.plan)
-            .filter(inner_predicate).unwrap().build().unwrap();
-        let outer_filter = LogicalPlanBuilder::from(inner_filter)
-            .filter(outer_predicate).unwrap().build().unwrap();
-            
-        Rel { plan: outer_filter }
+        LogicalPlanBuilder::from(source.plan)
+            .filter(P.call(vec![col("col")]))
+            .unwrap()
+            .build()
+            .unwrap()
+            .filter(Q.call(vec![col("col")]))
+            .unwrap()
+            .build()
+            .unwrap()
     }
     
     fn replacement(&self) -> Rel {
         // Same setup...
-        // Replacement: source.filter(P AND Q) 
+        // Replacement: source.filter(P AND Q)
         let combined = Expr::BinaryExpr(BinaryExpr {
-            left: Box::new(inner_predicate),
-            op: Operator::And, 
-            right: Box::new(outer_predicate),
+            left: Box::new(P.call(vec![col("col")])),
+            op: Operator::And,
+            right: Box::new(Q.call(vec![col("col")])),
         });
-        // Build merged filter plan...
+        
+        LogicalPlanBuilder::from(source.plan)
+            .filter(combined)
+            .unwrap()
+            .build()
+            .unwrap()
     }
 }
 ```
 
-**Key Features**:
-- Abstract functions (`P`, `Q`) represent uninterpreted predicates
-- Custom `Source` nodes integrate seamlessly with DataFusion's optimizer
-- Rule construction uses familiar DataFusion patterns
-- Ready for verification and code generation pipelines
+## Run Example
 
-### 🎯 Ultimate Goals
-
-1. **Rule Expression**: DSL for writing rewrite rules with abstract symbols
-2. **Verification**: Integrate with automated theorem provers (QED, CVC5, Z3)
-3. **Code Generation**: Adapters to generate DataFusion/Calcite implementations
-4. **Rule Interpreter**: Generic rule engine that applies rules to concrete queries
-
-## Architecture
-
+```bash
+cargo run --example filter_merge
 ```
-RuleScript Rule Definition
-         ↓
-┌─────────────────┬─────────────────┐
-│   Verification  │  Code Generation │
-│   (QED Solver)  │   (Adapters)     │
-└─────────────────┴─────────────────┘
-         ↓                 ↓
-   Correctness Proof   Implementation
-```
+
+## Theoretical Foundation
+
+Based on the paper "Extensible Rule Language for Query Optimizers" (VLDB 2025), RuleScript addresses the challenge of correctly implementing hundreds of rewrite rules in modern optimizers:
+
+- **Uninterpreted Symbols**: Abstract types/functions represent families of concrete queries
+- **Verification Pipeline**: Rules can be verified via QED solver (future integration)
+- **Code Generation**: Generate implementations for different engines via adapters (future)
+
+The key insight: Express rules with abstract symbols, verify once, apply to infinite concrete cases.
+
+## Why This Approach
+
+Modern query optimizers (Calcite: 100+ rules, CockroachDB: 200+ rules) suffer from:
+1. Error-prone manual implementation
+2. Difficult to verify correctness
+3. Redundant code across similar rules
+
+RuleScript solves this by:
+1. One rule definition → many concrete applications
+2. Automated verification possible (QED integration planned)
+3. Code generation from verified rules (adapter system planned)
 
 ## Next Steps
 
-1. **Immediate**: Add more rule examples (ProjectionPushdown, JoinReordering)
-2. **Short-term**: Implement rule verification pipeline using SMT solvers  
-3. **Medium-term**: DataFusion adapter for code generation
-4. **Long-term**: Generic rule interpreter and additional target engines
+**Immediate**
+- [ ] More rule examples (ProjectionPushdown, JoinAssociate)
+- [ ] Basic pattern matching engine
 
-## Running the Example
+**Short-term**
+- [ ] SMT solver integration for verification
+- [ ] Rule enumeration with meta-variables
 
-```bash
-# View the working FilterMerge rule implementation
-cargo run --example filter_merge
+**Long-term**
+- [ ] DataFusion optimizer integration
+- [ ] Code generation adapters
 
-# Output shows pattern vs replacement:
-# Pattern: Filter: Q(col) Filter: P(col) Source: table [fields: 1] 
-# Replacement: Filter: P(col) AND Q(col) Source: table [fields: 1]
-```
+## Dependencies
 
-## Related Work
-- **QED**: Query equivalence verification solver
-- **Apache Calcite**: Extensible query optimizer framework
-- **CockroachDB**: Production system with rule-based optimizer
-- **HoTTSQL/Cosette**: Earlier DSLs for query verification
+- `datafusion = "*"` - Query planning framework
+- `smtlib = "*"` - Future solver integration
+
+## Status
+
+Active development. API unstable. Not production ready.
+
+The project emphasizes rapid prototyping over completeness. We build the minimum required to validate ideas, then iterate based on real usage.
