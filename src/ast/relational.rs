@@ -1,9 +1,12 @@
 use std::{cmp::Ordering, fmt, sync::Arc};
 
 use datafusion::{
-    common::DFSchemaRef,
+    common::{DFSchemaRef, JoinConstraint},
     error::{DataFusionError, Result},
-    logical_expr::{Extension, LogicalPlan, UserDefinedLogicalNodeCore},
+    logical_expr::{
+        Aggregate, Distinct, Extension, Filter, Join, JoinType, Limit, LogicalPlan, Projection,
+        Sort, SortExpr, Union, UserDefinedLogicalNodeCore, build_join_schema, lit,
+    },
     prelude::Expr,
 };
 
@@ -112,5 +115,100 @@ impl Rel {
         });
 
         Self { plan }
+    }
+
+    // Filter the relation with a predicate
+    pub fn filter(self, predicate: Expr) -> Result<Self> {
+        Ok(Self {
+            plan: LogicalPlan::Filter(Filter::try_new(predicate, Arc::new(self.plan))?),
+        })
+    }
+
+    // Project specific expressions
+    pub fn project(self, exprs: Vec<Expr>) -> Result<Self> {
+        Ok(Self {
+            plan: LogicalPlan::Projection(Projection::try_new(exprs, Arc::new(self.plan))?),
+        })
+    }
+
+    // Join with another relation
+    pub fn join(
+        self,
+        right: Rel,
+        join_type: JoinType,
+        on_exprs: Vec<(Expr, Expr)>,
+        filter: Option<Expr>,
+    ) -> Result<Self> {
+        let left_schema = self.plan.schema();
+        let right_schema = right.plan.schema();
+        let join_schema = build_join_schema(left_schema, right_schema, &join_type)?;
+
+        Ok(Self {
+            plan: LogicalPlan::Join(Join {
+                left: Arc::new(self.plan),
+                right: Arc::new(right.plan),
+                on: on_exprs,
+                filter,
+                join_type,
+                join_constraint: JoinConstraint::On,
+                schema: Arc::new(join_schema),
+                null_equals_null: false,
+            }),
+        })
+    }
+
+    // Union with another relation
+    pub fn union(self, other: Rel) -> Result<Self> {
+        let union_schema = self.plan.schema().clone();
+        Ok(Self {
+            plan: LogicalPlan::Union(Union {
+                inputs: vec![Arc::new(self.plan), Arc::new(other.plan)],
+                schema: union_schema,
+            }),
+        })
+    }
+
+    // Aggregate with grouping and aggregate expressions
+    pub fn aggregate(self, group_exprs: Vec<Expr>, agg_exprs: Vec<Expr>) -> Result<Self> {
+        Ok(Self {
+            plan: LogicalPlan::Aggregate(Aggregate::try_new(
+                Arc::new(self.plan),
+                group_exprs,
+                agg_exprs,
+            )?),
+        })
+    }
+
+    // Remove duplicate rows
+    pub fn distinct(self) -> Result<Self> {
+        Ok(Self {
+            plan: LogicalPlan::Distinct(Distinct::All(Arc::new(self.plan))),
+        })
+    }
+
+    // Limit the number of rows
+    pub fn limit(self, skip: usize, fetch: Option<usize>) -> Result<Self> {
+        Ok(Self {
+            plan: LogicalPlan::Limit(Limit {
+                skip: if skip > 0 {
+                    Some(Box::new(lit(skip as i64)))
+                } else {
+                    None
+                },
+                fetch: fetch.map(|f| Box::new(lit(f as i64))),
+                input: Arc::new(self.plan),
+            }),
+        })
+    }
+
+    // Sort by expressions (converts Expr to SortExpr with default ascending, nulls first)
+    pub fn sort(self, exprs: Vec<SortExpr>) -> Result<Self> {
+        Ok(Self {
+            plan: LogicalPlan::Sort(Sort {
+                expr: exprs,
+                input: Arc::new(self.plan),
+                fetch: None,
+            }),
+        })
     }
 }

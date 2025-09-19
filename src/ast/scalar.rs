@@ -5,7 +5,8 @@ use datafusion::{
     common::Column,
     error::{DataFusionError, Result},
     logical_expr::{
-        ColumnarValue, Expr, ScalarUDF, ScalarUDFImpl, Signature, Volatility, expr::ScalarFunction,
+        BinaryExpr, ColumnarValue, Expr, Operator, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
+        expr::ScalarFunction,
     },
     scalar::ScalarValue,
 };
@@ -84,6 +85,24 @@ impl Function {
         Expr::ScalarFunction(ScalarFunction {
             func: Arc::new(udf),
             args,
+        })
+    }
+
+    /// Build an AND expression with another expression
+    pub fn and(&self, args: Vec<Expr>, other: Expr) -> Expr {
+        Expr::BinaryExpr(BinaryExpr {
+            left: Box::new(self.call(args)),
+            op: Operator::And,
+            right: Box::new(other),
+        })
+    }
+
+    /// Build an OR expression with another expression
+    pub fn or(&self, args: Vec<Expr>, other: Expr) -> Expr {
+        Expr::BinaryExpr(BinaryExpr {
+            left: Box::new(self.call(args)),
+            op: Operator::Or,
+            right: Box::new(other),
         })
     }
 }
