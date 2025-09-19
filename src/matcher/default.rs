@@ -1,13 +1,13 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use datafusion::{
     arrow::datatypes::DataType,
-    logical_expr::{Expr, Extension, Filter, LogicalPlan, Projection, expr::ScalarFunction},
+    logical_expr::{Expr, Extension, Filter, LogicalPlan, Projection},
 };
 
 use crate::ast::{
+    opaque::Type,
     relational::{Rel, Source},
-    scalar::Function,
 };
 
 use super::{BindingConflict, PatternMatcher, RuleError};
@@ -15,10 +15,13 @@ use super::{BindingConflict, PatternMatcher, RuleError};
 /// Default pattern matcher that tracks bindings internally
 #[derive(Debug, Default)]
 pub struct DefaultMatcher {
+    /// Abstract field name -> Set of aliased column names (partition)
+    field_partitions: HashMap<String, HashSet<String>>,
+
     /// Abstract functions/predicates -> concrete expressions
     functions: HashMap<String, Expr>,
 
-    /// Abstract sources -> concrete plans
+    /// Abstract sources -> concrete plans (original)
     sources: HashMap<String, LogicalPlan>,
 
     /// Abstract types -> concrete DataFusion types
@@ -116,24 +119,56 @@ impl DefaultMatcher {
             })
     }
 
-    /// Check if a ScalarFunction is one of our abstract functions
-    fn is_abstract_function(&self, func: &ScalarFunction) -> bool {
-        // Check if the UDF's implementation is our Function type
-        // We check by trying to get the inner implementation
-        func.func.inner().as_any().is::<Function>()
-    }
-
     // Specific resolvers for each plan type
 
     /// Resolve a Source pattern against any concrete plan
-    fn resolve_source(
-        &mut self,
-        source: &Source,
-        ext: &Extension,
-        concrete: &LogicalPlan,
-    ) -> Result<(), RuleError> {
-        // TODO: Implement source resolution
-        todo!("resolve_source")
+    fn resolve_source(&mut self, source: &Source, concrete: &LogicalPlan) -> Result<(), RuleError> {
+        // Use Source's annotate method to create aliased version
+        let annotated_plan = source.annotate(concrete)?;
+
+        // Store original concrete plan for instantiation later
+        self.bind_source(source.table_name.clone(), concrete.clone())?;
+
+        // For each concrete field, find the first matching abstract field
+        let annotated_schema = annotated_plan.schema();
+
+        for concrete_field in annotated_schema.fields() {
+            let alias = concrete_field.name().to_string();
+            let mut matched = false;
+
+            for abstract_field in &source.schema.fields {
+                // Check nullable property
+                if abstract_field.nullable != concrete_field.is_nullable() {
+                    continue;
+                }
+
+                // Check type compatibility
+                let type_matches = match &abstract_field.data_type {
+                    Type::Generic { id } => {
+                        // Generic type can match any concrete type
+                        self.bind_type(id.clone(), concrete_field.data_type().clone())?;
+                        true
+                    }
+                    Type::Boolean => concrete_field.data_type() == &DataType::Boolean,
+                };
+
+                if type_matches {
+                    // Add to this abstract field's partition using entry API
+                    self.field_partitions
+                        .entry(abstract_field.name.clone())
+                        .or_default()
+                        .insert(alias.clone());
+                    matched = true;
+                    break; // Found a match, move to next concrete field
+                }
+            }
+
+            if !matched {
+                return Err(RuleError::SchemaIncompatible { column: alias });
+            }
+        }
+
+        Ok(())
     }
 
     /// Resolve a Filter pattern against a concrete Filter
@@ -167,8 +202,8 @@ impl DefaultMatcher {
         match (pattern, concrete) {
             // Source pattern can match any plan with compatible schema
             (LogicalPlan::Extension(ext), con_plan) => {
-                let source = self.as_source(ext, con_plan)?;
-                self.resolve_source(source, ext, concrete)
+                let pat_source = self.as_source(ext, con_plan)?;
+                self.resolve_source(pat_source, con_plan)
             }
 
             // Filter patterns match Filter nodes
@@ -199,8 +234,6 @@ impl PatternMatcher for DefaultMatcher {
 
     fn instantiate(&self, _template: &Rel) -> Result<LogicalPlan, RuleError> {
         // TODO: Implement actual instantiation logic
-        Err(RuleError::InstantiationError {
-            reason: "DefaultMatcher instantiate not yet implemented".to_string(),
-        })
+        todo!("instantiate not yet implemented")
     }
 }

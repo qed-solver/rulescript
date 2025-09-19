@@ -34,6 +34,10 @@ pub enum RuleError {
     #[error("Expression mismatch: pattern {pattern} does not match target {target}")]
     ExpressionMismatch { pattern: Expr, target: Expr },
 
+    /// Schema partitioning failed - concrete column couldn't be matched to abstract fields
+    #[error("Cannot match column '{column}' to any abstract field")]
+    SchemaIncompatible { column: String },
+
     /// Inconsistent binding - same symbol bound to different values
     #[error("Inconsistent binding for '{symbol}'")]
     InconsistentBinding {
@@ -42,9 +46,9 @@ pub enum RuleError {
         details: BindingConflict,
     },
 
-    /// Failed to instantiate template with bindings
-    #[error("Failed to instantiate template: {reason}")]
-    InstantiationError { reason: String },
+    /// Failed to instantiate template - missing binding
+    #[error("Cannot instantiate: unbound symbol '{symbol}'")]
+    InstantiationError { symbol: String },
 
     /// Referenced binding not found
     #[error("Unbound symbol: '{symbol}'")]
