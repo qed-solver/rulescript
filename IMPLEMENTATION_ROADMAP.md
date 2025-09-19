@@ -6,37 +6,18 @@
 - ✅ Core AST types (`Type`, `Field`, `Schema`)
 - ✅ Abstract functions as DataFusion UDFs
 - ✅ Custom `Source` node via `UserDefinedLogicalNodeCore`
-- ✅ `RewriteRule` trait with pattern/replacement methods
+- ✅ `RewriteRule` trait with `from`/`to` methods
+- ✅ Helper methods on `Rel` (`filter`, `project`, `join`, `union`, `aggregate`, `distinct`, `limit`, `sort`)
+- ✅ Helper methods on `Function` (`and`, `or`)
+- ✅ `PatternMatcher` trait abstraction
+- ✅ `ApplicableRule<M>` trait for rule execution
+- ✅ `DefaultMatcher` structure with unified bindings/matching
+- ✅ Clean error types with `thiserror`
 - ✅ Working FilterMerge example
 
 ### What We Need to Build
 
-## Phase 1: Rule Expression Enhancement
-
-### 1.1 Complete Pattern Support
-```rust
-// Need to add builders/constructors for:
-impl Rel {
-    fn filter(self, pred: Expr) -> Self;
-    fn project(self, exprs: Vec<Expr>) -> Self;
-    fn join(self, join_type: JoinType, on: Expr, right: Rel) -> Self;
-    fn union(self, other: Rel) -> Self;
-    fn aggregate(self, group: Vec<Expr>, agg: Vec<Expr>) -> Self;
-    fn distinct(self) -> Self;
-}
-```
-
-### 1.2 Predicate Builders
-```rust
-// Convenience methods for building predicates
-impl Function {
-    fn and(self, other: Function) -> Expr;
-    fn or(self, other: Function) -> Expr;
-    fn not(self) -> Expr;
-}
-```
-
-## Phase 2: Export for Verification
+## Phase 3: Export for Verification
 
 ### 2.1 QED Format Serialization
 Based on paper Section 5.1, need to export to QED's expected format:
@@ -79,21 +60,16 @@ struct RuleExport {
 }
 ```
 
-## Phase 3: Generic Rule Interpreter
+## Phase 2: Pattern Matching Implementation (NEXT PRIORITY)
 
-### 3.1 Pattern Matching Engine
+### 2.1 DefaultMatcher Implementation
+
+The structure is ready, now need to implement:
 
 ```rust
-/// Tracks instantiations of uninterpreted symbols during matching
-struct MatchContext {
-    // Type instantiations: "T" -> DataType::Int32
-    type_bindings: HashMap<String, DataType>,
-    
-    // Function instantiations: "P" -> Expr::BinaryExpr(...)
-    function_bindings: HashMap<String, Expr>,
-    
-    // Plan instantiations: "Q0" -> LogicalPlan::TableScan(...)
-    plan_bindings: HashMap<String, LogicalPlan>,
+impl PatternMatcher for DefaultMatcher {
+    fn resolve(&mut self, pattern: &Rel, concrete: &LogicalPlan) -> Result<(), RuleError>;
+    fn instantiate(&self, template: &Rel) -> Result<LogicalPlan, RuleError>;
 }
 
 /// Result of pattern matching
@@ -179,13 +155,9 @@ fn match_predicate(
 }
 ```
 
-### 3.3 Transform Engine
+### 2.3 Instantiation Logic
 
-```rust
-/// Apply captured instantiations to build concrete plan
-trait Transformer {
-    fn transform(&self, context: &MatchContext) -> Result<LogicalPlan, String>;
-}
+The instantiation will use the bindings stored in DefaultMatcher to transform the template:
 
 impl Transformer for Rel {
     fn transform(&self, context: &MatchContext) -> Result<LogicalPlan, String> {

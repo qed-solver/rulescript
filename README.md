@@ -25,33 +25,37 @@ The `P` and `Q` are uninterpreted predicates - they can represent ANY boolean ex
 - **Abstract types** mapping to Binary in DataFusion (uniform representation)
 - **Abstract functions** as UDFs for pattern matching (not execution)
 - **Custom `Source` nodes** via DataFusion's `UserDefinedLogicalNodeCore`
-- **FilterMerge example** demonstrating complete rule construction
+- **Helper methods** on `Rel` for ergonomic plan construction (`filter`, `project`, `join`, etc.)
+- **Complete rule abstractions** with `RewriteRule`, `PatternMatcher`, and `ApplicableRule` traits
+- **DefaultMatcher** structure ready for pattern matching implementation
 
 ### Architecture
 ```
 src/
   ast/
-    opaque.rs    - Abstract types/fields/schemas with ID generation
-    relational.rs - Source pattern integrating with DataFusion
-    scalar.rs    - Abstract functions as DataFusion UDFs
-  rule.rs        - RewriteRule trait
+    opaque.rs     - Abstract types/fields/schemas with ID generation
+    relational.rs - Source pattern & helper methods for plan construction
+    scalar.rs     - Abstract functions as DataFusion UDFs
+  rule.rs         - Rule traits, PatternMatcher interface, DefaultMatcher
 ```
 
 ### Key Design Decisions
 - Using DataFusion's native types where possible
-- Custom nodes only for terminal patterns (`Source`)
+- Direct construction of LogicalPlan nodes (avoiding builder overhead)
 - All abstract types map to Binary for uniformity
 - Functions are UDFs that error on execution (pattern-only)
-- Public fields for direct manipulation
+- Unified `DefaultMatcher` contains bindings and matching logic
+- Customizable equivalence checking via overridable methods
+- Clean error types with `thiserror` and concrete values for debugging
 
 ## Example Usage
 
 ```rust
-use datafusion::logical_expr::{BinaryExpr, Operator, builder::LogicalPlanBuilder};
+use datafusion::prelude::col;
 use rulescript::{Field, Function, Rel, RewriteRule, Schema, Type};
 
 impl RewriteRule for FilterMergeRule {
-    fn pattern(&self) -> Rel {
+    fn from(&self) -> Rel {
         let schema = Schema { 
             fields: vec![Field {
                 name: "col".to_string(),
@@ -65,33 +69,29 @@ impl RewriteRule for FilterMergeRule {
         let Q = Function::boolean_predicate("Q".to_string(), 1);
         
         // Pattern: source.filter(P).filter(Q)
-        LogicalPlanBuilder::from(source.plan)
-            .filter(P.call(vec![col("col")]))
-            .unwrap()
-            .build()
-            .unwrap()
-            .filter(Q.call(vec![col("col")]))
-            .unwrap()
-            .build()
-            .unwrap()
+        source
+            .filter(P.call(vec![col("col")])).unwrap()
+            .filter(Q.call(vec![col("col")])).unwrap()
     }
     
-    fn replacement(&self) -> Rel {
+    fn to(&self) -> Rel {
         // Same setup...
-        // Replacement: source.filter(P AND Q)
-        let combined = Expr::BinaryExpr(BinaryExpr {
-            left: Box::new(P.call(vec![col("col")])),
-            op: Operator::And,
-            right: Box::new(Q.call(vec![col("col")])),
-        });
+        let source = Rel::source("table".to_string(), schema);
+        let P = Function::boolean_predicate("P".to_string(), 1);
+        let Q = Function::boolean_predicate("Q".to_string(), 1);
         
-        LogicalPlanBuilder::from(source.plan)
-            .filter(combined)
-            .unwrap()
-            .build()
-            .unwrap()
+        // Replacement: source.filter(P AND Q)
+        source.filter(P.and(vec![col("col")], Q.call(vec![col("col")]))).unwrap()
     }
 }
+
+// Apply the rule
+use rulescript::{ApplicableRule, DefaultMatcher};
+
+impl ApplicableRule for FilterMergeRule {}
+
+let rule = FilterMergeRule;
+let new_plan = rule.try_apply(&concrete_plan)?;
 ```
 
 ## Run Example
@@ -125,21 +125,24 @@ RuleScript solves this by:
 ## Next Steps
 
 **Immediate**
+- [ ] Implement `DefaultMatcher` pattern matching logic
 - [ ] More rule examples (ProjectionPushdown, JoinAssociate)
-- [ ] Basic pattern matching engine
+- [ ] Test pattern matching with concrete plans
 
 **Short-term**
 - [ ] SMT solver integration for verification
 - [ ] Rule enumeration with meta-variables
+- [ ] DataFusion optimizer integration
 
 **Long-term**
-- [ ] DataFusion optimizer integration
-- [ ] Code generation adapters
+- [ ] Code generation adapters for different engines
+- [ ] Performance optimizations for matching
 
 ## Dependencies
 
 - `datafusion = "*"` - Query planning framework
 - `smtlib = "*"` - Future solver integration
+- `thiserror = "*"` - Error handling macros
 
 ## Status
 
