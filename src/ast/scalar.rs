@@ -105,6 +105,12 @@ impl Function {
             right: Box::new(other),
         })
     }
+
+    /// Create a function call expression with an alias
+    /// Useful for projections where the output needs a specific name
+    pub fn call_as(&self, args: Vec<Expr>, alias: impl Into<String>) -> Expr {
+        self.call(args).alias(alias)
+    }
 }
 
 impl ScalarUDFImpl for Function {
@@ -174,5 +180,11 @@ impl Scalar {
         Self {
             expr: Expr::Literal(value),
         }
+    }
+
+    /// Add an alias to this scalar expression
+    /// Useful for naming expressions in projections
+    pub fn alias(&self, name: impl Into<String>) -> Expr {
+        self.expr.clone().alias(name)
     }
 }

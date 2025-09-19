@@ -62,18 +62,24 @@ pub enum RuleError {
 #[derive(Debug, Error)]
 pub enum BindingConflict {
     /// Conflicting expressions
-    #[error("Expression conflict - the same symbol was bound to different expressions:\n  Previous: {previous:?}\n  Attempted: {attempted:?}")]
+    #[error(
+        "Expression conflict - the same symbol was bound to different expressions:\n  Previous: {previous:?}\n  Attempted: {attempted:?}"
+    )]
     Expression { previous: Expr, attempted: Expr },
 
     /// Conflicting plans
-    #[error("Plan conflict - the same source was bound to incompatible plans:\n  Previous: {previous}\n  Attempted: {attempted}")]
+    #[error(
+        "Plan conflict - the same source was bound to incompatible plans:\n  Previous: {previous}\n  Attempted: {attempted}"
+    )]
     Plan {
         previous: LogicalPlan,
         attempted: LogicalPlan,
     },
 
     /// Conflicting types
-    #[error("Type conflict - the same type variable was bound to different types:\n  Previous: {previous:?}\n  Attempted: {attempted:?}")]
+    #[error(
+        "Type conflict - the same type variable was bound to different types:\n  Previous: {previous:?}\n  Attempted: {attempted:?}"
+    )]
     Type {
         previous: DataType,
         attempted: DataType,
