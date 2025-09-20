@@ -34,8 +34,8 @@ pub enum RuleError {
     ExpressionMismatch { pattern: Expr, target: Expr },
 
     /// Partitioning failed - concrete item couldn't be matched to any abstract pattern
-    #[error("Cannot match item at index {index} to any pattern")]
-    NoMatchingPattern { index: usize },
+    #[error("Cannot match item to any pattern: {item}")]
+    NoMatchingPattern { item: String },
 
     /// Inconsistent binding - same symbol bound to different values
     #[error("Inconsistent binding for '{symbol}'")]
