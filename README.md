@@ -20,14 +20,24 @@ The `P` and `Q` are uninterpreted predicates - they can represent ANY boolean ex
 
 ## Current State
 
-### Working
+### Completed ✅
 - **Core AST** wrapping DataFusion's `LogicalPlan` and `Expr`
 - **Abstract types** mapping to Binary in DataFusion (uniform representation)
 - **Abstract functions** as UDFs for pattern matching (not execution)
 - **Custom `Source` nodes** via DataFusion's `UserDefinedLogicalNodeCore`
 - **Helper methods** on `Rel` for ergonomic plan construction (`filter`, `project`, `join`, etc.)
 - **Complete rule abstractions** with `RewriteRule`, `PatternMatcher`, and `ApplicableRule` traits
-- **DefaultMatcher** structure ready for pattern matching implementation
+- **DefaultMatcher** with full pattern matching implementation:
+  - Expression matching with AND/OR commutativity support
+  - Column validation for field partitions
+  - Abstract function binding to concrete expressions
+  - Source pattern matching to logical plans
+  - Context-preserving instantiation principle
+- **Optimized codebase** with minimal cloning overhead
+- **Clean error types** with descriptive messages and concrete values
+
+### In Progress 🚧
+- **Instantiation logic** - Transform template plans using captured bindings
 
 ### Architecture
 ```
@@ -36,7 +46,11 @@ src/
     opaque.rs     - Abstract types/fields/schemas with ID generation
     relational.rs - Source pattern & helper methods for plan construction
     scalar.rs     - Abstract functions as DataFusion UDFs
-  rule.rs         - Rule traits, PatternMatcher interface, DefaultMatcher
+  matcher/
+    mod.rs        - PatternMatcher trait, error types, and utilities
+    default.rs    - DefaultMatcher implementation with full matching logic
+  rule.rs         - Rule traits (RewriteRule, ApplicableRule)
+  lib.rs          - Public API exports
 ```
 
 ### Key Design Decisions
@@ -44,15 +58,20 @@ src/
 - Direct construction of LogicalPlan nodes (avoiding builder overhead)
 - All abstract types map to Binary for uniformity
 - Functions are UDFs that error on execution (pattern-only)
-- Unified `DefaultMatcher` contains bindings and matching logic
-- Customizable equivalence checking via overridable methods
-- Clean error types with `thiserror` and concrete values for debugging
+- Unified `DefaultMatcher` manages three binding types:
+  - `field_partitions`: Abstract field → Set of concrete columns
+  - `functions`: Abstract function → Concrete expression
+  - `sources`: Source name → Original LogicalPlan
+- Context-preserving principle: expressions bound in one context stay in that context
+- Efficient pattern partitioning with descriptive error reporting
 
 ## Example Usage
 
 ```rust
 use datafusion::prelude::col;
 use rulescript::{Field, Function, Rel, RewriteRule, Schema, Type};
+
+struct FilterMergeRule;
 
 impl RewriteRule for FilterMergeRule {
     fn from(&self) -> Rel {
@@ -85,10 +104,10 @@ impl RewriteRule for FilterMergeRule {
     }
 }
 
-// Apply the rule
+// Apply the rule (once instantiate is implemented)
 use rulescript::{ApplicableRule, DefaultMatcher};
 
-impl ApplicableRule for FilterMergeRule {}
+impl ApplicableRule<DefaultMatcher> for FilterMergeRule {}
 
 let rule = FilterMergeRule;
 let new_plan = rule.try_apply(&concrete_plan)?;
@@ -125,16 +144,18 @@ RuleScript solves this by:
 ## Next Steps
 
 **Immediate**
-- [ ] Implement `DefaultMatcher` pattern matching logic
+- [x] ~~Implement `DefaultMatcher` pattern matching logic~~ ✅ Complete
+- [ ] Implement `instantiate` method for template transformation
+- [ ] Test pattern matching with concrete DataFusion plans
 - [ ] More rule examples (ProjectionPushdown, JoinAssociate)
-- [ ] Test pattern matching with concrete plans
 
 **Short-term**
-- [ ] SMT solver integration for verification
-- [ ] Rule enumeration with meta-variables
 - [ ] DataFusion optimizer integration
+- [ ] QED export for verification
+- [ ] Rule enumeration with meta-variables
 
 **Long-term**
+- [ ] SMT solver integration for verification
 - [ ] Code generation adapters for different engines
 - [ ] Performance optimizations for matching
 

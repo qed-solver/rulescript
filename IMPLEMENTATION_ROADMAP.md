@@ -1,8 +1,8 @@
 # Implementation Roadmap for RuleScript
 
-## Current State → Target State
+## Current State
 
-### What We Have
+### Completed ✅
 - ✅ Core AST types (`Type`, `Field`, `Schema`)
 - ✅ Abstract functions as DataFusion UDFs
 - ✅ Custom `Source` node via `UserDefinedLogicalNodeCore`
@@ -11,13 +11,54 @@
 - ✅ Helper methods on `Function` (`and`, `or`)
 - ✅ `PatternMatcher` trait abstraction
 - ✅ `ApplicableRule<M>` trait for rule execution
-- ✅ `DefaultMatcher` structure with unified bindings/matching
-- ✅ Clean error types with `thiserror`
-- ✅ Working FilterMerge example
+- ✅ `DefaultMatcher` structure with unified bindings
+- ✅ Clean error types with descriptive messages
+- ✅ **Pattern Matching Implementation**:
+  - ✅ `resolve` method with recursive plan matching
+  - ✅ Expression resolver methods (`resolve_abstract_function`, `resolve_binary_expr`, `resolve_column`)
+  - ✅ AND/OR commutativity handling via expression flattening
+  - ✅ Column validation for field partitions
+  - ✅ Source pattern binding to concrete plans
+  - ✅ Context-preserving instantiation principle
+- ✅ **Code Optimization**:
+  - ✅ Eliminated unnecessary clones throughout codebase
+  - ✅ Refactored `partition` method for better API
+  - ✅ Improved error reporting with concrete values
 
-### What We Need to Build
+### In Progress 🚧
 
-## Phase 3: Export for Verification
+## Phase 1: Complete Pattern Matching (IN PROGRESS)
+
+### 1.1 Instantiation Implementation (NEXT PRIORITY)
+
+The `instantiate` method needs to transform template plans using captured bindings:
+
+```rust
+impl PatternMatcher for DefaultMatcher {
+    fn instantiate(&self, template: &Rel) -> Result<LogicalPlan, RuleError> {
+        // Transform template using:
+        // - self.field_partitions: field mappings
+        // - self.functions: abstract function → concrete expression
+        // - self.sources: source name → concrete plan
+    }
+}
+```
+
+Key requirements:
+- Replace abstract functions with bound concrete expressions
+- Replace Source patterns with bound logical plans  
+- Respect context boundaries (expressions stay in their context)
+- Maintain exact structure of template while substituting bindings
+
+### 1.2 Testing with Concrete Examples
+
+Create comprehensive tests:
+- FilterMerge rule against real DataFusion plans
+- Verify AND/OR commutativity works correctly
+- Test error cases (inconsistent bindings, missing patterns)
+- Validate context preservation
+
+## Phase 2: Export for Verification
 
 ### 2.1 QED Format Serialization
 Based on paper Section 5.1, need to export to QED's expected format:
@@ -60,155 +101,9 @@ struct RuleExport {
 }
 ```
 
-## Phase 2: Pattern Matching Implementation (NEXT PRIORITY)
+## Phase 3: DataFusion Optimizer Integration
 
-### 2.1 DefaultMatcher Implementation
-
-The structure is ready, now need to implement:
-
-```rust
-impl PatternMatcher for DefaultMatcher {
-    fn resolve(&mut self, pattern: &Rel, concrete: &LogicalPlan) -> Result<(), RuleError>;
-    fn instantiate(&self, template: &Rel) -> Result<LogicalPlan, RuleError>;
-}
-
-/// Result of pattern matching
-enum MatchResult {
-    Success(MatchContext),
-    Failure(String), // Reason for failure
-}
-
-/// Core matching logic
-trait PatternMatcher {
-    fn match_against(&self, concrete: &LogicalPlan) -> MatchResult;
-}
-
-impl PatternMatcher for Rel {
-    fn match_against(&self, concrete: &LogicalPlan) -> MatchResult {
-        match (&self.plan, concrete) {
-            (LogicalPlan::Filter(pat_filter), LogicalPlan::Filter(con_filter)) => {
-                // 1. Recursively match inputs
-                let input_match = match_plan(&pat_filter.input, &con_filter.input)?;
-                
-                // 2. Match predicates (finding function instantiations)
-                let pred_match = match_predicate(
-                    &pat_filter.predicate, 
-                    &con_filter.predicate,
-                    &input_match
-                )?;
-                
-                // 3. Merge contexts
-                Ok(merge_contexts(input_match, pred_match))
-            }
-            (LogicalPlan::Extension(ext), _) if is_source_pattern(ext) => {
-                // Source pattern matches any plan with compatible schema
-                match_source_pattern(ext, concrete)
-            }
-            _ => MatchResult::Failure("Pattern structure mismatch".into())
-        }
-    }
-}
-```
-
-### 3.2 Predicate Matching
-
-This is the trickiest part - matching abstract predicates against concrete ones:
-
-```rust
-fn match_predicate(
-    pattern: &Expr,
-    concrete: &Expr,
-    context: &MatchContext
-) -> Result<MatchContext, String> {
-    match pattern {
-        Expr::ScalarFunction(f) if is_abstract_function(f) => {
-            // This abstract function must match the entire concrete expression
-            let func_name = f.name();
-            
-            // Check if we've seen this function before
-            if let Some(prev_binding) = context.function_bindings.get(func_name) {
-                if !expressions_equivalent(prev_binding, concrete) {
-                    return Err("Inconsistent function binding");
-                }
-            } else {
-                // New binding
-                context.function_bindings.insert(func_name.to_string(), concrete.clone());
-            }
-            Ok(context)
-        }
-        Expr::BinaryExpr(BinaryExpr { left, op, right }) => {
-            // For AND/OR, try to decompose both pattern and concrete
-            match op {
-                Operator::And => {
-                    // Try to find a way to split concrete expression
-                    // This might require backtracking/search
-                    find_and_decomposition(left, right, concrete, context)
-                }
-                _ => {
-                    // Other operators: match structurally
-                    match_structural(pattern, concrete, context)
-                }
-            }
-        }
-        _ => match_structural(pattern, concrete, context)
-    }
-}
-```
-
-### 2.3 Instantiation Logic
-
-The instantiation will use the bindings stored in DefaultMatcher to transform the template:
-
-impl Transformer for Rel {
-    fn transform(&self, context: &MatchContext) -> Result<LogicalPlan, String> {
-        match &self.plan {
-            LogicalPlan::Filter(filter) => {
-                // Recursively transform input
-                let input = transform_plan(&filter.input, context)?;
-                
-                // Transform predicate using bindings
-                let predicate = transform_expr(&filter.predicate, context)?;
-                
-                // Build new filter
-                Ok(LogicalPlanBuilder::from(input)
-                    .filter(predicate)?
-                    .build()?)
-            }
-            LogicalPlan::Extension(ext) if is_source_pattern(ext) => {
-                // Look up the bound plan
-                let source = ext.node.as_any().downcast_ref::<Source>().unwrap();
-                context.plan_bindings.get(&source.table_name)
-                    .cloned()
-                    .ok_or("Source pattern not bound")
-            }
-            // ... other cases
-        }
-    }
-}
-
-fn transform_expr(expr: &Expr, context: &MatchContext) -> Result<Expr, String> {
-    match expr {
-        Expr::ScalarFunction(f) if is_abstract_function(f) => {
-            // Replace with bound concrete expression
-            context.function_bindings.get(f.name())
-                .cloned()
-                .ok_or("Function not bound")
-        }
-        Expr::BinaryExpr(BinaryExpr { left, right, op }) => {
-            // Recursively transform operands
-            Ok(Expr::BinaryExpr(BinaryExpr {
-                left: Box::new(transform_expr(left, context)?),
-                op: *op,
-                right: Box::new(transform_expr(right, context)?),
-            }))
-        }
-        Expr::Column(_) => Ok(expr.clone()), // Keep columns as-is
-        _ => Ok(expr.clone())
-    }
-}
-```
-
-### 3.4 DataFusion Optimizer Rule Integration
+### 3.1 DataFusion Optimizer Rule Integration
 
 ```rust
 /// Adapter that makes our rules work with DataFusion's optimizer
@@ -306,30 +201,51 @@ impl RewriteRule {
 2. Same symbol → same binding throughout
 3. Transform(Match(concrete)) preserves semantics
 
-## Key Implementation Challenges
+## Key Implementation Insights
 
-1. **Predicate Decomposition**: Matching `P(x) AND Q(y)` against `x>5 AND y<10 AND x+y=15`
-   - Multiple valid decompositions possible
-   - May need backtracking search
+### Completed Challenges ✅
+1. **Predicate Decomposition**: Solved using expression flattening
+   - Flatten AND/OR expressions into lists of conjuncts/disjuncts
+   - Use `partition` method to match pattern items to concrete items
+   - Handles commutativity naturally
 
-2. **Type Inference**: When matching abstract types against concrete DataTypes
-   - Must track consistency across entire pattern
+2. **Consistent Bindings**: Implemented via DefaultMatcher
+   - Single source of truth for all bindings
+   - Validation on every new binding attempt
+   - Clear error messages for inconsistencies
+
+### Remaining Challenges
+1. **Type Inference**: Abstract types against concrete DataTypes
+   - Need to track consistency across pattern
    - Handle nullable/non-nullable variants
 
-3. **Performance**: Pattern matching on every optimization pass
-   - Consider caching/indexing strategies
+2. **Performance**: Pattern matching overhead
+   - Consider caching strategies
    - Early rejection based on plan structure
 
-4. **Correctness**: Ensuring soundness
+3. **Correctness**: Ensuring soundness
    - Never apply invalid rewrites
    - OK to miss valid opportunities
 
-## Development Order
+## Development Timeline
 
-1. **Week 1**: Complete pattern builders, basic matching for exact structural matches
-2. **Week 2**: QED export, predicate matching with function bindings
-3. **Week 3**: Transform engine, DataFusion integration
-4. **Week 4**: Testing, optimization, documentation
+### Completed (Weeks 1-2) ✅
+- Core AST and rule abstractions
+- Pattern builders and helper methods
+- Full pattern matching implementation with expression resolvers
+- AND/OR commutativity handling
+- Code optimization and cleanup
+
+### Current Sprint (Week 3) 🚧
+- Implement `instantiate` method
+- Test with concrete DataFusion plans
+- Create more rule examples
+
+### Upcoming (Week 4+)
+- DataFusion optimizer integration
+- QED export for verification
+- Performance optimizations
+- Documentation and examples
 
 ## Notes from Paper for Implementation
 
