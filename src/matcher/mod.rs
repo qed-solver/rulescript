@@ -25,13 +25,16 @@ pub enum RuleError {
     /// Pattern structure doesn't match the target
     #[error("Structure mismatch: pattern {pattern} does not match target {target}")]
     StructureMismatch {
-        pattern: LogicalPlan,
-        target: LogicalPlan,
+        pattern: Box<LogicalPlan>,
+        target: Box<LogicalPlan>,
     },
 
     /// Expression structure doesn't match
     #[error("Expression mismatch: pattern {pattern} does not match target {target}")]
-    ExpressionMismatch { pattern: Expr, target: Expr },
+    ExpressionMismatch {
+        pattern: Box<Expr>,
+        target: Box<Expr>,
+    },
 
     /// Partitioning failed - concrete item couldn't be matched to any abstract pattern
     #[error("Cannot match item to any pattern: {item}")]
@@ -62,11 +65,14 @@ pub enum RuleError {
 #[derive(Debug, Error)]
 pub enum BindingConflict {
     #[error("Function already bound: previous={previous:?}, attempted={attempted:?}")]
-    Expression { previous: Expr, attempted: Expr },
+    Expression {
+        previous: Box<Expr>,
+        attempted: Box<Expr>,
+    },
 
     #[error("Source already bound: previous={previous:?}, attempted={attempted:?}")]
     Plan {
-        previous: LogicalPlan,
-        attempted: LogicalPlan,
+        previous: Box<LogicalPlan>,
+        attempted: Box<LogicalPlan>,
     },
 }
