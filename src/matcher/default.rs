@@ -1,6 +1,11 @@
 use std::collections::{HashMap, HashSet};
 
-use datafusion::logical_expr::{Expr, Extension, Filter, LogicalPlan, Projection};
+use datafusion::{
+    common::Column,
+    logical_expr::{
+        BinaryExpr, Expr, Extension, Filter, LogicalPlan, Projection, expr::ScalarFunction,
+    },
+};
 
 use crate::ast::relational::{Rel, Source};
 
@@ -118,6 +123,56 @@ impl DefaultMatcher {
 
     // Specific resolvers for each plan type
 
+    /// Resolve an abstract function against a concrete expression
+    fn resolve_abstract_function(
+        &mut self,
+        pat_func: &ScalarFunction,
+        concrete: &Expr,
+    ) -> Result<(), RuleError> {
+        // TODO: Bind the abstract function to the concrete expression
+        todo!("resolve_abstract_function")
+    }
+
+    /// Resolve binary expressions
+    fn resolve_binary_expr(
+        &mut self,
+        pat_binary: &BinaryExpr,
+        con_binary: &BinaryExpr,
+    ) -> Result<(), RuleError> {
+        // TODO: Match operator and recursively match operands
+        todo!("resolve_binary_expr")
+    }
+
+    /// Resolve column references
+    fn resolve_column(&mut self, pat_col: &Column, con_col: &Column) -> Result<(), RuleError> {
+        // TODO: Check if concrete column is in the partition for the abstract field
+        todo!("resolve_column")
+    }
+
+    /// Resolve pattern expressions against concrete expressions
+    fn resolve_expr(&mut self, pattern: &Expr, concrete: &Expr) -> Result<(), RuleError> {
+        match (pattern, concrete) {
+            // Abstract function - binds to entire concrete expression
+            (Expr::ScalarFunction(pat_func), con_expr) => {
+                self.resolve_abstract_function(pat_func, con_expr)
+            }
+
+            // Binary expressions - match operator and operands
+            (Expr::BinaryExpr(pat_binary), Expr::BinaryExpr(con_binary)) => {
+                self.resolve_binary_expr(pat_binary, con_binary)
+            }
+
+            // Column references - check against field partitions
+            (Expr::Column(pat_col), Expr::Column(con_col)) => self.resolve_column(pat_col, con_col),
+
+            // Structure mismatch
+            _ => Err(RuleError::ExpressionMismatch {
+                pattern: pattern.clone(),
+                target: concrete.clone(),
+            }),
+        }
+    }
+
     /// Resolve a Source pattern against any concrete plan
     fn resolve_source(&mut self, source: &Source, concrete: &LogicalPlan) -> Result<(), RuleError> {
         // Store original concrete plan for instantiation later
@@ -125,7 +180,7 @@ impl DefaultMatcher {
 
         // Work directly with the concrete schema - no annotation
         let concrete_schema = concrete.schema();
-        let concrete_fields: Vec<_> = concrete_schema.fields().iter().cloned().collect();
+        let concrete_fields = concrete_schema.fields().to_vec();
 
         // Use partition_items with field information directly
         self.partition_items(
@@ -179,46 +234,6 @@ impl DefaultMatcher {
             &pattern.expr,
             |matcher, con_expr, pat_expr| matcher.resolve_expr(pat_expr, con_expr),
         )
-    }
-
-    /// Resolve pattern expressions against concrete expressions
-    fn resolve_expr(&mut self, pattern: &Expr, concrete: &Expr) -> Result<(), RuleError> {
-        // Extract columns used by this concrete expression
-        let used_columns = concrete
-            .column_refs()
-            .into_iter()
-            .map(|col| col.name.clone())
-            .collect::<HashSet<_>>();
-
-        // Extract allowed columns from pattern expression based on field partitions
-        let mut allowed_columns = HashSet::new();
-        for col_ref in pattern.column_refs() {
-            if let Some(partition) = self.field_partitions.get(&col_ref.name) {
-                // Pattern column refers to an abstract field - add all its concrete columns
-                allowed_columns.extend(partition.clone());
-            } else {
-                // Pattern references an unresolved abstract field - rule validation should catch this
-                // For now, treat as "doesn't match this pattern"
-                return Err(RuleError::UnboundSymbol {
-                    symbol: col_ref.name.clone(),
-                });
-            }
-        }
-
-        // Check dependency constraint: concrete columns must be subset of allowed columns
-        // Only check if pattern has column references (if empty, it's a constant/function)
-        if !pattern.column_refs().is_empty() && !used_columns.is_subset(&allowed_columns) {
-            return Err(RuleError::ExpressionMismatch {
-                pattern: pattern.clone(),
-                target: concrete.clone(),
-            });
-        }
-
-        // Save current bindings for potential rollback
-        let _saved_functions = self.functions.clone();
-
-        // Try to match the expression structure
-        todo!("match_expr_structure")
     }
 
     /// Resolve pattern plan against concrete plan
