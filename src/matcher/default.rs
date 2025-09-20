@@ -415,21 +415,47 @@ impl DefaultMatcher {
     }
 
     /// Instantiate a Source pattern by looking up the bound plan
-    fn instantiate_source(&self, _source: &Source) -> Result<LogicalPlan, RuleError> {
-        // TODO: Look up source.table_name in self.sources and return bound plan
-        todo!("instantiate_source")
+    fn instantiate_source(&self, source: &Source) -> Result<LogicalPlan, RuleError> {
+        // Look up the source by table name in our bindings
+        self.sources
+            .get(&source.table_name)
+            .cloned()
+            .ok_or_else(|| RuleError::UnboundSymbol {
+                symbol: source.table_name.clone(),
+            })
     }
 
     /// Instantiate a Filter node by transforming input and predicate
-    fn instantiate_filter(&self, _filter: &Filter) -> Result<LogicalPlan, RuleError> {
-        // TODO: Recursively instantiate input plan and predicate expression
-        todo!("instantiate_filter")
+    fn instantiate_filter(&self, filter: &Filter) -> Result<LogicalPlan, RuleError> {
+        // First, recursively instantiate the input
+        let new_input = Arc::new(self.instantiate_plan(&filter.input)?);
+
+        // Instantiate the filter predicate expression
+        let new_predicate = self.instantiate_expr(&filter.predicate)?;
+
+        // Build new Filter node with instantiated components
+        Ok(LogicalPlan::Filter(Filter::try_new(
+            new_predicate,
+            new_input,
+        )?))
     }
 
     /// Instantiate a Projection node by transforming input and expressions
-    fn instantiate_projection(&self, _projection: &Projection) -> Result<LogicalPlan, RuleError> {
-        // TODO: Recursively instantiate input plan and projection expressions
-        todo!("instantiate_projection")
+    fn instantiate_projection(&self, projection: &Projection) -> Result<LogicalPlan, RuleError> {
+        // First, recursively instantiate the input
+        let new_input = Arc::new(self.instantiate_plan(&projection.input)?);
+
+        // Instantiate all projection expressions
+        let new_exprs = projection
+            .expr
+            .iter()
+            .map(|expr| self.instantiate_expr(expr))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Build new Projection node with instantiated components
+        Ok(LogicalPlan::Projection(Projection::try_new(
+            new_exprs, new_input,
+        )?))
     }
 
     /// Main dispatcher for instantiating expressions

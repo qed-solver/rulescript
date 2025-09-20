@@ -48,10 +48,6 @@ pub enum RuleError {
         details: BindingConflict,
     },
 
-    /// Failed to instantiate template - missing binding
-    #[error("Cannot instantiate: unbound symbol '{symbol}'")]
-    InstantiationError { symbol: String },
-
     /// Referenced binding not found
     #[error("Unbound symbol: '{symbol}'")]
     UnboundSymbol { symbol: String },
