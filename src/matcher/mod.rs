@@ -34,9 +34,9 @@ pub enum RuleError {
     #[error("Expression mismatch: pattern {pattern} does not match target {target}")]
     ExpressionMismatch { pattern: Expr, target: Expr },
 
-    /// Schema partitioning failed - concrete column couldn't be matched to abstract fields
-    #[error("Cannot match column '{column}' to any abstract field")]
-    SchemaIncompatible { column: String },
+    /// Partitioning failed - concrete item couldn't be matched to any abstract pattern
+    #[error("Cannot match item at index {index} to any pattern")]
+    NoMatchingPattern { index: usize },
 
     /// Inconsistent binding - same symbol bound to different values
     #[error("Inconsistent binding for '{symbol}'")]
