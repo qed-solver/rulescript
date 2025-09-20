@@ -227,45 +227,30 @@ impl DefaultMatcher {
         // Try to get our abstract Function from the ScalarFunction
         let abstract_func = self.as_abstract_function(pat_func, concrete)?;
 
-        // Collect allowed columns from the pattern's arguments
-        // Pattern: P(x, y) means P can use columns from partitions of "x" and "y"
-        let mut allowed_columns = HashSet::new();
-        for arg in &pat_func.args {
-            // Pattern arguments should be columns (e.g., P(x, y))
-            // We don't support nested functions like P(Q(x))
-            let Expr::Column(col) = arg else {
-                return Err(RuleError::ExpressionMismatch {
-                    pattern: Expr::ScalarFunction(pat_func.clone()),
-                    target: concrete.clone(),
-                });
-            };
+        // Get the pattern expression (the abstract function call)
+        let pattern_expr = Expr::ScalarFunction(pat_func.clone());
 
-            // Get the partition for this abstract field
-            let Some(partition) = self.field_partitions.get(col.name()) else {
-                // Abstract field not in partitions - shouldn't happen in valid patterns
-                return Err(RuleError::UnboundSymbol {
-                    symbol: col.name().to_string(),
-                });
-            };
+        // Get pattern's column references directly (assumes well-formed pattern)
+        let pattern_columns = pattern_expr
+            .column_refs()
+            .into_iter()
+            .cloned()
+            .collect::<Vec<_>>();
 
-            allowed_columns.extend(partition.clone());
-        }
-
-        // Check that concrete expression only uses allowed columns
+        // Get concrete expression's column references
         let concrete_columns = concrete
             .column_refs()
-            .iter()
-            .map(|c| c.name().to_string())
-            .collect::<HashSet<_>>();
+            .into_iter()
+            .cloned()
+            .collect::<Vec<_>>();
 
-        // If pattern has no arguments, concrete shouldn't use any columns
-        // If pattern has arguments, concrete must use subset of allowed columns
-        if !pat_func.args.is_empty() && !concrete_columns.is_subset(&allowed_columns) {
-            return Err(RuleError::ExpressionMismatch {
-                pattern: Expr::ScalarFunction(pat_func.clone()),
-                target: concrete.clone(),
-            });
-        }
+        // Use partition_items to ensure each concrete column matches some pattern column
+        // This enforces that concrete expression only uses columns from allowed partitions
+        self.partition_items(
+            concrete_columns.iter(),
+            &pattern_columns,
+            |matcher, con_col, pat_col| matcher.resolve_column(pat_col, con_col),
+        )?;
 
         // Bind this abstract function to the entire concrete expression
         self.bind_function(abstract_func.name.clone(), concrete.clone())?;
@@ -330,8 +315,26 @@ impl DefaultMatcher {
 
     /// Resolve column references
     fn resolve_column(&mut self, pat_col: &Column, con_col: &Column) -> Result<(), RuleError> {
-        // TODO: Check if concrete column is in the partition for the abstract field
-        todo!("resolve_column")
+        // Get the abstract field name from the pattern column
+        let abstract_field = pat_col.name();
+
+        // Look up the partition for this abstract field
+        let Some(partition) = self.field_partitions.get(abstract_field) else {
+            // Abstract field not in partitions - shouldn't happen in valid patterns
+            return Err(RuleError::UnboundSymbol {
+                symbol: abstract_field.to_string(),
+            });
+        };
+
+        // Check if the concrete column is in the partition
+        if !partition.contains(con_col.name()) {
+            return Err(RuleError::ExpressionMismatch {
+                pattern: Expr::Column(pat_col.clone()),
+                target: Expr::Column(con_col.clone()),
+            });
+        }
+
+        Ok(())
     }
 
     /// Resolve pattern expressions against concrete expressions
