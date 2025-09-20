@@ -7,7 +7,10 @@ use datafusion::{
     },
 };
 
-use crate::ast::relational::{Rel, Source};
+use crate::ast::{
+    relational::{Rel, Source},
+    scalar::Function,
+};
 
 use super::{BindingConflict, PatternMatcher, RuleError};
 
@@ -31,37 +34,47 @@ impl DefaultMatcher {
 
     /// Bind a function to a concrete expression, checking for consistency
     pub fn bind_function(&mut self, name: String, expr: Expr) -> Result<(), RuleError> {
-        if let Some(previous) = self.functions.insert(name.clone(), expr.clone()) {
-            if previous != expr {
-                // Restore the previous value and return error
-                self.functions.insert(name.clone(), previous.clone());
-                return Err(RuleError::InconsistentBinding {
-                    symbol: name,
-                    details: BindingConflict::Expression {
-                        previous,
-                        attempted: expr,
-                    },
-                });
-            }
+        let Some(previous) = self.functions.insert(name.clone(), expr.clone()) else {
+            // No previous binding, success
+            return Ok(());
+        };
+
+        // There was a previous binding - check consistency
+        if previous != expr {
+            // Restore the previous value and return error
+            self.functions.insert(name.clone(), previous.clone());
+            return Err(RuleError::InconsistentBinding {
+                symbol: name,
+                details: BindingConflict::Expression {
+                    previous,
+                    attempted: expr,
+                },
+            });
         }
+
         Ok(())
     }
 
     /// Bind a source to a concrete plan, checking for consistency
     pub fn bind_source(&mut self, name: String, plan: LogicalPlan) -> Result<(), RuleError> {
-        if let Some(previous) = self.sources.insert(name.clone(), plan.clone()) {
-            if previous != plan {
-                // Restore the previous value and return error
-                self.sources.insert(name.clone(), previous.clone());
-                return Err(RuleError::InconsistentBinding {
-                    symbol: name,
-                    details: BindingConflict::Plan {
-                        previous,
-                        attempted: plan,
-                    },
-                });
-            }
+        let Some(previous) = self.sources.insert(name.clone(), plan.clone()) else {
+            // No previous binding, success
+            return Ok(());
+        };
+
+        // There was a previous binding - check consistency
+        if previous != plan {
+            // Restore the previous value and return error
+            self.sources.insert(name.clone(), previous.clone());
+            return Err(RuleError::InconsistentBinding {
+                symbol: name,
+                details: BindingConflict::Plan {
+                    previous,
+                    attempted: plan,
+                },
+            });
         }
+
         Ok(())
     }
 
@@ -88,6 +101,22 @@ impl DefaultMatcher {
             .downcast_ref::<Source>()
             .ok_or_else(|| RuleError::StructureMismatch {
                 pattern: LogicalPlan::Extension(ext.clone()),
+                target: concrete.clone(),
+            })
+    }
+
+    /// Get an abstract Function from a ScalarFunction or return error
+    fn as_abstract_function<'s>(
+        &self,
+        func: &'s ScalarFunction,
+        concrete: &Expr,
+    ) -> Result<&'s Function, RuleError> {
+        func.func
+            .inner()
+            .as_any()
+            .downcast_ref::<Function>()
+            .ok_or_else(|| RuleError::ExpressionMismatch {
+                pattern: Expr::ScalarFunction(func.clone()),
                 target: concrete.clone(),
             })
     }
@@ -122,56 +151,6 @@ impl DefaultMatcher {
     }
 
     // Specific resolvers for each plan type
-
-    /// Resolve an abstract function against a concrete expression
-    fn resolve_abstract_function(
-        &mut self,
-        pat_func: &ScalarFunction,
-        concrete: &Expr,
-    ) -> Result<(), RuleError> {
-        // TODO: Bind the abstract function to the concrete expression
-        todo!("resolve_abstract_function")
-    }
-
-    /// Resolve binary expressions
-    fn resolve_binary_expr(
-        &mut self,
-        pat_binary: &BinaryExpr,
-        con_binary: &BinaryExpr,
-    ) -> Result<(), RuleError> {
-        // TODO: Match operator and recursively match operands
-        todo!("resolve_binary_expr")
-    }
-
-    /// Resolve column references
-    fn resolve_column(&mut self, pat_col: &Column, con_col: &Column) -> Result<(), RuleError> {
-        // TODO: Check if concrete column is in the partition for the abstract field
-        todo!("resolve_column")
-    }
-
-    /// Resolve pattern expressions against concrete expressions
-    fn resolve_expr(&mut self, pattern: &Expr, concrete: &Expr) -> Result<(), RuleError> {
-        match (pattern, concrete) {
-            // Abstract function - binds to entire concrete expression
-            (Expr::ScalarFunction(pat_func), con_expr) => {
-                self.resolve_abstract_function(pat_func, con_expr)
-            }
-
-            // Binary expressions - match operator and operands
-            (Expr::BinaryExpr(pat_binary), Expr::BinaryExpr(con_binary)) => {
-                self.resolve_binary_expr(pat_binary, con_binary)
-            }
-
-            // Column references - check against field partitions
-            (Expr::Column(pat_col), Expr::Column(con_col)) => self.resolve_column(pat_col, con_col),
-
-            // Structure mismatch
-            _ => Err(RuleError::ExpressionMismatch {
-                pattern: pattern.clone(),
-                target: concrete.clone(),
-            }),
-        }
-    }
 
     /// Resolve a Source pattern against any concrete plan
     fn resolve_source(&mut self, source: &Source, concrete: &LogicalPlan) -> Result<(), RuleError> {
@@ -236,6 +215,103 @@ impl DefaultMatcher {
         )
     }
 
+    // Specific resolvers for each expression type
+
+    /// Resolve an abstract function against a concrete expression
+    fn resolve_abstract_function(
+        &mut self,
+        pat_func: &ScalarFunction,
+        concrete: &Expr,
+    ) -> Result<(), RuleError> {
+        // Try to get our abstract Function from the ScalarFunction
+        let abstract_func = self.as_abstract_function(pat_func, concrete)?;
+
+        // Collect allowed columns from the pattern's arguments
+        // Pattern: P(x, y) means P can use columns from partitions of "x" and "y"
+        let mut allowed_columns = HashSet::new();
+        for arg in &pat_func.args {
+            // Pattern arguments should be columns (e.g., P(x, y))
+            // We don't support nested functions like P(Q(x))
+            let Expr::Column(col) = arg else {
+                return Err(RuleError::ExpressionMismatch {
+                    pattern: Expr::ScalarFunction(pat_func.clone()),
+                    target: concrete.clone(),
+                });
+            };
+
+            // Get the partition for this abstract field
+            let Some(partition) = self.field_partitions.get(col.name()) else {
+                // Abstract field not in partitions - shouldn't happen in valid patterns
+                return Err(RuleError::UnboundSymbol {
+                    symbol: col.name().to_string(),
+                });
+            };
+
+            allowed_columns.extend(partition.clone());
+        }
+
+        // Check that concrete expression only uses allowed columns
+        let concrete_columns = concrete
+            .column_refs()
+            .iter()
+            .map(|c| c.name().to_string())
+            .collect::<HashSet<_>>();
+
+        // If pattern has no arguments, concrete shouldn't use any columns
+        // If pattern has arguments, concrete must use subset of allowed columns
+        if !pat_func.args.is_empty() && !concrete_columns.is_subset(&allowed_columns) {
+            return Err(RuleError::ExpressionMismatch {
+                pattern: Expr::ScalarFunction(pat_func.clone()),
+                target: concrete.clone(),
+            });
+        }
+
+        // Bind this abstract function to the entire concrete expression
+        self.bind_function(abstract_func.name.clone(), concrete.clone())?;
+
+        Ok(())
+    }
+
+    /// Resolve binary expressions
+    fn resolve_binary_expr(
+        &mut self,
+        pat_binary: &BinaryExpr,
+        con_binary: &BinaryExpr,
+    ) -> Result<(), RuleError> {
+        // TODO: Match operator and recursively match operands
+        todo!("resolve_binary_expr")
+    }
+
+    /// Resolve column references
+    fn resolve_column(&mut self, pat_col: &Column, con_col: &Column) -> Result<(), RuleError> {
+        // TODO: Check if concrete column is in the partition for the abstract field
+        todo!("resolve_column")
+    }
+
+    /// Resolve pattern expressions against concrete expressions
+    fn resolve_expr(&mut self, pattern: &Expr, concrete: &Expr) -> Result<(), RuleError> {
+        match (pattern, concrete) {
+            // Abstract function - binds to entire concrete expression
+            (Expr::ScalarFunction(pat_func), con_expr) => {
+                self.resolve_abstract_function(pat_func, con_expr)
+            }
+
+            // Binary expressions - match operator and operands
+            (Expr::BinaryExpr(pat_binary), Expr::BinaryExpr(con_binary)) => {
+                self.resolve_binary_expr(pat_binary, con_binary)
+            }
+
+            // Column references - check against field partitions
+            (Expr::Column(pat_col), Expr::Column(con_col)) => self.resolve_column(pat_col, con_col),
+
+            // Structure mismatch
+            _ => Err(RuleError::ExpressionMismatch {
+                pattern: pattern.clone(),
+                target: concrete.clone(),
+            }),
+        }
+    }
+
     /// Resolve pattern plan against concrete plan
     fn resolve_plan(
         &mut self,
@@ -275,7 +351,7 @@ impl PatternMatcher for DefaultMatcher {
         self.resolve_plan(&pattern.plan, concrete)
     }
 
-    fn instantiate(&self, _template: &Rel) -> Result<LogicalPlan, RuleError> {
+    fn instantiate(&self, template: &Rel) -> Result<LogicalPlan, RuleError> {
         // TODO: Implement actual instantiation logic
         todo!("instantiate not yet implemented")
     }
