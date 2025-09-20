@@ -3,7 +3,6 @@ mod default;
 pub use default::DefaultMatcher;
 
 use datafusion::{
-    arrow::datatypes::DataType,
     error::DataFusionError,
     logical_expr::{Expr, LogicalPlan},
 };
@@ -69,11 +68,5 @@ pub enum BindingConflict {
     Plan {
         previous: LogicalPlan,
         attempted: LogicalPlan,
-    },
-
-    #[error("Type already bound: previous={previous:?}, attempted={attempted:?}")]
-    Type {
-        previous: DataType,
-        attempted: DataType,
     },
 }

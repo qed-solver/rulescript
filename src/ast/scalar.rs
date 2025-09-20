@@ -5,8 +5,8 @@ use datafusion::{
     common::Column,
     error::{DataFusionError, Result},
     logical_expr::{
-        BinaryExpr, ColumnarValue, Expr, Operator, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
-        expr::ScalarFunction,
+        BinaryExpr, ColumnarValue, Expr, Operator, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl,
+        Signature, Volatility, expr::ScalarFunction,
     },
     scalar::ScalarValue,
 };
@@ -131,7 +131,7 @@ impl ScalarUDFImpl for Function {
         Ok((&self.return_type).into())
     }
 
-    fn invoke(&self, _args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    fn invoke_with_args(&self, _args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         // Functions shouldn't be executed - they're for pattern matching
         Err(DataFusionError::NotImplemented(format!(
             "Function '{}' is for pattern matching, not execution",
@@ -178,7 +178,7 @@ impl Scalar {
     /// Create a pattern for a literal value
     pub fn literal(value: ScalarValue) -> Self {
         Self {
-            expr: Expr::Literal(value),
+            expr: Expr::Literal(value, None),
         }
     }
 

@@ -1,13 +1,13 @@
 use std::{cmp::Ordering, fmt, sync::Arc};
 
 use datafusion::{
-    common::{DFSchemaRef, JoinConstraint},
+    common::{DFSchemaRef, JoinConstraint, NullEquality},
     error::{DataFusionError, Result},
     logical_expr::{
         Aggregate, Distinct, Extension, Filter, Join, JoinType, Limit, LogicalPlan, Projection,
         Sort, SortExpr, Union, UserDefinedLogicalNodeCore, build_join_schema,
     },
-    prelude::{Expr, col, lit},
+    prelude::{Expr, lit},
 };
 
 use crate::ast::opaque::Schema;
@@ -29,27 +29,6 @@ impl Source {
             schema,
             df_schema,
         }
-    }
-
-    /// Annotate a concrete plan with unique column aliases based on this Source's name
-    /// Returns the annotated plan where field names are the aliases
-    pub fn annotate(&self, concrete: &LogicalPlan) -> Result<LogicalPlan> {
-        let schema = concrete.schema();
-        let mut projection_exprs = Vec::new();
-
-        for (idx, field) in schema.fields().iter().enumerate() {
-            // Generate unique alias using source name as prefix
-            let alias = format!("{}_c{}", self.table_name, idx);
-
-            // Create projection expression with alias
-            let expr = col(field.name()).alias(&alias);
-            projection_exprs.push(expr);
-        }
-
-        // Wrap in a projection with aliases
-        let annotated = Projection::try_new(projection_exprs, Arc::new(concrete.clone()))?;
-
-        Ok(LogicalPlan::Projection(annotated))
     }
 }
 
@@ -173,7 +152,7 @@ impl Rel {
                 join_type,
                 join_constraint: JoinConstraint::On,
                 schema: Arc::new(join_schema),
-                null_equals_null: false,
+                null_equality: NullEquality::NullEqualsNothing,
             }),
         })
     }

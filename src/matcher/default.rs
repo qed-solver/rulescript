@@ -1,21 +1,15 @@
 use std::collections::{HashMap, HashSet};
 
-use datafusion::{
-    arrow::datatypes::DataType,
-    logical_expr::{Expr, Extension, Filter, LogicalPlan, Projection},
-};
+use datafusion::logical_expr::{Expr, Extension, Filter, LogicalPlan, Projection};
 
-use crate::ast::{
-    opaque::Type,
-    relational::{Rel, Source},
-};
+use crate::ast::relational::{Rel, Source};
 
 use super::{BindingConflict, PatternMatcher, RuleError};
 
 /// Default pattern matcher that tracks bindings internally
 #[derive(Debug, Default)]
 pub struct DefaultMatcher {
-    /// Abstract field name -> Set of aliased column names (partition)
+    /// Abstract field name -> Set of original column names (partition)
     field_partitions: HashMap<String, HashSet<String>>,
 
     /// Abstract functions/predicates -> concrete expressions
@@ -23,9 +17,6 @@ pub struct DefaultMatcher {
 
     /// Abstract sources -> concrete plans (original)
     sources: HashMap<String, LogicalPlan>,
-
-    /// Abstract types -> concrete DataFusion types
-    types: HashMap<String, DataType>,
 }
 
 impl DefaultMatcher {
@@ -69,24 +60,6 @@ impl DefaultMatcher {
         Ok(())
     }
 
-    /// Bind a type to a concrete DataType, checking for consistency
-    pub fn bind_type(&mut self, name: String, dtype: DataType) -> Result<(), RuleError> {
-        if let Some(previous) = self.types.insert(name.clone(), dtype.clone()) {
-            if previous != dtype {
-                // Restore the previous value and return error
-                self.types.insert(name.clone(), previous.clone());
-                return Err(RuleError::InconsistentBinding {
-                    symbol: name,
-                    details: BindingConflict::Type {
-                        previous,
-                        attempted: dtype,
-                    },
-                });
-            }
-        }
-        Ok(())
-    }
-
     /// Look up a bound function
     pub fn lookup_function(&self, name: &str) -> Option<&Expr> {
         self.functions.get(name)
@@ -95,11 +68,6 @@ impl DefaultMatcher {
     /// Look up a bound source
     pub fn lookup_source(&self, name: &str) -> Option<&LogicalPlan> {
         self.sources.get(name)
-    }
-
-    /// Look up a bound type
-    pub fn lookup_type(&self, name: &str) -> Option<&DataType> {
-        self.types.get(name)
     }
 
     // Helper methods for pattern matching
@@ -155,22 +123,15 @@ impl DefaultMatcher {
         // Store original concrete plan for instantiation later
         self.bind_source(source.table_name.clone(), concrete.clone())?;
 
-        // Get the annotated plan
-        let annotated_plan = source.annotate(concrete)?;
-        let annotated_schema = annotated_plan.schema();
-
-        // Create tuples of (alias, field) for concrete fields
-        let concrete_items = annotated_schema
-            .fields()
-            .iter()
-            .map(|f| (f.name().to_string(), f.clone()))
-            .collect::<Vec<_>>();
+        // Work directly with the concrete schema - no annotation
+        let concrete_schema = concrete.schema();
+        let concrete_fields: Vec<_> = concrete_schema.fields().iter().cloned().collect();
 
         // Use partition_items with field information directly
         self.partition_items(
-            concrete_items,
+            concrete_fields,
             &source.schema.fields,
-            |matcher, (alias, concrete_field), abstract_field| {
+            |matcher, concrete_field, abstract_field| {
                 // Check nullable property
                 if abstract_field.nullable != concrete_field.is_nullable() {
                     return Err(RuleError::StructureMismatch {
@@ -181,30 +142,12 @@ impl DefaultMatcher {
                     });
                 }
 
-                // Check type compatibility
-                match &abstract_field.data_type {
-                    Type::Generic { id } => {
-                        // bind_type returns Err on conflict, but we treat that as "try next pattern"
-                        matcher.bind_type(id.clone(), concrete_field.data_type().clone())?;
-                    }
-                    Type::Boolean => {
-                        if concrete_field.data_type() != &DataType::Boolean {
-                            return Err(RuleError::StructureMismatch {
-                                pattern: LogicalPlan::Extension(Extension {
-                                    node: std::sync::Arc::new(source.clone()),
-                                }),
-                                target: concrete.clone(),
-                            });
-                        }
-                    }
-                };
-
-                // Successfully matched - add to partition
+                // Add the original column name to the partition for this abstract field
                 matcher
                     .field_partitions
                     .entry(abstract_field.name.clone())
                     .or_default()
-                    .insert(alias.clone());
+                    .insert(concrete_field.name().to_string());
                 Ok(())
             },
         )?;
@@ -272,8 +215,7 @@ impl DefaultMatcher {
         }
 
         // Save current bindings for potential rollback
-        let saved_functions = self.functions.clone();
-        let saved_types = self.types.clone();
+        let _saved_functions = self.functions.clone();
 
         // Try to match the expression structure
         todo!("match_expr_structure")
