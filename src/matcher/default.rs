@@ -3,7 +3,8 @@ use std::collections::{HashMap, HashSet};
 use datafusion::{
     common::Column,
     logical_expr::{
-        BinaryExpr, Expr, Extension, Filter, LogicalPlan, Projection, expr::ScalarFunction,
+        BinaryExpr, Expr, Extension, Filter, LogicalPlan, Operator, Projection,
+        expr::ScalarFunction,
     },
 };
 
@@ -272,14 +273,59 @@ impl DefaultMatcher {
         Ok(())
     }
 
+    /// Flatten binary expressions with the same operator into a list (DFS order)
+    fn flatten_binary_op<'e>(expr: &'e Expr, op: &Operator) -> Vec<&'e Expr> {
+        match expr {
+            Expr::BinaryExpr(binary) if binary.op == *op => {
+                // Same operator - recursively flatten both sides
+                let mut terms = Self::flatten_binary_op(&binary.left, op);
+                terms.extend(Self::flatten_binary_op(&binary.right, op));
+                terms
+            }
+            other => {
+                // Different operator or not binary - return single term
+                vec![other]
+            }
+        }
+    }
+
     /// Resolve binary expressions
     fn resolve_binary_expr(
         &mut self,
         pat_binary: &BinaryExpr,
         con_binary: &BinaryExpr,
     ) -> Result<(), RuleError> {
-        // TODO: Match operator and recursively match operands
-        todo!("resolve_binary_expr")
+        // Check if operators match
+        if pat_binary.op != con_binary.op {
+            return Err(RuleError::ExpressionMismatch {
+                pattern: Expr::BinaryExpr(pat_binary.clone()),
+                target: Expr::BinaryExpr(con_binary.clone()),
+            });
+        }
+
+        match pat_binary.op {
+            Operator::And | Operator::Or => {
+                // For commutative AND/OR, flatten and use partition_items
+                let pattern_expr = Expr::BinaryExpr(pat_binary.clone());
+                let pattern_terms = Self::flatten_binary_op(&pattern_expr, &pat_binary.op);
+
+                let concrete_expr = Expr::BinaryExpr(con_binary.clone());
+                let concrete_terms = Self::flatten_binary_op(&concrete_expr, &con_binary.op);
+
+                // Use partition_items to match concrete terms to pattern terms
+                self.partition_items(
+                    concrete_terms,
+                    &pattern_terms,
+                    |matcher, con_term, pat_term| matcher.resolve_expr(pat_term, con_term),
+                )
+            }
+            _ => {
+                // For non-commutative operators, match structurally
+                self.resolve_expr(&pat_binary.left, &con_binary.left)?;
+                self.resolve_expr(&pat_binary.right, &con_binary.right)?;
+                Ok(())
+            }
+        }
     }
 
     /// Resolve column references
