@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet, hash_map::Entry},
+    collections::{HashMap, HashSet},
     fmt::Debug,
     sync::Arc,
 };
@@ -23,10 +23,10 @@ use super::{BindingConflict, PatternMatcher, RuleError};
 #[derive(Debug, Default)]
 pub struct DefaultMatcher {
     /// Abstract field name -> Set of original column names (partition)
-    field_partitions: HashMap<String, HashSet<String>>,
+    fields: HashMap<String, HashSet<String>>,
 
-    /// Abstract functions/predicates -> concrete expressions
-    functions: HashMap<String, Expr>,
+    /// Abstract functions/predicates -> Set of concrete expressions
+    functions: HashMap<String, HashSet<Expr>>,
 
     /// Abstract sources -> concrete plans (original)
     sources: HashMap<String, LogicalPlan>,
@@ -36,58 +36,6 @@ impl DefaultMatcher {
     /// Create a new empty matcher
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Bind a function to a concrete expression, checking for consistency
-    pub fn bind_function(&mut self, name: String, expr: Expr) -> Result<(), RuleError> {
-        match self.functions.entry(name.clone()) {
-            Entry::Occupied(entry) => {
-                if entry.get() != &expr {
-                    return Err(RuleError::InconsistentBinding {
-                        symbol: name,
-                        details: BindingConflict::Expression {
-                            previous: Box::new(entry.get().clone()),
-                            attempted: Box::new(expr),
-                        },
-                    });
-                }
-            }
-            Entry::Vacant(entry) => {
-                entry.insert(expr);
-            }
-        }
-        Ok(())
-    }
-
-    /// Bind a source to a concrete plan, checking for consistency
-    pub fn bind_source(&mut self, name: String, plan: LogicalPlan) -> Result<(), RuleError> {
-        match self.sources.entry(name.clone()) {
-            Entry::Occupied(entry) => {
-                if entry.get() != &plan {
-                    return Err(RuleError::InconsistentBinding {
-                        symbol: name,
-                        details: BindingConflict::Plan {
-                            previous: Box::new(entry.get().clone()),
-                            attempted: Box::new(plan),
-                        },
-                    });
-                }
-            }
-            Entry::Vacant(entry) => {
-                entry.insert(plan);
-            }
-        }
-        Ok(())
-    }
-
-    /// Look up a bound function
-    pub fn lookup_function(&self, name: &str) -> Option<&Expr> {
-        self.functions.get(name)
-    }
-
-    /// Look up a bound source
-    pub fn lookup_source(&self, name: &str) -> Option<&LogicalPlan> {
-        self.sources.get(name)
     }
 
     // ===== HELPER METHODS =====
@@ -207,7 +155,21 @@ impl DefaultMatcher {
     /// Resolve a Source pattern against any concrete plan
     fn resolve_source(&mut self, source: &Source, concrete: &LogicalPlan) -> Result<(), RuleError> {
         // Store original concrete plan for instantiation later (needs to be cloned for storage)
-        self.bind_source(source.table_name.clone(), concrete.clone())?;
+        // Check for consistency if already bound
+        if let Some(existing) = self.sources.get(&source.table_name) {
+            if existing != concrete {
+                return Err(RuleError::InconsistentBinding {
+                    symbol: source.table_name.clone(),
+                    details: BindingConflict::Plan {
+                        previous: Box::new(existing.clone()),
+                        attempted: Box::new(concrete.clone()),
+                    },
+                });
+            }
+        } else {
+            self.sources
+                .insert(source.table_name.clone(), concrete.clone());
+        }
 
         // Work directly with the concrete schema - no annotation
         let concrete_schema = concrete.schema();
@@ -230,7 +192,7 @@ impl DefaultMatcher {
 
                 // Add the original column name to the partition for this abstract field
                 matcher
-                    .field_partitions
+                    .fields
                     .entry(abstract_field.name.clone())
                     .or_default()
                     .insert(concrete_field.name().to_string());
@@ -323,7 +285,11 @@ impl DefaultMatcher {
         )?;
 
         // Bind this abstract function to the entire concrete expression
-        self.bind_function(abstract_func.name.clone(), concrete.clone())?;
+        // Add to the set of expressions bound to this function
+        self.functions
+            .entry(abstract_func.name.clone())
+            .or_default()
+            .insert(concrete.clone());
 
         Ok(())
     }
@@ -369,7 +335,7 @@ impl DefaultMatcher {
     /// Resolve a column reference
     fn resolve_column(&mut self, pat_col: &Column, con_col: &Column) -> Result<(), RuleError> {
         // Check if concrete column belongs to the partition for the pattern column
-        let partition = self.field_partitions.get(&pat_col.name);
+        let partition = self.fields.get(&pat_col.name);
 
         // If we have a partition for this abstract field, check if concrete column is in it
         if let Some(allowed_columns) = partition {
