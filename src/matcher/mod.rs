@@ -52,6 +52,10 @@ pub enum RuleError {
     #[error("Unbound symbol: '{symbol}'")]
     UnboundSymbol { symbol: String },
 
+    /// Invalid pattern structure
+    #[error("Invalid pattern: {reason}")]
+    InvalidPattern { reason: String },
+
     /// DataFusion error wrapper
     #[error("DataFusion error: {0}")]
     DataFusion(#[from] DataFusionError),

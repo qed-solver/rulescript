@@ -30,6 +30,10 @@ pub struct DefaultMatcher {
 
     /// Abstract sources -> concrete plans (original)
     sources: HashMap<String, LogicalPlan>,
+
+    /// Track the qualified name order of the top-level output columns
+    /// Used to preserve column ordering during projection instantiation
+    output_schema: Vec<String>,
 }
 
 impl DefaultMatcher {
@@ -40,35 +44,14 @@ impl DefaultMatcher {
 
     // ===== HELPER METHODS =====
 
-    /// Extract a Source from an Extension node or return error
-    fn as_source<'s>(
-        ext: &'s Extension,
-        pattern: &LogicalPlan,
-        concrete: &LogicalPlan,
-    ) -> Result<&'s Source, RuleError> {
-        ext.node
-            .as_any()
-            .downcast_ref::<Source>()
-            .ok_or_else(|| RuleError::StructureMismatch {
-                pattern: Box::new(pattern.clone()),
-                target: Box::new(concrete.clone()),
-            })
+    /// Extract a Source from an Extension node
+    fn as_source(ext: &Extension) -> Option<&Source> {
+        ext.node.as_any().downcast_ref::<Source>()
     }
 
-    /// Extract an abstract Function from a ScalarFunction or return error
-    fn as_abstract_function<'s>(
-        func: &'s ScalarFunction,
-        pattern: &Expr,
-        concrete: &Expr,
-    ) -> Result<&'s Function, RuleError> {
-        func.func
-            .inner()
-            .as_any()
-            .downcast_ref::<Function>()
-            .ok_or_else(|| RuleError::ExpressionMismatch {
-                pattern: Box::new(pattern.clone()),
-                target: Box::new(concrete.clone()),
-            })
+    /// Extract an abstract Function from a ScalarFunction
+    fn as_abstract_function(func: &ScalarFunction) -> Option<&Function> {
+        func.func.inner().as_any().downcast_ref::<Function>()
     }
 
     /// Generic partitioning routine: assign each item to first matching pattern
@@ -128,7 +111,11 @@ impl DefaultMatcher {
         match (pattern, concrete) {
             // Source pattern can match any plan with compatible schema
             (LogicalPlan::Extension(ext), con_plan) => {
-                let pat_source = Self::as_source(ext, pattern, concrete)?;
+                let pat_source =
+                    Self::as_source(ext).ok_or_else(|| RuleError::StructureMismatch {
+                        pattern: Box::new(pattern.clone()),
+                        target: Box::new(concrete.clone()),
+                    })?;
                 self.resolve_source(pat_source, con_plan)
             }
 
@@ -233,15 +220,8 @@ impl DefaultMatcher {
     fn resolve_expr(&mut self, pattern: &Expr, concrete: &Expr) -> Result<(), RuleError> {
         match (pattern, concrete) {
             // Abstract function can match any expression
-            (Expr::ScalarFunction(pat_func), _)
-                if pat_func
-                    .func
-                    .inner()
-                    .as_any()
-                    .downcast_ref::<Function>()
-                    .is_some() =>
-            {
-                self.resolve_abstract_function(pat_func, concrete)
+            (Expr::ScalarFunction(pat_func), con_expr) => {
+                self.resolve_abstract_function(pat_func, con_expr)
             }
 
             // Binary expressions
@@ -268,7 +248,11 @@ impl DefaultMatcher {
     ) -> Result<(), RuleError> {
         // Try to get our abstract Function from the ScalarFunction
         let pattern_expr = Expr::ScalarFunction(pat_func.clone());
-        let abstract_func = Self::as_abstract_function(pat_func, &pattern_expr, concrete)?;
+        let abstract_func =
+            Self::as_abstract_function(pat_func).ok_or_else(|| RuleError::ExpressionMismatch {
+                pattern: Box::new(pattern_expr.clone()),
+                target: Box::new(concrete.clone()),
+            })?;
 
         // Get pattern's column references directly from the function args (assumes well-formed pattern)
         let pattern_columns = pattern_expr.column_refs();
@@ -322,7 +306,38 @@ impl DefaultMatcher {
                     &pattern_terms,
                     concrete_terms,
                     |matcher, pat_term, con_term| matcher.resolve_expr(pat_term, con_term),
-                )
+                )?;
+
+                // After partition, consolidate multiple bindings for abstract functions
+                // that appeared in this flattened expression
+                for pat_term in &pattern_terms {
+                    let Expr::ScalarFunction(func) = pat_term else {
+                        continue;
+                    };
+                    let Some(abstract_func) = Self::as_abstract_function(func) else {
+                        continue;
+                    };
+                    let Some(exprs) = self.functions.get_mut(&abstract_func.name) else {
+                        continue;
+                    };
+
+                    if exprs.len() > 1 {
+                        // Consolidate multiple expressions into single conjunction/disjunction
+                        let combined = exprs
+                            .drain()
+                            .reduce(|acc, expr| {
+                                Expr::BinaryExpr(BinaryExpr::new(
+                                    Box::new(acc),
+                                    pat_binary.op,
+                                    Box::new(expr),
+                                ))
+                            })
+                            .unwrap();
+                        exprs.insert(combined);
+                    }
+                }
+
+                Ok(())
             }
             _ => {
                 // For non-commutative operators, match structurally
@@ -334,20 +349,21 @@ impl DefaultMatcher {
 
     /// Resolve a column reference
     fn resolve_column(&mut self, pat_col: &Column, con_col: &Column) -> Result<(), RuleError> {
-        // Check if concrete column belongs to the partition for the pattern column
-        let partition = self.fields.get(&pat_col.name);
+        // Get the partition for this abstract field - it must exist from Source matching
+        let allowed_columns =
+            self.fields
+                .get(&pat_col.name)
+                .ok_or_else(|| RuleError::UnboundSymbol {
+                    symbol: pat_col.name.clone(),
+                })?;
 
-        // If we have a partition for this abstract field, check if concrete column is in it
-        if let Some(allowed_columns) = partition {
-            if !allowed_columns.contains(&con_col.name) {
-                return Err(RuleError::ExpressionMismatch {
-                    pattern: Box::new(Expr::Column(pat_col.clone())),
-                    target: Box::new(Expr::Column(con_col.clone())),
-                });
-            }
+        // Check if concrete column is in the allowed partition
+        if !allowed_columns.contains(&con_col.name) {
+            return Err(RuleError::ExpressionMismatch {
+                pattern: Box::new(Expr::Column(pat_col.clone())),
+                target: Box::new(Expr::Column(con_col.clone())),
+            });
         }
-        // If no partition exists yet, this might be ok (depends on context)
-        // The partition would have been created during Source matching
 
         Ok(())
     }
@@ -359,12 +375,13 @@ impl DefaultMatcher {
         match template {
             // Source pattern: look up the bound concrete plan
             LogicalPlan::Extension(ext) => {
-                if let Some(source) = ext.node.as_any().downcast_ref::<Source>() {
-                    self.instantiate_source(source)
-                } else {
-                    // Not a Source node, pass through unchanged
-                    Ok(template.clone())
-                }
+                let source = Self::as_source(ext).ok_or_else(|| RuleError::InvalidPattern {
+                    reason: format!(
+                        "Unexpected extension node in template: {:?}",
+                        ext.node.name()
+                    ),
+                })?;
+                self.instantiate_source(source)
             }
 
             // Filter: instantiate input and predicate
@@ -375,8 +392,10 @@ impl DefaultMatcher {
 
             // TODO: Add other plan types as needed
 
-            // Other plan types: pass through unchanged (shouldn't appear in templates)
-            other => Ok(other.clone()),
+            // Other plan types should not appear in templates
+            other => Err(RuleError::InvalidPattern {
+                reason: format!("Unsupported plan type in template: {:?}", other),
+            }),
         }
     }
 
@@ -397,7 +416,13 @@ impl DefaultMatcher {
         let new_input = Arc::new(self.instantiate_plan(&filter.input)?);
 
         // Instantiate the filter predicate expression
-        let new_predicate = self.instantiate_expr(&filter.predicate)?;
+        // For filters, we expect exactly one expression back
+        let new_predicate = self
+            .instantiate_expr(&filter.predicate)?
+            .pop()
+            .ok_or_else(|| RuleError::InvalidPattern {
+                reason: "Filter predicate must resolve to a single expression".to_string(),
+            })?;
 
         // Build new Filter node with instantiated components
         Ok(LogicalPlan::Filter(Filter::try_new(
@@ -411,75 +436,135 @@ impl DefaultMatcher {
         // First, recursively instantiate the input
         let new_input = Arc::new(self.instantiate_plan(&projection.input)?);
 
-        // Instantiate all projection expressions
-        let new_exprs = projection
-            .expr
-            .iter()
-            .map(|expr| self.instantiate_expr(expr))
-            .collect::<Result<Vec<_>, _>>()?;
+        // Instantiate all projection expressions, flattening results
+        let mut all_exprs = Vec::new();
+        for template_expr in &projection.expr {
+            all_exprs.extend(self.instantiate_expr(template_expr)?);
+        }
 
-        // Build new Projection node with instantiated components
+        // Sort expressions by the original output column order
+        all_exprs.sort_by_key(|expr| {
+            // Get the qualified name of the expression
+            let (_table_ref, name) = expr.qualified_name();
+
+            // Find its position in the original order
+            self.output_schema
+                .iter()
+                .position(|output_name| output_name == &name)
+        });
+
+        // Build new Projection node with instantiated and sorted components
         Ok(LogicalPlan::Projection(Projection::try_new(
-            new_exprs, new_input,
+            all_exprs, new_input,
         )?))
     }
 
     /// Main dispatcher for instantiating expressions
-    fn instantiate_expr(&self, template: &Expr) -> Result<Expr, RuleError> {
+    /// Returns a Vec because abstract functions can expand to multiple expressions
+    fn instantiate_expr(&self, template: &Expr) -> Result<Vec<Expr>, RuleError> {
         match template {
-            // Abstract function: look up in bindings
-            Expr::ScalarFunction(func) => {
-                // Check if this is an abstract function
-                if func
-                    .func
-                    .inner()
-                    .as_any()
-                    .downcast_ref::<Function>()
-                    .is_some()
-                {
-                    self.instantiate_abstract_function(func)
-                } else {
-                    // Regular function, pass through unchanged
-                    Ok(template.clone())
-                }
-            }
+            // Abstract function: look up in bindings and return all bound expressions
+            Expr::ScalarFunction(func) => self.instantiate_abstract_function(func),
 
-            // Binary expression: recursively instantiate operands
+            // Binary expression: recursively instantiate operands (but stay as single expr)
             Expr::BinaryExpr(binary) => self.instantiate_binary_expr(binary),
 
-            // Column: keep as-is (already concrete)
+            // Column: expand to all concrete columns in the partition
             Expr::Column(column) => self.instantiate_column(column),
 
-            // Literal: keep as-is
-            Expr::Literal(..) => Ok(template.clone()),
-
             // TODO: Handle other expression types as needed
-            // For now, pass through unchanged
-            _ => Ok(template.clone()),
+            // Error on unexpected patterns instead of passing through
+            other => Err(RuleError::InvalidPattern {
+                reason: format!("Unsupported expression type in template: {:?}", other),
+            }),
         }
     }
 
     /// Instantiate an abstract function by looking up its binding
-    fn instantiate_abstract_function(&self, _func: &ScalarFunction) -> Result<Expr, RuleError> {
-        // TODO: Extract Function and look up in self.functions
-        todo!("instantiate_abstract_function")
+    fn instantiate_abstract_function(&self, func: &ScalarFunction) -> Result<Vec<Expr>, RuleError> {
+        // Templates should only contain abstract functions, not concrete ones
+        let abstract_func = Self::as_abstract_function(func)
+            .ok_or_else(|| RuleError::InvalidPattern {
+                reason: format!("Concrete function '{}' found in template - only abstract functions are allowed", func.name()),
+            })?;
+
+        // Return all bound expressions for this function
+        self.functions
+            .get(&abstract_func.name)
+            .map(|exprs| exprs.iter().cloned().collect())
+            .ok_or_else(|| RuleError::UnboundSymbol {
+                symbol: abstract_func.name.clone(),
+            })
     }
 
     /// Instantiate a binary expression by recursively transforming operands
-    fn instantiate_binary_expr(&self, _binary: &BinaryExpr) -> Result<Expr, RuleError> {
-        // TODO: Recursively instantiate left and right operands
-        todo!("instantiate_binary_expr")
+    fn instantiate_binary_expr(&self, binary: &BinaryExpr) -> Result<Vec<Expr>, RuleError> {
+        // Recursively instantiate left and right operands
+        // Each should return exactly one expression
+        let mut left_exprs = self.instantiate_expr(&binary.left)?;
+        let mut right_exprs = self.instantiate_expr(&binary.right)?;
+
+        if left_exprs.len() != 1 || right_exprs.len() != 1 {
+            return Err(RuleError::InvalidPattern {
+                reason: "Binary expression operands must resolve to single expressions".to_string(),
+            });
+        }
+
+        let left = left_exprs.pop().unwrap();
+        let right = right_exprs.pop().unwrap();
+
+        Ok(vec![Expr::BinaryExpr(BinaryExpr::new(
+            Box::new(left),
+            binary.op,
+            Box::new(right),
+        ))])
     }
 
-    /// Instantiate a column (pass through as columns are already concrete)
-    fn instantiate_column(&self, column: &Column) -> Result<Expr, RuleError> {
-        // Columns in templates are already concrete references
-        Ok(Expr::Column(column.clone()))
+    /// Instantiate a column by expanding to all concrete columns in its partition
+    fn instantiate_column(&self, column: &Column) -> Result<Vec<Expr>, RuleError> {
+        // Get all concrete columns for this abstract field
+        let concrete_columns =
+            self.fields
+                .get(&column.name)
+                .ok_or_else(|| RuleError::UnboundSymbol {
+                    symbol: column.name.clone(),
+                })?;
+
+        // Create column expressions for each concrete column
+        let mut columns: Vec<Expr> = concrete_columns
+            .iter()
+            .map(|name| Expr::Column(Column::new_unqualified(name)))
+            .collect();
+
+        // Sort by output schema order if we have one
+        if !self.output_schema.is_empty() {
+            columns.sort_by_key(|expr| {
+                if let Expr::Column(col) = expr {
+                    self.output_schema
+                        .iter()
+                        .position(|n| n == &col.name)
+                        .unwrap_or(usize::MAX)
+                } else {
+                    usize::MAX
+                }
+            });
+        }
+
+        Ok(columns)
     }
 }
 
 impl PatternMatcher for DefaultMatcher {
     fn resolve(&mut self, pattern: &Rel, concrete: &LogicalPlan) -> Result<(), RuleError> {
+        // Track the output column names of the concrete plan for ordering
+        // Get the schema field names from the concrete plan
+        let schema = concrete.schema();
+        self.output_schema = schema
+            .fields()
+            .iter()
+            .map(|f| f.name().to_string())
+            .collect();
+
         self.resolve_plan(&pattern.plan, concrete)
     }
 
