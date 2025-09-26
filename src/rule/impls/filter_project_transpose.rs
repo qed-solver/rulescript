@@ -105,15 +105,69 @@ mod tests {
     use datafusion::logical_expr::LogicalPlan;
 
     #[test]
-    fn test_filter_project_transpose() {
-        // Just test that the pattern compiles correctly
-        // Real matching would require plans with abstract functions
+    fn test_filter_project_transpose_creates_valid_plans() {
+        use crate::ast::opaque::Type;
+        use crate::rule::test::utils::*;
+        use datafusion::logical_expr::{LogicalPlanBuilder, col};
+
+        // This test verifies we can create the structure the rule expects
+        let source = table_with_binary_columns(vec!["x"]);
+
+        let f = test_function(
+            "f",
+            Type::Generic {
+                id: "T".to_string(),
+            },
+            Type::Generic {
+                id: "Tf".to_string(),
+            },
+        );
+        let p = test_predicate(
+            "P",
+            Type::Generic {
+                id: "Tf".to_string(),
+            },
+        );
+
+        // Create filter-on-projection plan
+        let proj = LogicalPlanBuilder::from(source.clone())
+            .project(vec![f.call(vec![col("x")]).alias("f_output")])
+            .unwrap()
+            .build()
+            .unwrap();
+
+        let filter_on_proj = LogicalPlanBuilder::from(proj)
+            .filter(p.call(vec![col("f_output")]))
+            .unwrap()
+            .build()
+            .unwrap();
+
+        // Verify structure
+        assert!(matches!(filter_on_proj, LogicalPlan::Filter(_)));
+        if let LogicalPlan::Filter(filter) = &filter_on_proj {
+            assert!(matches!(filter.input.as_ref(), LogicalPlan::Projection(_)));
+        }
+
+        // Note: Full pattern matching with abstract functions is complex
+    }
+
+    #[test]
+    fn test_filter_project_transpose_pattern_validation() {
+        // Validate the pattern structure
         let rule = FilterProjectTransposeRule;
         let pattern = rule.from();
         let replacement = rule.to();
 
-        // Verify the patterns are valid plans
+        // Pattern should be: source.project(f).filter(P)
         assert!(matches!(pattern.plan, LogicalPlan::Filter(_)));
+        if let LogicalPlan::Filter(filter) = &pattern.plan {
+            assert!(matches!(filter.input.as_ref(), LogicalPlan::Projection(_)));
+        }
+
+        // Replacement should be: source.filter(P').project(f)
         assert!(matches!(replacement.plan, LogicalPlan::Projection(_)));
+        if let LogicalPlan::Projection(proj) = &replacement.plan {
+            assert!(matches!(proj.input.as_ref(), LogicalPlan::Filter(_)));
+        }
     }
 }

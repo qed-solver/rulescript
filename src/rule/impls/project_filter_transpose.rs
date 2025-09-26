@@ -106,14 +106,87 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_project_filter_transpose() {
-        // Just test that the pattern compiles correctly
+    fn test_project_filter_transpose_creates_valid_plans() {
+        use crate::ast::opaque::Type;
+        use crate::rule::test::utils::*;
+        use datafusion::logical_expr::{LogicalPlanBuilder, col};
+
+        // This test verifies we can create the structure the rule expects
+        let source = table_with_binary_columns(vec!["x"]);
+
+        let f = test_function(
+            "f",
+            Type::Generic {
+                id: "T".to_string(),
+            },
+            Type::Generic {
+                id: "Tf".to_string(),
+            },
+        );
+        let p = test_predicate(
+            "P",
+            Type::Generic {
+                id: "T".to_string(),
+            },
+        );
+
+        // Create projection-on-filter plan
+        let filtered = LogicalPlanBuilder::from(source.clone())
+            .filter(p.call(vec![col("x")]))
+            .unwrap()
+            .build()
+            .unwrap();
+
+        let proj_on_filter = LogicalPlanBuilder::from(filtered)
+            .project(vec![f.call(vec![col("x")]).alias("f_output")])
+            .unwrap()
+            .build()
+            .unwrap();
+
+        // Verify structure
+        assert!(matches!(
+            proj_on_filter,
+            datafusion::logical_expr::LogicalPlan::Projection(_)
+        ));
+        if let datafusion::logical_expr::LogicalPlan::Projection(proj) = &proj_on_filter {
+            assert!(matches!(
+                proj.input.as_ref(),
+                datafusion::logical_expr::LogicalPlan::Filter(_)
+            ));
+        }
+
+        // Note: Full pattern matching with abstract functions is complex
+    }
+
+    #[test]
+    fn test_project_filter_transpose_pattern_validation() {
+        // Validate the pattern structure
         let rule = ProjectFilterTransposeRule;
         let pattern = rule.from();
         let replacement = rule.to();
-        
-        // Verify the patterns are valid
-        assert!(matches!(pattern.plan, datafusion::logical_expr::LogicalPlan::Projection(_)));
-        assert!(matches!(replacement.plan, datafusion::logical_expr::LogicalPlan::Filter(_)));
+
+        // Pattern should be: source.filter(P).project(f)
+        assert!(matches!(
+            pattern.plan,
+            datafusion::logical_expr::LogicalPlan::Projection(_)
+        ));
+        if let datafusion::logical_expr::LogicalPlan::Projection(proj) = &pattern.plan {
+            assert!(matches!(
+                proj.input.as_ref(),
+                datafusion::logical_expr::LogicalPlan::Filter(_)
+            ));
+        }
+
+        // Replacement should be: source.project(f).filter(P')
+        assert!(matches!(
+            replacement.plan,
+            datafusion::logical_expr::LogicalPlan::Filter(_)
+        ));
+        if let datafusion::logical_expr::LogicalPlan::Filter(filter) = &replacement.plan {
+            assert!(matches!(
+                filter.input.as_ref(),
+                datafusion::logical_expr::LogicalPlan::Projection(_)
+            ));
+        }
     }
 }

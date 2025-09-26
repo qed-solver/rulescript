@@ -18,9 +18,9 @@ impl RewriteRule for ProjectMergeRule {
         // Create a simple single-column schema
         let schema = Schema {
             fields: vec![Field {
-                name: "a".to_string(),
+                name: "col".to_string(),
                 data_type: Type::Generic {
-                    id: "T1".to_string(),
+                    id: "Tc".to_string(),
                 },
                 nullable: true,
             }],
@@ -30,7 +30,7 @@ impl RewriteRule for ProjectMergeRule {
         let f = Function::new(
             "f".to_string(),
             vec![Type::Generic {
-                id: "T1".to_string(),
+                id: "Tc".to_string(),
             }],
             Type::Generic {
                 id: "Tf".to_string(),
@@ -52,7 +52,7 @@ impl RewriteRule for ProjectMergeRule {
 
         // First projection creates new columns with an alias
         let first_proj = source
-            .project(vec![f.call(vec![col("a")]).alias("f_output")])
+            .project(vec![f.call(vec![col("col")]).alias("f_output")])
             .unwrap();
 
         // Second projection operates on the output of the first
@@ -66,9 +66,9 @@ impl RewriteRule for ProjectMergeRule {
         // Same single-column schema
         let schema = Schema {
             fields: vec![Field {
-                name: "a".to_string(),
+                name: "col".to_string(),
                 data_type: Type::Generic {
-                    id: "T1".to_string(),
+                    id: "Tc".to_string(),
                 },
                 nullable: true,
             }],
@@ -78,7 +78,7 @@ impl RewriteRule for ProjectMergeRule {
         let f = Function::new(
             "f".to_string(),
             vec![Type::Generic {
-                id: "T1".to_string(),
+                id: "Tc".to_string(),
             }],
             Type::Generic {
                 id: "Tf".to_string(),
@@ -98,7 +98,7 @@ impl RewriteRule for ProjectMergeRule {
         // This represents the composition g∘f
         let source = Rel::source("source".to_string(), schema);
         source
-            .project(vec![g.call(vec![f.call(vec![col("a")])])])
+            .project(vec![g.call(vec![f.call(vec![col("col")])])])
             .unwrap()
     }
 
@@ -112,58 +112,83 @@ impl ApplicableRule<DefaultMatcher> for ProjectMergeRule {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use datafusion::{
-        arrow::datatypes::{DataType, Field, Schema as ArrowSchema},
-        logical_expr::{col, LogicalPlan, LogicalPlanBuilder},
-    };
-    use std::sync::Arc;
-
-    fn test_source() -> LogicalPlan {
-        // Create a simple test schema
-        let schema = Arc::new(ArrowSchema::new(vec![
-            Field::new("id", DataType::Int32, false),
-            Field::new("age", DataType::Int32, true),
-            Field::new("salary", DataType::Float64, true),
-        ]));
-
-        let table_source = Arc::new(datafusion::logical_expr::builder::LogicalTableSource::new(
-            schema,
-        ));
-
-        LogicalPlanBuilder::scan("test", table_source, None)
-            .unwrap()
-            .build()
-            .unwrap()
-    }
+    use crate::rule::test::utils::*;
+    use datafusion::logical_expr::{LogicalPlanBuilder, col, lit};
 
     #[test]
-    fn test_project_merge_basic() {
-        // For now, just test that the pattern compiles correctly
-        // The actual matching would require plans with abstract functions
-        let rule = ProjectMergeRule;
-        let pattern = rule.from();
-        let replacement = rule.to();
+    fn test_project_merge_calcite_style() {
+        // Based on typical Calcite patterns: nested projections with expressions
+        // SQL equivalent: SELECT x * 2 FROM (SELECT salary + 1000 as x FROM emp)
 
-        // Verify the patterns are valid plans
-        assert!(matches!(pattern.plan, LogicalPlan::Projection(_)));
-        assert!(matches!(replacement.plan, LogicalPlan::Projection(_)));
-    }
+        let emp = emp_table();
 
-    #[test]
-    fn test_project_merge_no_match_single() {
-        // Test with single projection - should not match
-        let source = test_source();
-
-        let plan = LogicalPlanBuilder::from(source)
-            .project(vec![col("id"), col("age")])
+        // Build: emp.project(salary + 1000 as x).project(x * 2)
+        let input = LogicalPlanBuilder::from(emp.clone())
+            .project(vec![(col("salary") + lit(1000.0)).alias("x")])
+            .unwrap()
+            .project(vec![(col("x") * lit(2.0)).alias("result")])
             .unwrap()
             .build()
             .unwrap();
 
-        // Apply the rule
-        let rule = ProjectMergeRule;
-        let result = rule.try_apply(&plan);
+        // Expected: emp.project((salary + 1000) * 2)
+        // The rule should merge the two projections into one
+        let expected = LogicalPlanBuilder::from(emp)
+            .project(vec![
+                ((col("salary") + lit(1000.0)) * lit(2.0)).alias("result"),
+            ])
+            .unwrap()
+            .build()
+            .unwrap();
 
-        assert!(result.is_err(), "Should not match single projection");
+        let rule = ProjectMergeRule;
+        let result = rule.try_apply(&input).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_project_merge_with_column_rename() {
+        // Test case: consecutive projections that rename columns
+        // SQL equivalent: SELECT ename FROM (SELECT name as ename FROM dept)
+
+        let dept = dept_table();
+
+        // Build: dept.project(dname as name).project(name as final_name)
+        let input = LogicalPlanBuilder::from(dept.clone())
+            .project(vec![col("dname").alias("name")])
+            .unwrap()
+            .project(vec![col("name").alias("final_name")])
+            .unwrap()
+            .build()
+            .unwrap();
+
+        // Expected: dept.project(dname as final_name)
+        let expected = LogicalPlanBuilder::from(dept)
+            .project(vec![col("dname").alias("final_name")])
+            .unwrap()
+            .build()
+            .unwrap();
+
+        let rule = ProjectMergeRule;
+        let result = rule.try_apply(&input).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_no_match_single_projection() {
+        // Should not match a single projection
+        let emp = emp_table();
+
+        let plan = LogicalPlanBuilder::from(emp)
+            .project(vec![col("empno"), col("ename")])
+            .unwrap()
+            .build()
+            .unwrap();
+
+        let rule = ProjectMergeRule;
+        assert!(
+            rule.try_apply(&plan).is_err(),
+            "Should not match single projection"
+        );
     }
 }
