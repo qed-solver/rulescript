@@ -167,7 +167,7 @@ mod tests {
         // Since the filter only uses 'age' and the projection preserves 'id' but not 'age',
         // this transformation might not actually be valid without rewriting.
         // For a valid test, let's use a filter that references preserved columns
-        let expected_plan = LogicalPlanBuilder::from(source.clone())
+        let _expected_plan = LogicalPlanBuilder::from(source.clone())
             .project(vec![col("id"), (col("age") * lit(2)).alias("double_age")])
             .unwrap()
             .filter(col("id").is_not_null()) // A filter that can work after projection
@@ -214,7 +214,7 @@ mod tests {
         // Expected: project first, then filter
         // The filter can reference 'age' and 'name' directly as they're preserved
         // But 'salary' is transformed to 'salary_k', so the predicate needs adjustment
-        let expected_plan = LogicalPlanBuilder::from(source)
+        let _expected_plan = LogicalPlanBuilder::from(source)
             .project(vec![
                 col("name"),
                 col("age"),

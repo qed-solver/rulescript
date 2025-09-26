@@ -58,7 +58,7 @@ impl ApplicableRule<DefaultMatcher> for ProjectRemoveRule {}
 mod tests {
     use super::*;
     use crate::rule::test::utils::*;
-    use datafusion::logical_expr::{LogicalPlan, LogicalPlanBuilder};
+    use datafusion::logical_expr::LogicalPlanBuilder;
 
     #[tokio::test]
     async fn test_project_remove_identity() {
@@ -67,7 +67,7 @@ mod tests {
         let schema = source.schema();
 
         // Build identity projection - all columns in same order
-        let identity_exprs = identity_projection(&schema);
+        let identity_exprs = identity_projection(schema);
 
         let input_plan = LogicalPlanBuilder::from(source.clone())
             .project(identity_exprs)

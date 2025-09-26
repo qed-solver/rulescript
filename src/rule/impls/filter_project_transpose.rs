@@ -133,7 +133,7 @@ impl ApplicableRule<DefaultMatcher> for FilterProjectTransposeRule {}
 mod tests {
     use super::*;
     use crate::rule::test::utils::*;
-    use datafusion::logical_expr::{LogicalPlan, LogicalPlanBuilder};
+    use datafusion::logical_expr::LogicalPlanBuilder;
 
     #[tokio::test]
     async fn test_filter_project_transpose_basic() {

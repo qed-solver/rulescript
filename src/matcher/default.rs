@@ -336,7 +336,7 @@ impl DefaultMatcher {
         // Add to the list of expressions bound to this function (usually just one)
         self.functions
             .entry(abstract_func.name.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(concrete.clone());
 
         Ok(())
@@ -572,13 +572,14 @@ impl DefaultMatcher {
                 })?;
 
         // Transform each bound expression by replacing column references with context expressions
-        Ok(bound_exprs
+        bound_exprs
             .iter()
             .map(|expr| self.replace_columns_with_context(expr, &context))
-            .collect::<Result<_, _>>()?)
+            .collect::<Result<_, _>>()
     }
 
     /// Replace column references in an expression with expressions from the context
+    #[allow(clippy::only_used_in_recursion)]
     fn replace_columns_with_context(
         &self,
         expr: &Expr,
@@ -717,12 +718,10 @@ impl DefaultMatcher {
                     } else {
                         Ok(new_expr.not_like(new_pattern))
                     }
+                } else if like.case_insensitive {
+                    Ok(new_expr.ilike(new_pattern))
                 } else {
-                    if like.case_insensitive {
-                        Ok(new_expr.ilike(new_pattern))
-                    } else {
-                        Ok(new_expr.like(new_pattern))
-                    }
+                    Ok(new_expr.like(new_pattern))
                 }
             }
             Expr::SimilarTo(_similar) => {

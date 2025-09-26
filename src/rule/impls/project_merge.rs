@@ -139,7 +139,7 @@ impl ApplicableRule<DefaultMatcher> for ProjectMergeRule {}
 mod tests {
     use super::*;
     use crate::rule::test::utils::*;
-    use datafusion::logical_expr::{LogicalPlan, LogicalPlanBuilder};
+    use datafusion::logical_expr::LogicalPlanBuilder;
 
     #[tokio::test]
     async fn test_project_merge_basic() {
