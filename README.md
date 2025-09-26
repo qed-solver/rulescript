@@ -27,17 +27,29 @@ The `P` and `Q` are uninterpreted predicates - they can represent ANY boolean ex
 - **Custom `Source` nodes** via DataFusion's `UserDefinedLogicalNodeCore`
 - **Helper methods** on `Rel` for ergonomic plan construction (`filter`, `project`, `join`, etc.)
 - **Complete rule abstractions** with `RewriteRule`, `PatternMatcher`, and `ApplicableRule` traits
-- **DefaultMatcher** with full pattern matching implementation:
+- **DefaultMatcher** with full pattern matching and instantiation:
   - Expression matching with AND/OR commutativity support
   - Column validation for field partitions
   - Abstract function binding to concrete expressions
   - Source pattern matching to logical plans
   - Context-preserving instantiation principle
+  - Function composition support in templates (e.g., `f(g(x))`)
+  - Alias handling in pattern matching (ignores wrapper, matches inner)
+- **Template instantiation logic**:
+  - Recursive plan transformation using captured bindings
+  - Column replacement with context mapping for function composition
+  - Proper expression ordering preservation
+  - Support for most Expr types (Column, BinaryExpr, ScalarFunction, literals, etc.)
+- **DataFusion optimizer integration**:
+  - `RuleWrapper<R, M>` adapter for OptimizerRule trait
+  - Generic over matcher type with DefaultMatcher as default
+  - Recursive rule application with `transform_down`
 - **Optimized codebase** with minimal cloning overhead
 - **Clean error types** with descriptive messages and concrete values
 
 ### In Progress 🚧
-- **Instantiation logic** - Transform template plans using captured bindings
+- **Testing and Examples** - Creating concrete examples with valid DataFusion plans
+- **Additional plan types** - Support for Join, Union, Aggregate in matcher
 
 ### Architecture
 ```
@@ -104,19 +116,29 @@ impl RewriteRule for FilterMergeRule {
     }
 }
 
-// Apply the rule (once instantiate is implemented)
-use rulescript::{ApplicableRule, DefaultMatcher};
+// Apply the rule  
+use rulescript::{ApplicableRule, DefaultMatcher, RuleWrapper};
+use datafusion::optimizer::Optimizer;
 
 impl ApplicableRule<DefaultMatcher> for FilterMergeRule {}
 
+// Use directly
 let rule = FilterMergeRule;
 let new_plan = rule.try_apply(&concrete_plan)?;
+
+// Or integrate with DataFusion's optimizer
+let optimizer_rule = RuleWrapper::new(FilterMergeRule);
+optimizer.add_rule(Arc::new(optimizer_rule));
 ```
 
-## Run Example
+## Run Tests
 
 ```bash
-cargo run --example filter_merge
+# Build the project
+cargo build
+
+# Run any future tests (to be added)
+cargo test
 ```
 
 ## Theoretical Foundation
@@ -145,25 +167,43 @@ RuleScript solves this by:
 
 **Immediate**
 - [x] ~~Implement `DefaultMatcher` pattern matching logic~~ ✅ Complete
-- [ ] Implement `instantiate` method for template transformation
-- [ ] Test pattern matching with concrete DataFusion plans
+- [x] ~~Implement `instantiate` method for template transformation~~ ✅ Complete
+- [x] ~~DataFusion optimizer integration~~ ✅ Complete via RuleWrapper
+- [ ] Create concrete rule examples with real DataFusion plans
+- [ ] Test function composition with chained projections
 - [ ] More rule examples (ProjectionPushdown, JoinAssociate)
 
 **Short-term**
-- [ ] DataFusion optimizer integration
+- [ ] Support additional plan types (Join, Union, Aggregate) in matcher
 - [ ] QED export for verification
 - [ ] Rule enumeration with meta-variables
+- [ ] Comprehensive testing suite
 
 **Long-term**
 - [ ] SMT solver integration for verification
 - [ ] Code generation adapters for different engines
 - [ ] Performance optimizations for matching
+- [ ] Support for more complex expression types (windows, subqueries)
 
 ## Dependencies
 
 - `datafusion = "*"` - Query planning framework
 - `smtlib = "*"` - Future solver integration
 - `thiserror = "*"` - Error handling macros
+
+## Known Limitations
+
+### Current Implementation
+- **Plan Types**: Only Filter and Projection are fully supported in matcher
+- **Expression Types**: Some complex expressions not yet handled in instantiation (SIMILAR TO, LIKE with escape chars)
+- **Alias Support**: Templates intentionally don't support Alias expressions
+- **Testing**: No comprehensive test suite or concrete examples yet
+- **Performance**: No optimizations for pattern matching efficiency
+
+### Design Decisions
+- **Function Composition**: Requires properly chained projections, not arbitrary nesting
+- **Strict Validation**: All column references must exist in context (no partial matches)
+- **Single Binding**: Abstract symbols can only bind to one concrete value per rule application
 
 ## Status
 

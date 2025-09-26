@@ -1,5 +1,24 @@
 # Implementation Roadmap for RuleScript
 
+## Recent Improvements (Latest Session)
+
+### Function Composition Support
+- **Problem**: Templates with composed functions like `f(g(x))` weren't working
+- **Solution**: Build context mapping from function arguments to instantiated expressions
+- **Implementation**: `replace_columns_with_context` recursively substitutes column references
+- **Key Insight**: Functions in templates need their arguments' instantiated values as context
+
+### Alias Handling
+- **Pattern Matching**: Aliases in patterns now properly ignore the wrapper
+- **Design Decision**: Templates don't support Alias expressions (intentional)
+- **Benefit**: Patterns can match both aliased and non-aliased concrete expressions
+
+### DataFusion Integration
+- **Challenge**: Can't implement foreign trait (OptimizerRule) for type parameter
+- **Solution**: `RuleWrapper<R, M>` struct that wraps any ApplicableRule
+- **Flexibility**: Generic over matcher type, defaults to DefaultMatcher
+- **Application**: Uses `transform_down` for recursive rule application
+
 ## Current State
 
 ### Completed ✅
@@ -20,6 +39,18 @@
   - ✅ Column validation for field partitions
   - ✅ Source pattern binding to concrete plans
   - ✅ Context-preserving instantiation principle
+- ✅ **Instantiation Implementation**:
+  - ✅ `instantiate` method with recursive plan transformation
+  - ✅ `instantiate_source`, `instantiate_filter`, `instantiate_projection`
+  - ✅ `instantiate_expr` with support for multiple expression types
+  - ✅ `instantiate_abstract_function` with context building
+  - ✅ `replace_columns_with_context` for function composition
+  - ✅ `instantiate_column` with partition expansion
+  - ✅ Column ordering preservation via `output_schema` tracking
+- ✅ **DataFusion Integration**:
+  - ✅ `RuleWrapper<R, M>` adapter implementing OptimizerRule
+  - ✅ Generic over matcher type with DefaultMatcher as default
+  - ✅ Recursive rule application using `transform_down`
 - ✅ **Code Optimization**:
   - ✅ Eliminated unnecessary clones throughout codebase
   - ✅ Refactored `partition` method for better API
@@ -27,36 +58,26 @@
 
 ### In Progress 🚧
 
-## Phase 1: Complete Pattern Matching (IN PROGRESS)
+## Phase 1: Complete Pattern Matching ✅ COMPLETED
 
-### 1.1 Instantiation Implementation (NEXT PRIORITY)
+### 1.1 Instantiation Implementation ✅ COMPLETED
 
-The `instantiate` method needs to transform template plans using captured bindings:
+The `instantiate` method successfully transforms template plans using captured bindings:
+- ✅ Replaces abstract functions with bound concrete expressions
+- ✅ Replaces Source patterns with bound logical plans  
+- ✅ Respects context boundaries via `replace_columns_with_context`
+- ✅ Maintains exact structure of template while substituting bindings
+- ✅ Function composition support through context mapping
+- ✅ Proper handling of column ordering preservation
 
-```rust
-impl PatternMatcher for DefaultMatcher {
-    fn instantiate(&self, template: &Rel) -> Result<LogicalPlan, RuleError> {
-        // Transform template using:
-        // - self.field_partitions: field mappings
-        // - self.functions: abstract function → concrete expression
-        // - self.sources: source name → concrete plan
-    }
-}
-```
+### 1.2 Testing with Concrete Examples (IN PROGRESS)
 
-Key requirements:
-- Replace abstract functions with bound concrete expressions
-- Replace Source patterns with bound logical plans  
-- Respect context boundaries (expressions stay in their context)
-- Maintain exact structure of template while substituting bindings
-
-### 1.2 Testing with Concrete Examples
-
-Create comprehensive tests:
-- FilterMerge rule against real DataFusion plans
-- Verify AND/OR commutativity works correctly
-- Test error cases (inconsistent bindings, missing patterns)
-- Validate context preservation
+Need to create comprehensive tests:
+- [ ] FilterMerge rule against real DataFusion plans
+- [ ] Function composition with chained projections
+- [ ] Test error cases (inconsistent bindings, missing patterns)
+- [ ] Validate context preservation
+- [ ] Examples with proper DataFusion query plans
 
 ## Phase 2: Export for Verification
 
@@ -101,47 +122,31 @@ struct RuleExport {
 }
 ```
 
-## Phase 3: DataFusion Optimizer Integration
+## Phase 3: DataFusion Optimizer Integration ✅ COMPLETED
 
-### 3.1 DataFusion Optimizer Rule Integration
+### 3.1 DataFusion Optimizer Rule Integration ✅ COMPLETED
 
+Successfully implemented as `RuleWrapper<R, M>` in `src/rule.rs`:
+- ✅ Generic wrapper supporting any `ApplicableRule<M>` 
+- ✅ Implements DataFusion's `OptimizerRule` trait
+- ✅ Uses `transform_down` for recursive application
+- ✅ Handles both successful matches and fallbacks
+- ✅ Preserves rule names for debugging
+
+Usage:
 ```rust
-/// Adapter that makes our rules work with DataFusion's optimizer
-struct RuleScriptOptimizer {
-    rule: Box<dyn RewriteRule>,
-}
+use rulescript::{RuleWrapper, ApplicableRule, DefaultMatcher};
 
-impl OptimizerRule for RuleScriptOptimizer {
-    fn try_optimize(
-        &self,
-        plan: &LogicalPlan,
-        config: &dyn OptimizerConfig,
-    ) -> Result<Option<LogicalPlan>> {
-        // Get pattern from our rule
-        let pattern = self.rule.pattern();
-        
-        // Try to match
-        match pattern.match_against(plan) {
-            MatchResult::Success(context) => {
-                // Get replacement pattern
-                let replacement = self.rule.replacement();
-                
-                // Transform using captured context
-                let new_plan = replacement.transform(&context)?;
-                
-                Ok(Some(new_plan))
-            }
-            MatchResult::Failure(_) => {
-                // Rule doesn't apply
-                Ok(None)
-            }
-        }
-    }
-    
-    fn name(&self) -> &str {
-        self.rule.name()
-    }
-}
+// Define your rule implementing RewriteRule
+struct MyRule;
+impl RewriteRule for MyRule { ... }
+impl ApplicableRule<DefaultMatcher> for MyRule {}
+
+// Wrap it for DataFusion
+let optimizer_rule = RuleWrapper::new(MyRule);
+
+// Add to optimizer
+optimizer.add_rule(Arc::new(optimizer_rule));
 ```
 
 ## Phase 4: Advanced Features
@@ -229,23 +234,28 @@ impl RewriteRule {
 
 ## Development Timeline
 
-### Completed (Weeks 1-2) ✅
+### Completed (Weeks 1-3) ✅
 - Core AST and rule abstractions
 - Pattern builders and helper methods
 - Full pattern matching implementation with expression resolvers
 - AND/OR commutativity handling
+- Complete instantiation implementation
+- Function composition support
+- DataFusion optimizer integration via RuleWrapper
 - Code optimization and cleanup
 
-### Current Sprint (Week 3) 🚧
-- Implement `instantiate` method
-- Test with concrete DataFusion plans
-- Create more rule examples
+### Current Sprint (Week 4) 🚧
+- Create concrete rule examples with real DataFusion plans
+- Test function composition with chained projections
+- Add support for more plan types (Join, Union, Aggregate)
+- Build comprehensive test suite
 
-### Upcoming (Week 4+)
-- DataFusion optimizer integration
+### Upcoming (Week 5+)
 - QED export for verification
 - Performance optimizations
+- Rule enumeration with meta-variables
 - Documentation and examples
+- SMT solver integration
 
 ## Notes from Paper for Implementation
 
