@@ -232,6 +232,11 @@ impl DefaultMatcher {
             // Columns must match exactly
             (Expr::Column(pat_col), Expr::Column(con_col)) => self.resolve_column(pat_col, con_col),
 
+            // Alias in pattern - resolve inner pattern against concrete (which may or may not be aliased)
+            (Expr::Alias(pat_alias), concrete_expr) => {
+                self.resolve_expr(&pat_alias.expr, concrete_expr)
+            }
+
             // TODO: Handle other expression types as needed
             _ => Err(RuleError::ExpressionMismatch {
                 pattern: Box::new(pattern.clone()),
@@ -488,13 +493,196 @@ impl DefaultMatcher {
                 reason: format!("Concrete function '{}' found in template - only abstract functions are allowed", func.name()),
             })?;
 
-        // Return all bound expressions for this function
-        self.functions
-            .get(&abstract_func.name)
-            .map(|exprs| exprs.iter().cloned().collect())
-            .ok_or_else(|| RuleError::UnboundSymbol {
-                symbol: abstract_func.name.clone(),
-            })
+        // Instantiate all arguments to build the context
+        // The context maps column names that appear in the function's arguments
+        // to their instantiated expressions
+        let mut context = HashMap::new();
+        for arg in &func.args {
+            for expr in self.instantiate_expr(arg)? {
+                // Get the qualified name of the expression
+                let (_table_ref, name) = expr.qualified_name();
+                context.insert(name, expr);
+            }
+        }
+
+        // Get the bound expressions for this function
+        let bound_exprs =
+            self.functions
+                .get(&abstract_func.name)
+                .ok_or_else(|| RuleError::UnboundSymbol {
+                    symbol: abstract_func.name.clone(),
+                })?;
+
+        // Transform each bound expression by replacing column references with context expressions
+        Ok(bound_exprs
+            .iter()
+            .map(|expr| self.replace_columns_with_context(expr, &context))
+            .collect::<Result<_, _>>()?)
+    }
+
+    /// Replace column references in an expression with expressions from the context
+    fn replace_columns_with_context(
+        &self,
+        expr: &Expr,
+        context: &HashMap<String, Expr>,
+    ) -> Result<Expr, RuleError> {
+        match expr {
+            Expr::Column(col) => {
+                // Look up this column in the context - it must exist
+                context
+                    .get(&col.name)
+                    .cloned()
+                    .ok_or_else(|| RuleError::UnboundSymbol {
+                        symbol: col.name.clone(),
+                    })
+            }
+            Expr::BinaryExpr(binary) => {
+                // Recursively replace in both operands
+                let left = self.replace_columns_with_context(&binary.left, context)?;
+                let right = self.replace_columns_with_context(&binary.right, context)?;
+                Ok(Expr::BinaryExpr(BinaryExpr::new(
+                    Box::new(left),
+                    binary.op,
+                    Box::new(right),
+                )))
+            }
+            Expr::ScalarFunction(func) => {
+                // Recursively replace in all arguments
+                let mut new_args = Vec::new();
+                for arg in &func.args {
+                    new_args.push(self.replace_columns_with_context(arg, context)?);
+                }
+                Ok(Expr::ScalarFunction(ScalarFunction {
+                    func: func.func.clone(),
+                    args: new_args,
+                }))
+            }
+            Expr::Literal(value, data_type) => {
+                // Literals stay as is
+                Ok(Expr::Literal(value.clone(), data_type.clone()))
+            }
+            Expr::Not(inner) => {
+                let new_inner = self.replace_columns_with_context(inner, context)?;
+                Ok(Expr::Not(Box::new(new_inner)))
+            }
+            Expr::IsNull(inner) => {
+                let new_inner = self.replace_columns_with_context(inner, context)?;
+                Ok(Expr::IsNull(Box::new(new_inner)))
+            }
+            Expr::IsNotNull(inner) => {
+                let new_inner = self.replace_columns_with_context(inner, context)?;
+                Ok(Expr::IsNotNull(Box::new(new_inner)))
+            }
+            Expr::Negative(inner) => {
+                let new_inner = self.replace_columns_with_context(inner, context)?;
+                Ok(Expr::Negative(Box::new(new_inner)))
+            }
+            Expr::Between(between) => {
+                let new_expr = self.replace_columns_with_context(&between.expr, context)?;
+                let new_low = self.replace_columns_with_context(&between.low, context)?;
+                let new_high = self.replace_columns_with_context(&between.high, context)?;
+                Ok(Expr::Between(datafusion::logical_expr::Between::new(
+                    Box::new(new_expr),
+                    between.negated,
+                    Box::new(new_low),
+                    Box::new(new_high),
+                )))
+            }
+            Expr::Case(case) => {
+                let new_expr = case
+                    .expr
+                    .as_ref()
+                    .map(|e| self.replace_columns_with_context(e, context))
+                    .transpose()?
+                    .map(Box::new);
+
+                let mut new_when = Vec::new();
+                for (when_expr, then_expr) in &case.when_then_expr {
+                    new_when.push((
+                        Box::new(self.replace_columns_with_context(when_expr, context)?),
+                        Box::new(self.replace_columns_with_context(then_expr, context)?),
+                    ));
+                }
+
+                let new_else = case
+                    .else_expr
+                    .as_ref()
+                    .map(|e| self.replace_columns_with_context(e, context))
+                    .transpose()?
+                    .map(Box::new);
+
+                Ok(Expr::Case(datafusion::logical_expr::Case::new(
+                    new_expr, new_when, new_else,
+                )))
+            }
+            Expr::Cast(cast) => {
+                let new_expr = self.replace_columns_with_context(&cast.expr, context)?;
+                Ok(Expr::Cast(datafusion::logical_expr::Cast::new(
+                    Box::new(new_expr),
+                    cast.data_type.clone(),
+                )))
+            }
+            Expr::TryCast(try_cast) => {
+                let new_expr = self.replace_columns_with_context(&try_cast.expr, context)?;
+                Ok(Expr::TryCast(datafusion::logical_expr::TryCast::new(
+                    Box::new(new_expr),
+                    try_cast.data_type.clone(),
+                )))
+            }
+            Expr::Alias(alias) => {
+                let new_expr = self.replace_columns_with_context(&alias.expr, context)?;
+                Ok(new_expr.alias_qualified(alias.relation.clone(), alias.name.clone()))
+            }
+            Expr::InList(in_list) => {
+                let new_expr = self.replace_columns_with_context(&in_list.expr, context)?;
+                let mut new_list = Vec::new();
+                for item in &in_list.list {
+                    new_list.push(self.replace_columns_with_context(item, context)?);
+                }
+                Ok(new_expr.in_list(new_list, in_list.negated))
+            }
+            Expr::Like(like) => {
+                let new_expr = self.replace_columns_with_context(&like.expr, context)?;
+                let new_pattern = self.replace_columns_with_context(&like.pattern, context)?;
+                // Like expressions don't support escape char replacement in the builder API
+                // For now, we'll reconstruct it manually if needed
+                if like.escape_char.is_some() {
+                    return Err(RuleError::InvalidPattern {
+                        reason:
+                            "LIKE with escape character not yet supported in column replacement"
+                                .to_string(),
+                    });
+                }
+                if like.negated {
+                    if like.case_insensitive {
+                        Ok(new_expr.not_ilike(new_pattern))
+                    } else {
+                        Ok(new_expr.not_like(new_pattern))
+                    }
+                } else {
+                    if like.case_insensitive {
+                        Ok(new_expr.ilike(new_pattern))
+                    } else {
+                        Ok(new_expr.like(new_pattern))
+                    }
+                }
+            }
+            Expr::SimilarTo(_similar) => {
+                // SimilarTo expressions are complex, for now return an error
+                // This would need special handling as DataFusion may not have a builder for it
+                Err(RuleError::InvalidPattern {
+                    reason: "SIMILAR TO expressions not yet supported in column replacement"
+                        .to_string(),
+                })
+            }
+            // For other expression types we don't handle yet, return an error
+            other => Err(RuleError::InvalidPattern {
+                reason: format!(
+                    "Expression type {:?} not yet supported in column replacement",
+                    other
+                ),
+            }),
+        }
     }
 
     /// Instantiate a binary expression by recursively transforming operands
