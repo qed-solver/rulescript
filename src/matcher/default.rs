@@ -296,6 +296,11 @@ impl DefaultMatcher {
                 self.resolve_expr(&pat_alias.expr, concrete_expr)
             }
 
+            // Alias in concrete but not in pattern - try to match pattern against inner expression
+            (pattern_expr, Expr::Alias(con_alias)) => {
+                self.resolve_expr(pattern_expr, &con_alias.expr)
+            }
+
             // TODO: Handle other expression types as needed
             _ => Err(RuleError::ExpressionMismatch {
                 pattern: Box::new(pattern.clone()),

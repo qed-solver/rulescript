@@ -8,13 +8,14 @@ use crate::{
 };
 use datafusion::logical_expr::col;
 
-/// Removes trivial projections that are identity mappings
-/// Pattern: source.project([col1, col2, ...]) where projection is identity → source
+/// Removes identity projections (when projection outputs all columns in same order)
+/// Pattern: source.project([col]) → source
+/// Where [col] represents ALL columns in order
 pub struct ProjectRemoveRule;
 
 impl RewriteRule for ProjectRemoveRule {
     fn from(&self) -> Rel {
-        // Create a generic schema with a single field that can match any schema
+        // Create a generic schema
         let schema = Schema {
             fields: vec![Field {
                 name: "col".to_string(),
@@ -26,13 +27,16 @@ impl RewriteRule for ProjectRemoveRule {
         };
 
         // Pattern: source.project([col])
-        // This will match any projection that only contains column references
         let source = Rel::source("source".to_string(), schema);
+
+        // Create a projection with just column references
+        // During matching, this single column pattern will match against
+        // the full list of columns if they're in the same order
         source.project(vec![col("col")]).unwrap()
     }
 
     fn to(&self) -> Rel {
-        // Same schema with single generic field
+        // Same schema as pattern
         let schema = Schema {
             fields: vec![Field {
                 name: "col".to_string(),
@@ -43,7 +47,7 @@ impl RewriteRule for ProjectRemoveRule {
             }],
         };
 
-        // Replacement: just the source
+        // Replacement: just the source (remove projection)
         Rel::source("source".to_string(), schema)
     }
 
@@ -57,61 +61,52 @@ impl ApplicableRule<DefaultMatcher> for ProjectRemoveRule {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rule::test::utils::*;
-    use datafusion::logical_expr::LogicalPlanBuilder;
+    use crate::rule::test::utils::test_table;
+    use datafusion::logical_expr::{LogicalPlanBuilder, col};
 
-    #[tokio::test]
-    async fn test_project_remove_identity() {
-        // Create test input with identity projection
-        let source = test_table_scan("employees").await;
-        let schema = source.schema();
+    #[test]
+    fn test_project_remove_identity() {
+        let source = test_table();
 
-        // Build identity projection - all columns in same order
-        let identity_exprs = identity_projection(schema);
-
-        let input_plan = LogicalPlanBuilder::from(source.clone())
-            .project(identity_exprs)
+        // Identity projection: all columns in same order
+        let input = LogicalPlanBuilder::from(source.clone())
+            .project(vec![col("a"), col("b")])
             .unwrap()
             .build()
             .unwrap();
 
-        // Expected: just the source without projection
-        let expected_plan = source;
-
-        // Apply the rule
         let rule = ProjectRemoveRule;
-        let result = rule.try_apply(&input_plan);
-
-        // Note: This test will likely fail because our pattern matching
-        // doesn't recognize identity projections yet. But we're setting up
-        // the expected behavior.
-        if result.is_ok() {
-            let actual_plan = result.unwrap();
-            assert_eq!(
-                actual_plan, expected_plan,
-                "Transformed plan does not match expected.\nActual:\n{:?}\n\nExpected:\n{:?}",
-                actual_plan, expected_plan
-            );
-        }
-        // For now, we expect this might fail
+        let result = rule.try_apply(&input).unwrap();
+        assert_eq!(result, source);
     }
 
-    #[tokio::test]
-    async fn test_project_remove_non_identity() {
-        // Create test input with non-identity projection (reordering columns)
-        let source = test_table_scan("employees").await;
+    #[test]
+    fn test_no_match_reordered() {
+        let source = test_table();
 
-        let plan = LogicalPlanBuilder::from(source.clone())
-            .project(vec![col("name"), col("id")]) // Reordered
+        // Reordered columns - should not match
+        let plan = LogicalPlanBuilder::from(source)
+            .project(vec![col("b"), col("a")])
             .unwrap()
             .build()
             .unwrap();
 
-        // Apply the rule
         let rule = ProjectRemoveRule;
-        let result = rule.try_apply(&plan);
+        assert!(rule.try_apply(&plan).is_err());
+    }
 
-        // Should not match non-identity projections
-        assert!(result.is_err(), "Should not match non-identity projection");
+    #[test]
+    fn test_no_match_subset() {
+        let source = test_table();
+
+        // Subset of columns - should not match
+        let plan = LogicalPlanBuilder::from(source)
+            .project(vec![col("a")])
+            .unwrap()
+            .build()
+            .unwrap();
+
+        let rule = ProjectRemoveRule;
+        assert!(rule.try_apply(&plan).is_err());
     }
 }

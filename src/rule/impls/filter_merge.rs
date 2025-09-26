@@ -95,106 +95,44 @@ impl ApplicableRule<DefaultMatcher> for FilterMergeRule {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rule::test::utils::*;
-    use datafusion::logical_expr::LogicalPlanBuilder;
+    use crate::rule::test::utils::test_table;
+    use datafusion::logical_expr::{LogicalPlanBuilder, col, lit};
 
-    #[tokio::test]
-    async fn test_filter_merge_basic() {
-        // Create test input: source.filter(age > 25).filter(salary > 50000)
-        let source = test_table_scan("employees").await;
-        let first_predicate = gt_expr("age", lit(25));
-        let second_predicate = gt_expr("salary", lit(50000.0));
+    #[test]
+    fn test_filter_merge() {
+        let source = test_table();
 
-        let input_plan = LogicalPlanBuilder::from(source.clone())
-            .filter(first_predicate.clone())
+        // Input: source.filter(a > 1).filter(b < 10)
+        let input = LogicalPlanBuilder::from(source.clone())
+            .filter(col("a").gt(lit(1)))
             .unwrap()
-            .filter(second_predicate.clone())
+            .filter(col("b").lt(lit(10)))
             .unwrap()
             .build()
             .unwrap();
 
-        // Create expected output: source.filter(first AND second)
-        let expected_plan = LogicalPlanBuilder::from(source)
-            .filter(first_predicate.and(second_predicate))
+        // Expected: source.filter(a > 1 AND b < 10)
+        let expected = LogicalPlanBuilder::from(source)
+            .filter(col("a").gt(lit(1)).and(col("b").lt(lit(10))))
             .unwrap()
             .build()
             .unwrap();
 
-        // Apply the rule
         let rule = FilterMergeRule;
-        let result = rule.try_apply(&input_plan);
-
-        assert!(result.is_ok(), "Rule should apply successfully");
-        let actual_plan = result.unwrap();
-
-        // Compare the actual result with expected
-        assert_eq!(
-            actual_plan, expected_plan,
-            "Transformed plan does not match expected.\nActual:\n{:?}\n\nExpected:\n{:?}",
-            actual_plan, expected_plan
-        );
+        let result = rule.try_apply(&input).unwrap();
+        assert_eq!(result, expected);
     }
 
-    #[tokio::test]
-    async fn test_filter_merge_complex_predicates() {
-        // Create test input with complex predicates
-        let source = test_table_scan("employees").await;
-
-        let first_predicate = and_expr(gt_expr("age", lit(25)), lt_expr("age", lit(65)));
-        let second_predicate = or_expr(
-            eq_expr("active", lit(true)),
-            gt_expr("salary", lit(100000.0)),
-        );
-
-        let input_plan = LogicalPlanBuilder::from(source.clone())
-            .filter(first_predicate.clone())
-            .unwrap()
-            .filter(second_predicate.clone())
+    #[test]
+    fn test_no_match_single_filter() {
+        let source = test_table();
+        let plan = LogicalPlanBuilder::from(source)
+            .filter(col("a").gt(lit(1)))
             .unwrap()
             .build()
             .unwrap();
 
-        // Expected: source.filter(first_predicate AND second_predicate)
-        let expected_plan = LogicalPlanBuilder::from(source)
-            .filter(first_predicate.and(second_predicate))
-            .unwrap()
-            .build()
-            .unwrap();
-
-        // Apply the rule
         let rule = FilterMergeRule;
-        let result = rule.try_apply(&input_plan);
-
-        assert!(
-            result.is_ok(),
-            "Rule should apply to complex predicates: {:?}",
-            result.err()
-        );
-        let actual_plan = result.unwrap();
-
-        assert_eq!(
-            actual_plan, expected_plan,
-            "Transformed plan does not match expected.\nActual:\n{:?}\n\nExpected:\n{:?}",
-            actual_plan, expected_plan
-        );
+        assert!(rule.try_apply(&plan).is_err());
     }
-
-    #[tokio::test]
-    async fn test_filter_merge_no_match() {
-        // Create test input with only one filter
-        let source = test_table_scan("employees").await;
-        let plan = LogicalPlanBuilder::from(source.clone())
-            .filter(gt_expr("age", lit(25)))
-            .unwrap()
-            .build()
-            .unwrap();
-
-        // Apply the rule
-        let rule = FilterMergeRule;
-        let result = rule.try_apply(&plan);
-
-        assert!(result.is_err(), "Rule should not match single filter");
-    }
-
-    use datafusion::logical_expr::lit;
 }

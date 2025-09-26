@@ -34,7 +34,7 @@ The `P` and `Q` are uninterpreted predicates - they can represent ANY boolean ex
   - Source pattern matching to logical plans
   - Context-preserving instantiation principle
   - Function composition support in templates (e.g., `f(g(x))`)
-  - Alias handling in pattern matching (ignores wrapper, matches inner)
+  - Alias handling in both pattern and concrete expressions
 - **Template instantiation logic**:
   - Recursive plan transformation using captured bindings
   - Column replacement with context mapping for function composition
@@ -47,18 +47,22 @@ The `P` and `Q` are uninterpreted predicates - they can represent ANY boolean ex
 - **Optimized codebase** with minimal cloning overhead
 - **Clean error types** with descriptive messages and concrete values
 - **Concrete rule implementations** in `src/rule/impls/`:
-  - FilterMergeRule - Merges consecutive filters with AND
-  - ProjectRemoveRule - Removes identity projections
-  - ProjectMergeRule - Merges consecutive projections via composition
-  - FilterProjectTransposeRule - Pushes filters below projections
-  - ProjectFilterTransposeRule - Pulls projections above filters
+  - FilterMergeRule ✅ - Fully working with tests
+  - ProjectRemoveRule ✅ - Fully working with tests  
+  - ProjectMergeRule ⚠️ - Pattern compiles, needs abstract functions for full matching
+  - FilterProjectTransposeRule ⚠️ - Pattern compiles, needs abstract functions
+  - ProjectFilterTransposeRule ⚠️ - Pattern compiles, needs abstract functions
 - **Smart column pattern matching**:
   - Column patterns in projections match ordered sequences
   - Column patterns in function arguments match any from partition
   - Enables proper identity projection detection
+- **Minimal test infrastructure**:
+  - No async/tokio dependencies in tests
+  - Direct LogicalPlan construction without SessionContext
+  - Tests run in milliseconds
 
 ### In Progress 🚧
-- **Testing and Examples** - Creating concrete examples with valid DataFusion plans
+- **Full rule testing** - Need to create plans with abstract functions for complete pattern matching
 - **Additional plan types** - Support for Join, Union, Aggregate in matcher
 
 ### Architecture
@@ -150,8 +154,11 @@ optimizer.add_rule(Arc::new(optimizer_rule));
 # Build the project
 cargo build
 
-# Run any future tests (to be added)
+# Run all tests
 cargo test
+
+# Run with clippy checks
+cargo clippy --all-targets
 ```
 
 ## Theoretical Foundation
@@ -209,14 +216,14 @@ RuleScript solves this by:
 ### Current Implementation
 - **Plan Types**: Only Filter and Projection are fully supported in matcher
 - **Expression Types**: Some complex expressions not yet handled in instantiation (SIMILAR TO, LIKE with escape chars)
-- **Alias Support**: Templates intentionally don't support Alias expressions
-- **Testing**: No comprehensive test suite or concrete examples yet
+- **Pattern Matching**: Abstract functions can't match regular binary expressions (need plans with abstract functions)
 - **Performance**: No optimizations for pattern matching efficiency
 
 ### Design Decisions
 - **Function Composition**: Requires properly chained projections, not arbitrary nesting
 - **Strict Validation**: All column references must exist in context (no partial matches)
 - **Single Binding**: Abstract symbols can only bind to one concrete value per rule application
+- **Testing Philosophy**: Minimal tests without heavy dependencies (no tokio, no CSV files)
 
 ## Status
 

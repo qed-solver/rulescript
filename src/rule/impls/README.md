@@ -7,37 +7,32 @@ This directory contains concrete implementations of query optimization rules, in
 ### FilterMergeRule ✅
 - **File**: `filter_merge.rs`
 - **Pattern**: `Filter(P, Filter(Q, source))` → `Filter(P AND Q, source)`
-- **Test Source**: Custom (Calcite doesn't have explicit tests for this simple rule)
-- **Status**: Implemented
-- **Notes**: Combines two consecutive filters using AND operator
+- **Status**: Fully working with tests
+- **Notes**: Combines two consecutive filters using AND operator. Tests use concrete binary expressions.
 
 ### ProjectRemoveRule ✅
 - **File**: `project_remove.rs`
 - **Pattern**: `Project([col], source)` → `source`
-- **Test Source**: Based on Calcite's ProjectRemoveRule concept
-- **Status**: Implemented
+- **Status**: Fully working with tests
 - **Notes**: Uses smart column pattern matching - a single column pattern matches the full ordered list of columns. Only matches true identity projections (all columns in same order).
 
-### FilterProjectTransposeRule ✅
-- **File**: `filter_project_transpose.rs`
-- **Pattern**: `Filter(P, Project(f, source))` → `Project(f, Filter(P', source))`
-- **Test Source**: Based on Calcite's FilterProjectTransposeRule tests
-- **Status**: Implemented
-- **Notes**: Pushes filter below projection when the predicate can be rewritten in terms of input columns. Uses function composition to rewrite predicates.
-
-### ProjectFilterTransposeRule ✅
-- **File**: `project_filter_transpose.rs`
-- **Pattern**: `Project(f, Filter(P, source))` → `Filter(P', Project(f, source))`
-- **Test Source**: Custom (inverse of FilterProjectTranspose)
-- **Status**: Implemented
-- **Notes**: Pulls projection above filter. Less commonly beneficial but enables other optimizations.
-
-### ProjectMergeRule ✅
+### ProjectMergeRule ⚠️
 - **File**: `project_merge.rs`
 - **Pattern**: `Project(f, Project(g, source))` → `Project(f∘g, source)`
-- **Test Source**: Based on Calcite's ProjectMergeRule
-- **Status**: Implemented
-- **Notes**: Uses function composition to merge consecutive projections. Handles complex expression substitution.
+- **Status**: Pattern compiles correctly, but full matching requires abstract functions in concrete plans
+- **Notes**: Uses function composition to merge consecutive projections. Pattern uses aliased outputs for proper column referencing.
+
+### FilterProjectTransposeRule ⚠️
+- **File**: `filter_project_transpose.rs`
+- **Pattern**: `Filter(P(f(x)), Project(f(x), source))` → `Project(f(x), Filter(P(x), source))`
+- **Status**: Pattern compiles correctly, but full matching requires abstract functions
+- **Notes**: Pushes filter below projection. Would require predicate rewriting in real implementation.
+
+### ProjectFilterTransposeRule ⚠️
+- **File**: `project_filter_transpose.rs`
+- **Pattern**: `Project(f(x), Filter(P(x), source))` → `Filter(P(f(x)), Project(f(x), source))`
+- **Status**: Pattern compiles correctly, but full matching requires abstract functions
+- **Notes**: Pulls projection above filter. Would require inverse function mapping in real implementation.
 
 ## Not Implemented / Cannot Support
 
@@ -57,6 +52,19 @@ Test utilities are located in `src/rule/test.rs` and provide:
 - Expression builders for predicates and projections
 - Plan comparison utilities
 
+## Testing Approach
+
+### Current State
+- Tests are minimal and fast (no async, no CSV files, no SessionContext)
+- Simple rules (FilterMerge, ProjectRemove) have working end-to-end tests
+- Complex rules with abstract functions have pattern compilation tests only
+
+### Pattern vs Concrete Matching
+- **Issue**: Patterns use abstract functions (ScalarFunction with UDFs) 
+- **Concrete plans**: Use regular expressions (BinaryExpr, Column, etc.)
+- **Result**: Abstract functions can't match regular binary expressions
+- **Solution**: For full testing, would need to create plans with abstract functions
+
 ## Pattern Matching Behavior
 
 ### Column Patterns
@@ -66,13 +74,21 @@ Column patterns behave differently depending on context:
 - **In function arguments**: A column pattern matches any single column from its partition
   - Example: Pattern `F(col("a"))` where "a" maps to [col1, col2, col3] can match `F(col2)` or `F(col3)`
 
-This distinction enables precise matching for identity projections while maintaining flexibility for predicates and functions.
+### Alias Handling
+- Matcher handles Alias in both pattern and concrete expressions
+- Pattern without alias can match concrete with alias (looks through the wrapper)
+- Enables matching of aliased projections common in real query plans
+
+## Implementation Status Legend
+- ✅ Fully working with end-to-end tests
+- ⚠️ Pattern compiles but requires abstract functions for full matching
+- ❌ Not implemented or has known issues
 
 ## Adding New Rules
 
 When adding a new rule:
 1. Create a new file in `impls/` directory
 2. Implement `RewriteRule` trait with pattern and replacement
-3. Add tests using utilities from `test.rs`
+3. Add minimal tests (avoid async/tokio)
 4. Update this README with implementation status
-5. Note the source of test cases (Calcite or custom)
+5. Consider if rule needs abstract functions for matching
