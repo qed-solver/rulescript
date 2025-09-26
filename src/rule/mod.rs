@@ -1,3 +1,7 @@
+pub mod impls;
+#[cfg(test)]
+pub mod test;
+
 use std::{
     fmt::{self, Debug, Formatter},
     marker::PhantomData,

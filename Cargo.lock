@@ -2424,6 +2424,7 @@ dependencies = [
  "datafusion",
  "smtlib",
  "thiserror 2.0.16",
+ "tokio",
 ]
 
 [[package]]

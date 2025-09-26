@@ -7,3 +7,6 @@ edition = "2024"
 datafusion = "*"
 smtlib = "*"
 thiserror = "*"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }

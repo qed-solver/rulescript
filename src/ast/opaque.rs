@@ -1,21 +1,9 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
-};
+use std::sync::Arc;
 
 use datafusion::{
     arrow::datatypes::{DataType, Field as ArrowField, Schema as ArrowSchema},
     common::{DFSchema, DFSchemaRef},
 };
-
-// Global counter for generating unique identifiers
-static ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-/// Generate a globally unique identifier with a descriptive prefix
-pub fn generate_unique_id(prefix: &str) -> String {
-    let id = ID_COUNTER.fetch_add(1, Ordering::SeqCst);
-    format!("__{prefix}_{id}")
-}
 
 #[derive(Debug, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Type {
@@ -59,8 +47,9 @@ impl Schema {
     pub fn from_types(types: Vec<Type>) -> Self {
         let fields = types
             .into_iter()
-            .map(|dtype| Field {
-                name: generate_unique_id("field"),
+            .enumerate()
+            .map(|(i, dtype)| Field {
+                name: format!("field_{}", i),
                 data_type: dtype,
                 nullable: true,
             })

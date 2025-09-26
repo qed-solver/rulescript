@@ -11,7 +11,7 @@ use datafusion::{
     scalar::ScalarValue,
 };
 
-use crate::ast::opaque::{Type, generate_unique_id};
+use crate::ast::opaque::Type;
 
 /// Function that can take a configurable number of inputs
 /// This integrates with DataFusion's scalar function system
@@ -37,31 +37,12 @@ impl Function {
         }
     }
 
-    /// Convenience constructor for functions with a specific number of inputs (all same type)
-    pub fn with_input_count(name: String, input_count: usize) -> Self {
-        let input_types = (0..input_count)
-            .map(|_| Type::Generic {
-                id: generate_unique_id("input"),
-            })
-            .collect();
-        let return_type = Type::Generic {
-            id: generate_unique_id("return"),
-        };
-
-        Self::new(name, input_types, return_type)
-    }
-
     /// Create a boolean predicate function (for use in filters/joins)
-    pub fn boolean_predicate(name: String, input_count: usize) -> Self {
-        let input_types = (0..input_count)
-            .map(|_| Type::Generic {
-                id: generate_unique_id("input"),
-            })
-            .collect();
-
-        // Use direct boolean enum variant
+    /// Kept for backward compatibility but now requires explicit types
+    pub fn boolean_predicate(name: String, arity: usize) -> Self {
+        // For backward compatibility, create a simple predicate with generic type "T"
+        let input_types = vec![Type::Generic { id: "T".to_string() }; arity];
         let return_type = Type::Boolean;
-
         Self::new(name, input_types, return_type)
     }
 
@@ -160,13 +141,7 @@ impl Scalar {
         }
     }
 
-    /// Create a pattern for a function call with input count (generates types)
-    pub fn function_with_count(name: String, input_count: usize, args: Vec<Expr>) -> Self {
-        let func = Function::with_input_count(name, input_count);
-        Self {
-            expr: func.call(args),
-        }
-    }
+
 
     /// Create a pattern for a column reference
     pub fn column(name: String) -> Self {
