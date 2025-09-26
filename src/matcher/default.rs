@@ -22,8 +22,8 @@ use super::{BindingConflict, PatternMatcher, RuleError};
 /// Default pattern matcher that tracks bindings internally
 #[derive(Debug, Default)]
 pub struct DefaultMatcher {
-    /// Abstract field name -> Set of original column names (partition)
-    fields: HashMap<String, HashSet<String>>,
+    /// Abstract field name -> Set of concrete Column objects (partition)
+    fields: HashMap<String, HashSet<Column>>,
 
     /// Abstract functions/predicates -> Set of concrete expressions
     functions: HashMap<String, HashSet<Expr>>,
@@ -158,17 +158,22 @@ impl DefaultMatcher {
                 .insert(source.table_name.clone(), concrete.clone());
         }
 
-        // Work directly with the concrete schema - no annotation
-        let concrete_schema = concrete.schema();
-        let concrete_fields = concrete_schema.fields();
+        // Use columns() which provides proper qualified Column objects
+        // paired with their corresponding fields
+        let concrete_schema = concrete
+            .schema()
+            .columns()
+            .into_iter()
+            .zip(concrete.schema().fields().iter());
 
-        // Use partition with field information directly
         self.partition(
             &source.schema.fields,
-            concrete_fields,
-            |matcher, abstract_field, concrete_field| {
-                // Check nullable property
-                if abstract_field.nullable != concrete_field.is_nullable() {
+            concrete_schema,
+            |matcher, abstract_field, (concrete_column, concrete_field)| {
+                // Check nullable property:
+                // - If pattern field is non-nullable, concrete must also be non-nullable
+                // - If pattern field is nullable, concrete can be either nullable or non-nullable
+                if !abstract_field.nullable && concrete_field.is_nullable() {
                     return Err(RuleError::StructureMismatch {
                         pattern: Box::new(LogicalPlan::Extension(Extension {
                             node: Arc::new(source.clone()),
@@ -177,12 +182,12 @@ impl DefaultMatcher {
                     });
                 }
 
-                // Add the original column name to the partition for this abstract field
+                // Now concrete_column is already a Column with proper qualifiers
                 matcher
                     .fields
                     .entry(abstract_field.name.clone())
                     .or_default()
-                    .insert(concrete_field.name().to_string());
+                    .insert(concrete_column.clone());
                 Ok(())
             },
         )?;
@@ -363,7 +368,7 @@ impl DefaultMatcher {
                 })?;
 
         // Check if concrete column is in the allowed partition
-        if !allowed_columns.contains(&con_col.name) {
+        if !allowed_columns.contains(con_col) {
             return Err(RuleError::ExpressionMismatch {
                 pattern: Box::new(Expr::Column(pat_col.clone())),
                 target: Box::new(Expr::Column(con_col.clone())),
@@ -719,26 +724,19 @@ impl DefaultMatcher {
                 })?;
 
         // Create column expressions for each concrete column
-        let mut columns: Vec<Expr> = concrete_columns
-            .iter()
-            .map(|name| Expr::Column(Column::new_unqualified(name)))
-            .collect();
+        let mut columns = concrete_columns.iter().collect::<Vec<_>>();
 
         // Sort by output schema order if we have one
-        if !self.output_schema.is_empty() {
-            columns.sort_by_key(|expr| {
-                if let Expr::Column(col) = expr {
-                    self.output_schema
-                        .iter()
-                        .position(|n| n == &col.name)
-                        .unwrap_or(usize::MAX)
-                } else {
-                    usize::MAX
-                }
-            });
-        }
+        columns.sort_by_key(|col| {
+            self.output_schema
+                .iter()
+                .position(|name| name == col.name())
+        });
 
-        Ok(columns)
+        Ok(columns
+            .iter()
+            .map(|&col| Expr::Column(col.clone()))
+            .collect())
     }
 }
 

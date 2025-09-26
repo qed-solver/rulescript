@@ -39,10 +39,16 @@ impl RewriteRule for ProjectRemoveRule {
         let identity = Function::new(
             "identity".to_string(),
             vec![
-                Type::Generic { id: "T1".to_string() },
-                Type::Generic { id: "T2".to_string() },
+                Type::Generic {
+                    id: "T1".to_string(),
+                },
+                Type::Generic {
+                    id: "T2".to_string(),
+                },
             ],
-            Type::Generic { id: "Tidentity".to_string() },  // Return type (though identity should preserve types)
+            Type::Generic {
+                id: "Tidentity".to_string(),
+            }, // Return type (though identity should preserve types)
         );
 
         // Pattern: source.project(identity(col1, col2))
@@ -95,10 +101,10 @@ mod tests {
         // Create test input with identity projection
         let source = test_table_scan("employees").await;
         let schema = source.schema();
-        
+
         // Build identity projection - all columns in same order
         let identity_exprs = identity_projection(&schema);
-        
+
         let input_plan = LogicalPlanBuilder::from(source.clone())
             .project(identity_exprs)
             .unwrap()
@@ -126,11 +132,11 @@ mod tests {
         // For now, we expect this might fail
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_project_remove_non_identity() {
         // Create test input with non-identity projection (reordering columns)
         let source = test_table_scan("employees").await;
-        
+
         let plan = LogicalPlanBuilder::from(source.clone())
             .project(vec![col("name"), col("id")]) // Reordered
             .unwrap()

@@ -39,31 +39,39 @@ impl RewriteRule for ProjectMergeRule {
         let f = Function::new(
             "f".to_string(),
             vec![
-                Type::Generic { id: "T1".to_string() },
-                Type::Generic { id: "T2".to_string() },
+                Type::Generic {
+                    id: "T1".to_string(),
+                },
+                Type::Generic {
+                    id: "T2".to_string(),
+                },
             ],
-            Type::Generic { id: "Tf".to_string() },
+            Type::Generic {
+                id: "Tf".to_string(),
+            },
         );
         let g = Function::new(
             "g".to_string(),
-            vec![Type::Generic { id: "Tf".to_string() }],
-            Type::Generic { id: "Tg".to_string() },
+            vec![Type::Generic {
+                id: "Tf".to_string(),
+            }],
+            Type::Generic {
+                id: "Tg".to_string(),
+            },
         );
 
         // Pattern: source.project(f(a, b)).project(g(f_output))
         // The second projection references the output of the first
         let source = Rel::source("source".to_string(), schema);
-        
+
         // First projection creates new columns
         let first_proj = source
             .project(vec![f.call(vec![col("a"), col("b")])])
             .unwrap();
-        
+
         // Second projection operates on the output of the first
         // Note: g now expects 1 argument based on our type definition
-        first_proj
-            .project(vec![g.call(vec![col("f")])])
-            .unwrap()
+        first_proj.project(vec![g.call(vec![col("f")])]).unwrap()
     }
 
     fn to(&self) -> Rel {
@@ -91,15 +99,25 @@ impl RewriteRule for ProjectMergeRule {
         let f = Function::new(
             "f".to_string(),
             vec![
-                Type::Generic { id: "T1".to_string() },
-                Type::Generic { id: "T2".to_string() },
+                Type::Generic {
+                    id: "T1".to_string(),
+                },
+                Type::Generic {
+                    id: "T2".to_string(),
+                },
             ],
-            Type::Generic { id: "Tf".to_string() },
+            Type::Generic {
+                id: "Tf".to_string(),
+            },
         );
         let g = Function::new(
             "g".to_string(),
-            vec![Type::Generic { id: "Tf".to_string() }],
-            Type::Generic { id: "Tg".to_string() },
+            vec![Type::Generic {
+                id: "Tf".to_string(),
+            }],
+            Type::Generic {
+                id: "Tg".to_string(),
+            },
         );
 
         // Replacement: source.project(g(f(a, b)))
@@ -127,13 +145,10 @@ mod tests {
     async fn test_project_merge_basic() {
         // Create test input: source.project(age + 1).project(col * 2)
         let source = test_table_scan("employees").await;
-        
+
         // Build input plan with two projections
         let input_plan = LogicalPlanBuilder::from(source.clone())
-            .project(vec![
-                (col("age") + lit(1)).alias("new_age"),
-                col("salary"),
-            ])
+            .project(vec![(col("age") + lit(1)).alias("new_age"), col("salary")])
             .unwrap()
             .project(vec![
                 (col("new_age") * lit(2)).alias("final_age"),
@@ -160,7 +175,7 @@ mod tests {
 
         assert!(result.is_ok(), "Rule should apply successfully");
         let actual_plan = result.unwrap();
-        
+
         // Compare the actual result with expected
         assert_eq!(
             actual_plan, expected_plan,
@@ -173,7 +188,7 @@ mod tests {
     async fn test_project_merge_complex_composition() {
         // Create test with more complex expressions
         let source = test_table_scan("employees").await;
-        
+
         let input_plan = LogicalPlanBuilder::from(source.clone())
             .project(vec![
                 col("id"),
@@ -205,7 +220,7 @@ mod tests {
 
         assert!(result.is_ok(), "Should merge complex projections");
         let actual_plan = result.unwrap();
-        
+
         assert_eq!(
             actual_plan, expected_plan,
             "Transformed plan does not match expected.\nActual:\n{:?}\n\nExpected:\n{:?}",
@@ -217,7 +232,7 @@ mod tests {
     async fn test_project_merge_no_match_single() {
         // Test with single projection - should not match
         let source = test_table_scan("employees").await;
-        
+
         let plan = LogicalPlanBuilder::from(source.clone())
             .project(vec![col("id"), col("name")])
             .unwrap()

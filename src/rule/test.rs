@@ -3,10 +3,7 @@ pub mod utils {
     use datafusion::{
         arrow::datatypes::{DataType, Field, Schema as ArrowSchema},
         common::DFSchema,
-        logical_expr::{
-            col, lit, LogicalPlan, LogicalPlanBuilder, Operator,
-            Expr,
-        },
+        logical_expr::{Expr, LogicalPlan, LogicalPlanBuilder, Operator, col, lit},
         prelude::SessionContext,
     };
     use std::sync::Arc;
@@ -26,7 +23,7 @@ pub mod utils {
     pub async fn test_table_scan(table_name: &str) -> LogicalPlan {
         let ctx = SessionContext::new();
         let schema = test_schema();
-        
+
         // Register a memory table with the schema
         ctx.register_csv(
             table_name,
@@ -40,7 +37,9 @@ pub mod utils {
             // Fallback: create empty table scan
             ctx.register_table(
                 table_name,
-                Arc::new(datafusion::datasource::empty::EmptyTable::new(schema.clone())),
+                Arc::new(datafusion::datasource::empty::EmptyTable::new(
+                    schema.clone(),
+                )),
             )
             .unwrap();
         });
@@ -66,18 +65,14 @@ pub mod utils {
 
     /// Create identity projection (all columns)
     pub fn identity_projection(schema: &DFSchema) -> Vec<Expr> {
-        schema
-            .fields()
-            .iter()
-            .map(|f| col(f.name()))
-            .collect()
+        schema.fields().iter().map(|f| col(f.name())).collect()
     }
 
     /// Compare two logical plans for equality
     pub fn plans_equal(plan1: &LogicalPlan, plan2: &LogicalPlan) -> bool {
         plan1 == plan2
     }
-    
+
     /// Build the expected output for a test and compare with actual
     pub fn assert_plan_equals(actual: &LogicalPlan, expected: &LogicalPlan) {
         assert_eq!(

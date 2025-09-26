@@ -15,26 +15,30 @@ pub struct FilterMergeRule;
 
 impl RewriteRule for FilterMergeRule {
     fn from(&self) -> Rel {
-        // Create a generic schema for the source
+        // Create a generic schema with a single field that can match any schema
         let schema = Schema {
             fields: vec![Field {
                 name: "col".to_string(),
                 data_type: Type::Generic {
                     id: "T".to_string(),
                 },
-                nullable: true,
+                nullable: true, // nullable so it can match any field
             }],
         };
 
         // Create abstract predicates P and Q with explicit types
         let p = Function::new(
             "P".to_string(),
-            vec![Type::Generic { id: "T".to_string() }],
+            vec![Type::Generic {
+                id: "T".to_string(),
+            }],
             Type::Boolean,
         );
         let q = Function::new(
             "Q".to_string(),
-            vec![Type::Generic { id: "T".to_string() }],
+            vec![Type::Generic {
+                id: "T".to_string(),
+            }],
             Type::Boolean,
         );
 
@@ -48,7 +52,7 @@ impl RewriteRule for FilterMergeRule {
     }
 
     fn to(&self) -> Rel {
-        // Create same schema and predicates
+        // Same schema as pattern
         let schema = Schema {
             fields: vec![Field {
                 name: "col".to_string(),
@@ -61,22 +65,23 @@ impl RewriteRule for FilterMergeRule {
 
         let p = Function::new(
             "P".to_string(),
-            vec![Type::Generic { id: "T".to_string() }],
+            vec![Type::Generic {
+                id: "T".to_string(),
+            }],
             Type::Boolean,
         );
         let q = Function::new(
             "Q".to_string(),
-            vec![Type::Generic { id: "T".to_string() }],
+            vec![Type::Generic {
+                id: "T".to_string(),
+            }],
             Type::Boolean,
         );
 
         // Replacement: source.filter(P AND Q)
         let source = Rel::source("source".to_string(), schema);
         source
-            .filter(
-                p.call(vec![col("col")])
-                    .and(q.call(vec![col("col")])),
-            )
+            .filter(p.call(vec![col("col")]).and(q.call(vec![col("col")])))
             .unwrap()
     }
 
@@ -91,7 +96,7 @@ impl ApplicableRule<DefaultMatcher> for FilterMergeRule {}
 mod tests {
     use super::*;
     use crate::rule::test::utils::*;
-    use datafusion::logical_expr::{LogicalPlan, LogicalPlanBuilder};
+    use datafusion::logical_expr::LogicalPlanBuilder;
 
     #[tokio::test]
     async fn test_filter_merge_basic() {
@@ -99,7 +104,7 @@ mod tests {
         let source = test_table_scan("employees").await;
         let first_predicate = gt_expr("age", lit(25));
         let second_predicate = gt_expr("salary", lit(50000.0));
-        
+
         let input_plan = LogicalPlanBuilder::from(source.clone())
             .filter(first_predicate.clone())
             .unwrap()
@@ -121,7 +126,7 @@ mod tests {
 
         assert!(result.is_ok(), "Rule should apply successfully");
         let actual_plan = result.unwrap();
-        
+
         // Compare the actual result with expected
         assert_eq!(
             actual_plan, expected_plan,
@@ -134,16 +139,13 @@ mod tests {
     async fn test_filter_merge_complex_predicates() {
         // Create test input with complex predicates
         let source = test_table_scan("employees").await;
-        
-        let first_predicate = and_expr(
-            gt_expr("age", lit(25)),
-            lt_expr("age", lit(65)),
-        );
+
+        let first_predicate = and_expr(gt_expr("age", lit(25)), lt_expr("age", lit(65)));
         let second_predicate = or_expr(
             eq_expr("active", lit(true)),
             gt_expr("salary", lit(100000.0)),
         );
-        
+
         let input_plan = LogicalPlanBuilder::from(source.clone())
             .filter(first_predicate.clone())
             .unwrap()
@@ -163,9 +165,13 @@ mod tests {
         let rule = FilterMergeRule;
         let result = rule.try_apply(&input_plan);
 
-        assert!(result.is_ok(), "Rule should apply to complex predicates");
+        assert!(
+            result.is_ok(),
+            "Rule should apply to complex predicates: {:?}",
+            result.err()
+        );
         let actual_plan = result.unwrap();
-        
+
         assert_eq!(
             actual_plan, expected_plan,
             "Transformed plan does not match expected.\nActual:\n{:?}\n\nExpected:\n{:?}",

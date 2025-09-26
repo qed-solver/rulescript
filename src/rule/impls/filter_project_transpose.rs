@@ -40,14 +40,22 @@ impl RewriteRule for FilterProjectTransposeRule {
         let f = Function::new(
             "f".to_string(),
             vec![
-                Type::Generic { id: "T1".to_string() },
-                Type::Generic { id: "T2".to_string() },
+                Type::Generic {
+                    id: "T1".to_string(),
+                },
+                Type::Generic {
+                    id: "T2".to_string(),
+                },
             ],
-            Type::Generic { id: "Tf".to_string() },
+            Type::Generic {
+                id: "Tf".to_string(),
+            },
         );
         let p = Function::new(
             "P".to_string(),
-            vec![Type::Generic { id: "Tf".to_string() }],
+            vec![Type::Generic {
+                id: "Tf".to_string(),
+            }],
             Type::Boolean,
         );
 
@@ -85,14 +93,22 @@ impl RewriteRule for FilterProjectTransposeRule {
         let f = Function::new(
             "f".to_string(),
             vec![
-                Type::Generic { id: "T1".to_string() },
-                Type::Generic { id: "T2".to_string() },
+                Type::Generic {
+                    id: "T1".to_string(),
+                },
+                Type::Generic {
+                    id: "T2".to_string(),
+                },
             ],
-            Type::Generic { id: "Tf".to_string() },
+            Type::Generic {
+                id: "Tf".to_string(),
+            },
         );
         let p = Function::new(
             "P".to_string(),
-            vec![Type::Generic { id: "Tf".to_string() }],
+            vec![Type::Generic {
+                id: "Tf".to_string(),
+            }],
             Type::Boolean,
         );
 
@@ -124,7 +140,7 @@ mod tests {
         // Create test: source.project(age + 10).filter(result > 30)
         // Should become: source.filter(age + 10 > 30).project(age + 10)
         let source = test_table_scan("employees").await;
-        
+
         // Build input plan: project then filter
         let input_plan = LogicalPlanBuilder::from(source.clone())
             .project(vec![
@@ -156,7 +172,7 @@ mod tests {
 
         assert!(result.is_ok(), "Rule should apply successfully");
         let actual_plan = result.unwrap();
-        
+
         // Compare the actual result with expected
         assert_eq!(
             actual_plan, expected_plan,
@@ -169,7 +185,7 @@ mod tests {
     async fn test_filter_project_transpose_complex_predicate() {
         // Test with complex predicate involving multiple projected columns
         let source = test_table_scan("employees").await;
-        
+
         let input_plan = LogicalPlanBuilder::from(source.clone())
             .project(vec![
                 (col("age") * lit(2)).alias("double_age"),
@@ -177,8 +193,9 @@ mod tests {
             ])
             .unwrap()
             .filter(
-                col("double_age").gt(lit(50))
-                    .and(col("salary_k").lt(lit(100.0)))
+                col("double_age")
+                    .gt(lit(50))
+                    .and(col("salary_k").lt(lit(100.0))),
             )
             .unwrap()
             .build()
@@ -189,8 +206,9 @@ mod tests {
         // salary_k < 100 becomes (salary / 1000) < 100
         let expected_plan = LogicalPlanBuilder::from(source)
             .filter(
-                (col("age") * lit(2)).gt(lit(50))
-                    .and((col("salary") / lit(1000.0)).lt(lit(100.0)))
+                (col("age") * lit(2))
+                    .gt(lit(50))
+                    .and((col("salary") / lit(1000.0)).lt(lit(100.0))),
             )
             .unwrap()
             .project(vec![
@@ -207,7 +225,7 @@ mod tests {
 
         assert!(result.is_ok(), "Should transpose complex predicates");
         let actual_plan = result.unwrap();
-        
+
         assert_eq!(
             actual_plan, expected_plan,
             "Transformed plan does not match expected.\nActual:\n{:?}\n\nExpected:\n{:?}",
@@ -219,7 +237,7 @@ mod tests {
     async fn test_filter_project_transpose_no_match() {
         // Test with no filter - should not match
         let source = test_table_scan("employees").await;
-        
+
         let plan = LogicalPlanBuilder::from(source.clone())
             .project(vec![col("id"), col("name")])
             .unwrap()

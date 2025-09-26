@@ -41,18 +41,28 @@ impl RewriteRule for ProjectFilterTransposeRule {
         let p = Function::new(
             "P".to_string(),
             vec![
-                Type::Generic { id: "T1".to_string() },
-                Type::Generic { id: "T2".to_string() },
+                Type::Generic {
+                    id: "T1".to_string(),
+                },
+                Type::Generic {
+                    id: "T2".to_string(),
+                },
             ],
             Type::Boolean,
         );
         let f = Function::new(
             "f".to_string(),
             vec![
-                Type::Generic { id: "T1".to_string() },
-                Type::Generic { id: "T2".to_string() },
+                Type::Generic {
+                    id: "T1".to_string(),
+                },
+                Type::Generic {
+                    id: "T2".to_string(),
+                },
             ],
-            Type::Generic { id: "Tf".to_string() },
+            Type::Generic {
+                id: "Tf".to_string(),
+            },
         );
 
         // Pattern: source.filter(P(a, b)).project(f(a, b))
@@ -89,18 +99,28 @@ impl RewriteRule for ProjectFilterTransposeRule {
         let p = Function::new(
             "P".to_string(),
             vec![
-                Type::Generic { id: "T1".to_string() },
-                Type::Generic { id: "T2".to_string() },
+                Type::Generic {
+                    id: "T1".to_string(),
+                },
+                Type::Generic {
+                    id: "T2".to_string(),
+                },
             ],
             Type::Boolean,
         );
         let f = Function::new(
             "f".to_string(),
             vec![
-                Type::Generic { id: "T1".to_string() },
-                Type::Generic { id: "T2".to_string() },
+                Type::Generic {
+                    id: "T1".to_string(),
+                },
+                Type::Generic {
+                    id: "T2".to_string(),
+                },
             ],
-            Type::Generic { id: "Tf".to_string() },
+            Type::Generic {
+                id: "Tf".to_string(),
+            },
         );
 
         // Replacement: source.project(f(a, b)).filter(P'(f))
@@ -111,7 +131,7 @@ impl RewriteRule for ProjectFilterTransposeRule {
         source
             .project(vec![proj_result.clone()])
             .unwrap()
-            .filter(p.call(vec![col("f")]))  // Filter now references projected column
+            .filter(p.call(vec![col("f")])) // Filter now references projected column
             .unwrap()
     }
 
@@ -134,14 +154,11 @@ mod tests {
         // Should become: source.project(age * 2).filter(age > 25)
         // Note: The filter still references original columns since they're preserved in projection
         let source = test_table_scan("employees").await;
-        
+
         let input_plan = LogicalPlanBuilder::from(source.clone())
             .filter(col("age").gt(lit(25)))
             .unwrap()
-            .project(vec![
-                col("id"),
-                (col("age") * lit(2)).alias("double_age"),
-            ])
+            .project(vec![col("id"), (col("age") * lit(2)).alias("double_age")])
             .unwrap()
             .build()
             .unwrap();
@@ -151,12 +168,9 @@ mod tests {
         // this transformation might not actually be valid without rewriting.
         // For a valid test, let's use a filter that references preserved columns
         let expected_plan = LogicalPlanBuilder::from(source.clone())
-            .project(vec![
-                col("id"),
-                (col("age") * lit(2)).alias("double_age"),
-            ])
+            .project(vec![col("id"), (col("age") * lit(2)).alias("double_age")])
             .unwrap()
-            .filter(col("id").is_not_null())  // A filter that can work after projection
+            .filter(col("id").is_not_null()) // A filter that can work after projection
             .unwrap()
             .build()
             .unwrap();
@@ -182,10 +196,9 @@ mod tests {
     async fn test_project_filter_transpose_preserves_semantics() {
         // Test that filter predicates are properly adjusted
         let source = test_table_scan("employees").await;
-        
-        let filter_predicate = col("age").gt(lit(25))
-            .and(col("salary").lt(lit(100000.0)));
-        
+
+        let filter_predicate = col("age").gt(lit(25)).and(col("salary").lt(lit(100000.0)));
+
         let input_plan = LogicalPlanBuilder::from(source.clone())
             .filter(filter_predicate.clone())
             .unwrap()
@@ -209,8 +222,7 @@ mod tests {
             ])
             .unwrap()
             .filter(
-                col("age").gt(lit(25))
-                    .and(col("salary_k").lt(lit(100.0)))  // Adjusted: salary/1000 < 100
+                col("age").gt(lit(25)).and(col("salary_k").lt(lit(100.0))), // Adjusted: salary/1000 < 100
             )
             .unwrap()
             .build()
@@ -235,7 +247,7 @@ mod tests {
     async fn test_project_filter_transpose_no_match() {
         // Test with no project after filter - should not match
         let source = test_table_scan("employees").await;
-        
+
         let plan = LogicalPlanBuilder::from(source.clone())
             .filter(col("age").gt(lit(25)))
             .unwrap()
@@ -246,7 +258,10 @@ mod tests {
         let rule = ProjectFilterTransposeRule;
         let result = rule.try_apply(&plan);
 
-        assert!(result.is_err(), "Should not match when no projection present");
+        assert!(
+            result.is_err(),
+            "Should not match when no projection present"
+        );
     }
 
     use datafusion::logical_expr::lit;

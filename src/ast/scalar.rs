@@ -37,15 +37,6 @@ impl Function {
         }
     }
 
-    /// Create a boolean predicate function (for use in filters/joins)
-    /// Kept for backward compatibility but now requires explicit types
-    pub fn boolean_predicate(name: String, arity: usize) -> Self {
-        // For backward compatibility, create a simple predicate with generic type "T"
-        let input_types = vec![Type::Generic { id: "T".to_string() }; arity];
-        let return_type = Type::Boolean;
-        Self::new(name, input_types, return_type)
-    }
-
     /// Get the number of input arguments
     pub fn input_count(&self) -> usize {
         self.input_types.len()
@@ -140,8 +131,6 @@ impl Scalar {
             expr: func.call(args),
         }
     }
-
-
 
     /// Create a pattern for a column reference
     pub fn column(name: String) -> Self {
