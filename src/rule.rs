@@ -1,4 +1,14 @@
-use datafusion::logical_expr::LogicalPlan;
+use std::{
+    fmt::{self, Debug, Formatter},
+    marker::PhantomData,
+};
+
+use datafusion::{
+    common::tree_node::{Transformed, TreeNode},
+    error::Result as DataFusionResult,
+    logical_expr::LogicalPlan,
+    optimizer::{OptimizerConfig, OptimizerRule},
+};
 
 use crate::{
     ast::relational::Rel,
@@ -52,5 +62,68 @@ pub trait ApplicableRule<M: PatternMatcher + Default = DefaultMatcher>: RewriteR
     fn matches_with(&self, plan: &LogicalPlan, matcher: &mut M) -> bool {
         let from = self.from();
         matcher.resolve(&from, plan).is_ok()
+    }
+}
+
+/// Wrapper to use ApplicableRule as DataFusion OptimizerRule
+pub struct RuleWrapper<R, M = DefaultMatcher> {
+    pub rule: R,
+    _phantom: PhantomData<M>,
+}
+
+impl<R, M> Debug for RuleWrapper<R, M>
+where
+    R: Debug,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RuleWrapper")
+            .field("rule", &self.rule)
+            .finish()
+    }
+}
+
+impl<R, M> RuleWrapper<R, M> {
+    pub fn new(rule: R) -> Self {
+        Self {
+            rule,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<R, M> OptimizerRule for RuleWrapper<R, M>
+where
+    R: ApplicableRule<M> + Debug,
+    M: PatternMatcher + Default,
+{
+    fn name(&self) -> &str {
+        self.rule.name()
+    }
+
+    fn apply_order(&self) -> Option<datafusion::optimizer::ApplyOrder> {
+        None
+    }
+
+    fn supports_rewrite(&self) -> bool {
+        true
+    }
+
+    fn rewrite(
+        &self,
+        plan: LogicalPlan,
+        _config: &dyn OptimizerConfig,
+    ) -> DataFusionResult<Transformed<LogicalPlan>> {
+        // Try to apply the rule at this node
+        match self.rule.try_apply(&plan) {
+            Ok(new_plan) => Ok(Transformed::yes(new_plan)),
+            Err(_) => {
+                // Rule didn't match or failed, try children
+                let transformed = plan.transform_down(|node| match self.rule.try_apply(&node) {
+                    Ok(new_node) => Ok(Transformed::yes(new_node)),
+                    Err(_) => Ok(Transformed::no(node)),
+                })?;
+                Ok(transformed)
+            }
+        }
     }
 }
