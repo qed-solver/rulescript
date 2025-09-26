@@ -11,12 +11,12 @@ This directory contains concrete implementations of query optimization rules, in
 - **Status**: Implemented
 - **Notes**: Combines two consecutive filters using AND operator
 
-### ProjectRemoveRule ⚠️
+### ProjectRemoveRule ✅
 - **File**: `project_remove.rs`
-- **Pattern**: `Project(identity, source)` → `source`
+- **Pattern**: `Project([col], source)` → `source`
 - **Test Source**: Based on Calcite's ProjectRemoveRule concept
-- **Status**: Partially Implemented
-- **Notes**: Pattern matching for identity projections needs enhancement. The rule structure is complete but requires matcher improvements to detect identity mappings.
+- **Status**: Implemented
+- **Notes**: Uses smart column pattern matching - a single column pattern matches the full ordered list of columns. Only matches true identity projections (all columns in same order).
 
 ### FilterProjectTransposeRule ✅
 - **File**: `filter_project_transpose.rs`
@@ -56,6 +56,17 @@ Test utilities are located in `src/rule/test.rs` and provide:
 - Schema builders for common test scenarios
 - Expression builders for predicates and projections
 - Plan comparison utilities
+
+## Pattern Matching Behavior
+
+### Column Patterns
+Column patterns behave differently depending on context:
+- **In projections**: A column pattern matches an ordered sequence of columns from its partition
+  - Example: Pattern `project([col("a")])` where "a" maps to [col1, col2, col3] matches concrete `project([col1, col2, col3])` exactly
+- **In function arguments**: A column pattern matches any single column from its partition
+  - Example: Pattern `F(col("a"))` where "a" maps to [col1, col2, col3] can match `F(col2)` or `F(col3)`
+
+This distinction enables precise matching for identity projections while maintaining flexibility for predicates and functions.
 
 ## Adding New Rules
 

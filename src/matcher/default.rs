@@ -1,8 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Debug,
-    sync::Arc,
-};
+use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
 use datafusion::{
     common::Column,
@@ -22,11 +18,11 @@ use super::{BindingConflict, PatternMatcher, RuleError};
 /// Default pattern matcher that tracks bindings internally
 #[derive(Debug, Default)]
 pub struct DefaultMatcher {
-    /// Abstract field name -> Set of concrete Column objects (partition)
-    fields: HashMap<String, HashSet<Column>>,
+    /// Abstract field name -> Ordered list of concrete Column objects
+    fields: HashMap<String, Vec<Column>>,
 
-    /// Abstract functions/predicates -> Set of concrete expressions
-    functions: HashMap<String, HashSet<Expr>>,
+    /// Abstract functions/predicates -> List of concrete expressions (usually single)
+    functions: HashMap<String, Vec<Expr>>,
 
     /// Abstract sources -> concrete plans (original)
     sources: HashMap<String, LogicalPlan>,
@@ -187,7 +183,7 @@ impl DefaultMatcher {
                     .fields
                     .entry(abstract_field.name.clone())
                     .or_default()
-                    .insert(concrete_column.clone());
+                    .push(concrete_column.clone());
                 Ok(())
             },
         )?;
@@ -213,7 +209,65 @@ impl DefaultMatcher {
         // First, recursively match the inputs
         self.resolve_plan(&pattern.input, &concrete.input)?;
 
-        // Use the generic partitioning routine
+        // Check if all pattern expressions are column references
+        let pattern_cols = pattern
+            .expr
+            .iter()
+            .map(|e| {
+                if let Expr::Column(col) = e {
+                    Ok(col)
+                } else {
+                    Err(())
+                }
+            })
+            .collect::<Result<Vec<_>, _>>();
+
+        // If pattern has all columns, check for partition-based matching
+        if let Ok(pattern_cols) = pattern_cols {
+            // Pattern has all columns, so concrete must also have all columns
+            let concrete_cols = concrete
+                .expr
+                .iter()
+                .map(|e| {
+                    if let Expr::Column(col) = e {
+                        Ok(col)
+                    } else {
+                        // Pattern expects columns but concrete has non-column expression
+                        Err(RuleError::NoMatchingPattern {
+                            item: e.to_string(),
+                        })
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            // Collect all columns from pattern's partitions in order
+            let mut expected_columns = Vec::new();
+            for pat_col in pattern_cols {
+                if let Some(partition) = self.fields.get(&pat_col.name) {
+                    expected_columns.extend(partition.clone());
+                } else {
+                    // Pattern column not bound yet, can't match
+                    return Err(RuleError::UnboundSymbol {
+                        symbol: pat_col.name.clone(),
+                    });
+                }
+            }
+
+            // Check if the concatenated partitions match the concrete columns exactly
+            let concrete_columns = concrete_cols.iter().map(|&c| c.clone()).collect::<Vec<_>>();
+            if expected_columns == concrete_columns {
+                // Matches! The concrete columns are exactly the concatenation of pattern partitions
+                return Ok(());
+            } else {
+                // Doesn't match - concrete columns don't match the expected partition concatenation
+                return Err(RuleError::StructureMismatch {
+                    pattern: Box::new(LogicalPlan::Projection(pattern.clone())),
+                    target: Box::new(LogicalPlan::Projection(concrete.clone())),
+                });
+            }
+        }
+
+        // Otherwise use the generic partitioning routine
         self.partition(
             &pattern.expr,
             &concrete.expr,
@@ -279,11 +333,11 @@ impl DefaultMatcher {
         )?;
 
         // Bind this abstract function to the entire concrete expression
-        // Add to the set of expressions bound to this function
+        // Add to the list of expressions bound to this function (usually just one)
         self.functions
             .entry(abstract_func.name.clone())
-            .or_default()
-            .insert(concrete.clone());
+            .or_insert_with(Vec::new)
+            .push(concrete.clone());
 
         Ok(())
     }
@@ -327,24 +381,23 @@ impl DefaultMatcher {
                     let Some(abstract_func) = Self::as_abstract_function(func) else {
                         continue;
                     };
-                    let Some(exprs) = self.functions.get_mut(&abstract_func.name) else {
+                    let Some(exprs) = self.functions.remove(&abstract_func.name) else {
                         continue;
                     };
 
-                    if exprs.len() > 1 {
-                        // Consolidate multiple expressions into single conjunction/disjunction
-                        let combined = exprs
-                            .drain()
-                            .reduce(|acc, expr| {
-                                Expr::BinaryExpr(BinaryExpr::new(
-                                    Box::new(acc),
-                                    pat_binary.op,
-                                    Box::new(expr),
-                                ))
-                            })
-                            .unwrap();
-                        exprs.insert(combined);
-                    }
+                    // Consolidate multiple expressions into single conjunction/disjunction
+                    let combined = exprs
+                        .into_iter()
+                        .reduce(|acc, expr| {
+                            Expr::BinaryExpr(BinaryExpr::new(
+                                Box::new(acc),
+                                pat_binary.op,
+                                Box::new(expr),
+                            ))
+                        })
+                        .unwrap_or_default();
+                    self.functions
+                        .insert(abstract_func.name.clone(), vec![combined]);
                 }
 
                 Ok(())
@@ -357,9 +410,9 @@ impl DefaultMatcher {
         }
     }
 
-    /// Resolve a column reference
+    /// Resolve a column reference (for non-projection contexts like filters)
     fn resolve_column(&mut self, pat_col: &Column, con_col: &Column) -> Result<(), RuleError> {
-        // Get the partition for this abstract field - it must exist from Source matching
+        // Get the list of allowed columns for this abstract field
         let allowed_columns =
             self.fields
                 .get(&pat_col.name)
@@ -367,7 +420,7 @@ impl DefaultMatcher {
                     symbol: pat_col.name.clone(),
                 })?;
 
-        // Check if concrete column is in the allowed partition
+        // Check if concrete column is in the allowed list
         if !allowed_columns.contains(con_col) {
             return Err(RuleError::ExpressionMismatch {
                 pattern: Box::new(Expr::Column(pat_col.clone())),
@@ -727,11 +780,7 @@ impl DefaultMatcher {
         let mut columns = concrete_columns.iter().collect::<Vec<_>>();
 
         // Sort by output schema order if we have one
-        columns.sort_by_key(|col| {
-            self.output_schema
-                .iter()
-                .position(|name| name == col.name())
-        });
+        columns.sort_by_key(|col| self.output_schema.iter().position(|name| name == &col.name));
 
         Ok(columns
             .iter()

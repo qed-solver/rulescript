@@ -46,6 +46,16 @@ The `P` and `Q` are uninterpreted predicates - they can represent ANY boolean ex
   - Recursive rule application with `transform_down`
 - **Optimized codebase** with minimal cloning overhead
 - **Clean error types** with descriptive messages and concrete values
+- **Concrete rule implementations** in `src/rule/impls/`:
+  - FilterMergeRule - Merges consecutive filters with AND
+  - ProjectRemoveRule - Removes identity projections
+  - ProjectMergeRule - Merges consecutive projections via composition
+  - FilterProjectTransposeRule - Pushes filters below projections
+  - ProjectFilterTransposeRule - Pulls projections above filters
+- **Smart column pattern matching**:
+  - Column patterns in projections match ordered sequences
+  - Column patterns in function arguments match any from partition
+  - Enables proper identity projection detection
 
 ### In Progress 🚧
 - **Testing and Examples** - Creating concrete examples with valid DataFusion plans
@@ -71,10 +81,13 @@ src/
 - All abstract types map to Binary for uniformity
 - Functions are UDFs that error on execution (pattern-only)
 - Unified `DefaultMatcher` manages three binding types:
-  - `field_partitions`: Abstract field → Set of concrete columns
-  - `functions`: Abstract function → Concrete expression
+  - `fields`: Abstract field → Ordered list of concrete columns
+  - `functions`: Abstract function → List of concrete expressions
   - `sources`: Source name → Original LogicalPlan
 - Context-preserving principle: expressions bound in one context stay in that context
+- Column patterns match differently based on context:
+  - Direct projection expressions: match full ordered sequence
+  - Function arguments: match any column from partition
 - Efficient pattern partitioning with descriptive error reporting
 
 ## Example Usage

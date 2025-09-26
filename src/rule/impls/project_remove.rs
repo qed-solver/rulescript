@@ -2,7 +2,6 @@ use crate::{
     ast::{
         opaque::{Field, Schema, Type},
         relational::Rel,
-        scalar::Function,
     },
     matcher::DefaultMatcher,
     rule::{ApplicableRule, RewriteRule},
@@ -15,68 +14,33 @@ pub struct ProjectRemoveRule;
 
 impl RewriteRule for ProjectRemoveRule {
     fn from(&self) -> Rel {
-        // Create a generic schema with multiple fields
+        // Create a generic schema with a single field that can match any schema
         let schema = Schema {
-            fields: vec![
-                Field {
-                    name: "col1".to_string(),
-                    data_type: Type::Generic {
-                        id: "T1".to_string(),
-                    },
-                    nullable: true,
+            fields: vec![Field {
+                name: "col".to_string(),
+                data_type: Type::Generic {
+                    id: "T".to_string(),
                 },
-                Field {
-                    name: "col2".to_string(),
-                    data_type: Type::Generic {
-                        id: "T2".to_string(),
-                    },
-                    nullable: true,
-                },
-            ],
+                nullable: true,
+            }],
         };
 
-        // Create identity projection function with explicit types
-        let identity = Function::new(
-            "identity".to_string(),
-            vec![
-                Type::Generic {
-                    id: "T1".to_string(),
-                },
-                Type::Generic {
-                    id: "T2".to_string(),
-                },
-            ],
-            Type::Generic {
-                id: "Tidentity".to_string(),
-            }, // Return type (though identity should preserve types)
-        );
-
-        // Pattern: source.project(identity(col1, col2))
+        // Pattern: source.project([col])
+        // This will match any projection that only contains column references
         let source = Rel::source("source".to_string(), schema);
-        source
-            .project(vec![identity.call(vec![col("col1"), col("col2")])])
-            .unwrap()
+        source.project(vec![col("col")]).unwrap()
     }
 
     fn to(&self) -> Rel {
-        // Same schema
+        // Same schema with single generic field
         let schema = Schema {
-            fields: vec![
-                Field {
-                    name: "col1".to_string(),
-                    data_type: Type::Generic {
-                        id: "T1".to_string(),
-                    },
-                    nullable: true,
+            fields: vec![Field {
+                name: "col".to_string(),
+                data_type: Type::Generic {
+                    id: "T".to_string(),
                 },
-                Field {
-                    name: "col2".to_string(),
-                    data_type: Type::Generic {
-                        id: "T2".to_string(),
-                    },
-                    nullable: true,
-                },
-            ],
+                nullable: true,
+            }],
         };
 
         // Replacement: just the source
