@@ -18,10 +18,7 @@ use super::{BindingConflict, PatternMatcher, RuleError};
 /// Default pattern matcher that tracks bindings internally
 #[derive(Debug, Default)]
 pub struct DefaultMatcher {
-    /// Abstract field name -> Ordered list of concrete Column objects
-    fields: HashMap<String, Vec<Column>>,
-
-    /// Abstract functions/predicates -> List of concrete expressions (usually single)
+    /// Abstract functions/predicates -> list of concrete expressions (usually single)
     functions: HashMap<String, Vec<Expr>>,
 
     /// Abstract sources -> concrete plans (original)
@@ -41,12 +38,12 @@ impl DefaultMatcher {
     // ===== HELPER METHODS =====
 
     /// Extract a Source from an Extension node
-    fn as_source(ext: &Extension) -> Option<&Source> {
+    fn as_source_opt(ext: &Extension) -> Option<&Source> {
         ext.node.as_any().downcast_ref::<Source>()
     }
 
     /// Extract an abstract Function from a ScalarFunction
-    fn as_abstract_function(func: &ScalarFunction) -> Option<&Function> {
+    fn as_abstract_function_opt(func: &ScalarFunction) -> Option<&Function> {
         func.func.inner().as_any().downcast_ref::<Function>()
     }
 
@@ -56,28 +53,33 @@ impl DefaultMatcher {
         patterns: impl IntoIterator<Item = P>,
         items: impl IntoIterator<Item = I>,
         mut try_match: impl FnMut(&mut Self, &P, &I) -> Result<(), RuleError>,
-    ) -> Result<(), RuleError> {
-        let patterns = patterns.into_iter().collect::<Vec<_>>();
+    ) -> Result<Vec<(P, Vec<I>)>, RuleError> {
+        let mut partitions = patterns
+            .into_iter()
+            .map(|p| (p, Vec::new()))
+            .collect::<Vec<_>>();
 
         for item in items {
-            let mut matched = false;
+            let mut assign = None;
 
-            for pattern in &patterns {
+            for (pattern, partition) in &mut partitions {
                 // Try matching - Ok means success, Err means try next pattern
-                if try_match(self, pattern, &item).is_ok() {
-                    matched = true;
+                if try_match(self, &pattern, &item).is_ok() {
+                    assign = Some(partition);
                     break;
                 }
             }
 
-            if !matched {
+            if let Some(partition) = assign {
+                partition.push(item);
+            } else {
                 return Err(RuleError::NoMatchingPattern {
                     item: format!("{:?}", item),
                 });
             }
         }
 
-        Ok(())
+        Ok(partitions)
     }
 
     /// Flatten binary expressions with the same operator into a list (DFS order)
@@ -103,12 +105,12 @@ impl DefaultMatcher {
         &mut self,
         pattern: &LogicalPlan,
         concrete: &LogicalPlan,
-    ) -> Result<(), RuleError> {
+    ) -> Result<HashMap<Column, Vec<Column>>, RuleError> {
         match (pattern, concrete) {
             // Source pattern can match any plan with compatible schema
             (LogicalPlan::Extension(ext), con_plan) => {
                 let pat_source =
-                    Self::as_source(ext).ok_or_else(|| RuleError::StructureMismatch {
+                    Self::as_source_opt(ext).ok_or_else(|| RuleError::StructureMismatch {
                         pattern: Box::new(pattern.clone()),
                         target: Box::new(concrete.clone()),
                     })?;
@@ -136,7 +138,11 @@ impl DefaultMatcher {
     }
 
     /// Resolve a Source pattern against any concrete plan
-    fn resolve_source(&mut self, source: &Source, concrete: &LogicalPlan) -> Result<(), RuleError> {
+    fn resolve_source(
+        &mut self,
+        source: &Source,
+        concrete: &LogicalPlan,
+    ) -> Result<HashMap<Column, Vec<Column>>, RuleError> {
         // Store original concrete plan for instantiation later (needs to be cloned for storage)
         // Check for consistency if already bound
         if let Some(existing) = self.sources.get(&source.table_name) {
@@ -154,50 +160,68 @@ impl DefaultMatcher {
                 .insert(source.table_name.clone(), concrete.clone());
         }
 
-        // Use columns() which provides proper qualified Column objects
-        // paired with their corresponding fields
-        let concrete_schema = concrete
-            .schema()
-            .columns()
-            .into_iter()
-            .zip(concrete.schema().fields().iter());
+        let source_plan = LogicalPlan::Extension(Extension {
+            node: Arc::new(source.clone()),
+        });
 
-        self.partition(
-            &source.schema.fields,
-            concrete_schema,
-            |matcher, abstract_field, (concrete_column, concrete_field)| {
+        let abstract_field_column = source_plan
+            .schema()
+            .fields()
+            .iter()
+            .zip(source_plan.schema().columns());
+        let concrete_field_column = concrete
+            .schema()
+            .fields()
+            .iter()
+            .zip(concrete.schema().columns());
+
+        let partitions = self.partition(
+            abstract_field_column,
+            concrete_field_column,
+            |_, (abstract_field, _), (concrete_field, _)| {
                 // Check nullable property:
                 // - If pattern field is non-nullable, concrete must also be non-nullable
                 // - If pattern field is nullable, concrete can be either nullable or non-nullable
-                if !abstract_field.nullable && concrete_field.is_nullable() {
-                    return Err(RuleError::StructureMismatch {
+                if !abstract_field.is_nullable() && concrete_field.is_nullable() {
+                    Err(RuleError::StructureMismatch {
                         pattern: Box::new(LogicalPlan::Extension(Extension {
                             node: Arc::new(source.clone()),
                         })),
                         target: Box::new(concrete.clone()),
-                    });
+                    })
+                } else {
+                    Ok(())
                 }
-
-                // Now concrete_column is already a Column with proper qualifiers
-                matcher
-                    .fields
-                    .entry(abstract_field.name.clone())
-                    .or_default()
-                    .push(concrete_column.clone());
-                Ok(())
             },
         )?;
 
-        Ok(())
+        Ok(partitions
+            .into_iter()
+            .map(|((_, abstract_column), partition)| {
+                (
+                    abstract_column,
+                    partition
+                        .into_iter()
+                        .map(|(_, concrete_column)| concrete_column)
+                        .collect(),
+                )
+            })
+            .collect())
     }
 
     /// Resolve a Filter pattern against a concrete Filter
-    fn resolve_filter(&mut self, pattern: &Filter, concrete: &Filter) -> Result<(), RuleError> {
+    fn resolve_filter(
+        &mut self,
+        pattern: &Filter,
+        concrete: &Filter,
+    ) -> Result<HashMap<Column, Vec<Column>>, RuleError> {
         // First, recursively match the inputs
-        self.resolve_plan(&pattern.input, &concrete.input)?;
+        let context = self.resolve_plan(&pattern.input, &concrete.input)?;
 
         // Match the filter predicate expression
-        self.resolve_expr(&pattern.predicate, &concrete.predicate)
+        self.resolve_expr(&pattern.predicate, &concrete.predicate, &context)?;
+
+        Ok(context)
     }
 
     /// Resolve a Projection pattern against a concrete Projection
@@ -205,100 +229,82 @@ impl DefaultMatcher {
         &mut self,
         pattern: &Projection,
         concrete: &Projection,
-    ) -> Result<(), RuleError> {
+    ) -> Result<HashMap<Column, Vec<Column>>, RuleError> {
         // First, recursively match the inputs
-        self.resolve_plan(&pattern.input, &concrete.input)?;
+        let input_context = self.resolve_plan(&pattern.input, &concrete.input)?;
 
-        // Check if all pattern expressions are column references
-        let pattern_cols = pattern
-            .expr
-            .iter()
-            .map(|e| {
-                if let Expr::Column(col) = e {
-                    Ok(col)
-                } else {
-                    Err(())
-                }
-            })
-            .collect::<Result<Vec<_>, _>>();
+        // Then, partition the projection exxpressions
+        let partitions = self.partition(
+            &pattern.expr,
+            LogicalPlan::Projection(concrete.clone())
+                .schema()
+                .columns()
+                .into_iter()
+                .zip(&concrete.expr),
+            |matcher, pat_expr, (_, con_expr)| {
+                matcher.resolve_expr(pat_expr, con_expr, &input_context)
+            },
+        )?;
 
-        // If pattern has all columns, check for partition-based matching
-        if let Ok(pattern_cols) = pattern_cols {
-            // Pattern has all columns, so concrete must also have all columns
-            let concrete_cols = concrete
-                .expr
-                .iter()
-                .map(|e| {
-                    if let Expr::Column(col) = e {
-                        Ok(col)
-                    } else {
-                        // Pattern expects columns but concrete has non-column expression
-                        Err(RuleError::NoMatchingPattern {
-                            item: e.to_string(),
-                        })
-                    }
-                })
-                .collect::<Result<Vec<_>, _>>()?;
+        // Finally, construct the context based on partition
+        let mut output_context = HashMap::new();
+        for (pat_col, (pat_expr, con_exprs)) in LogicalPlan::Projection(pattern.clone())
+            .schema()
+            .columns()
+            .into_iter()
+            .zip(partitions)
+        {
+            let con_cols = con_exprs
+                .into_iter()
+                .map(|(con_col, _)| con_col.clone())
+                .collect::<Vec<_>>();
+            if let Expr::Column(expr_col) = pat_expr {
+                // Get the list of expected columns for this abstract field
+                let expected_cols =
+                    input_context
+                        .get(expr_col)
+                        .ok_or_else(|| RuleError::UnboundSymbol {
+                            symbol: expr_col.name.clone(),
+                        })?;
 
-            // Collect all columns from pattern's partitions in order
-            let mut expected_columns = Vec::new();
-            for pat_col in pattern_cols {
-                if let Some(partition) = self.fields.get(&pat_col.name) {
-                    expected_columns.extend(partition.clone());
-                } else {
-                    // Pattern column not bound yet, can't match
+                // Check if concrete column is in the allowed list
+                if !(&con_cols == expected_cols) {
                     return Err(RuleError::UnboundSymbol {
-                        symbol: pat_col.name.clone(),
+                        symbol: expr_col.name.clone(),
                     });
                 }
             }
-
-            // Check if the concatenated partitions match the concrete columns exactly
-            let concrete_columns = concrete_cols.iter().map(|&c| c.clone()).collect::<Vec<_>>();
-            if expected_columns == concrete_columns {
-                // Matches! The concrete columns are exactly the concatenation of pattern partitions
-                return Ok(());
-            } else {
-                // Doesn't match - concrete columns don't match the expected partition concatenation
-                return Err(RuleError::StructureMismatch {
-                    pattern: Box::new(LogicalPlan::Projection(pattern.clone())),
-                    target: Box::new(LogicalPlan::Projection(concrete.clone())),
-                });
-            }
+            output_context.insert(pat_col, con_cols);
         }
-
-        // Otherwise use the generic partitioning routine
-        self.partition(
-            &pattern.expr,
-            &concrete.expr,
-            |matcher, pat_expr, con_expr| matcher.resolve_expr(pat_expr, con_expr),
-        )
+        Ok(output_context)
     }
 
     /// Main dispatcher for resolving expressions
-    fn resolve_expr(&mut self, pattern: &Expr, concrete: &Expr) -> Result<(), RuleError> {
+    fn resolve_expr(
+        &mut self,
+        pattern: &Expr,
+        concrete: &Expr,
+        context: &HashMap<Column, Vec<Column>>,
+    ) -> Result<(), RuleError> {
         match (pattern, concrete) {
             // Abstract function can match any expression
             (Expr::ScalarFunction(pat_func), con_expr) => {
-                self.resolve_abstract_function(pat_func, con_expr)
+                self.resolve_abstract_function(pat_func, con_expr, context)
             }
 
             // Binary expressions
             (Expr::BinaryExpr(pat_binary), Expr::BinaryExpr(con_binary)) => {
-                self.resolve_binary_expr(pat_binary, con_binary)
+                self.resolve_binary_expr(pat_binary, con_binary, context)
             }
 
             // Columns must match exactly
-            (Expr::Column(pat_col), Expr::Column(con_col)) => self.resolve_column(pat_col, con_col),
+            (Expr::Column(pat_col), Expr::Column(con_col)) => {
+                self.resolve_column(pat_col, con_col, context)
+            }
 
             // Alias in pattern - resolve inner pattern against concrete (which may or may not be aliased)
             (Expr::Alias(pat_alias), concrete_expr) => {
-                self.resolve_expr(&pat_alias.expr, concrete_expr)
-            }
-
-            // Alias in concrete but not in pattern - try to match pattern against inner expression
-            (pattern_expr, Expr::Alias(con_alias)) => {
-                self.resolve_expr(pattern_expr, &con_alias.expr)
+                self.resolve_expr(&pat_alias.expr, concrete_expr, context)
             }
 
             // TODO: Handle other expression types as needed
@@ -314,14 +320,16 @@ impl DefaultMatcher {
         &mut self,
         pat_func: &ScalarFunction,
         concrete: &Expr,
+        context: &HashMap<Column, Vec<Column>>,
     ) -> Result<(), RuleError> {
         // Try to get our abstract Function from the ScalarFunction
         let pattern_expr = Expr::ScalarFunction(pat_func.clone());
-        let abstract_func =
-            Self::as_abstract_function(pat_func).ok_or_else(|| RuleError::ExpressionMismatch {
+        let abstract_func = Self::as_abstract_function_opt(pat_func).ok_or_else(|| {
+            RuleError::ExpressionMismatch {
                 pattern: Box::new(pattern_expr.clone()),
                 target: Box::new(concrete.clone()),
-            })?;
+            }
+        })?;
 
         // Get pattern's column references directly from the function args (assumes well-formed pattern)
         let pattern_columns = pattern_expr.column_refs();
@@ -334,7 +342,7 @@ impl DefaultMatcher {
         self.partition(
             &pattern_columns,
             concrete_columns.iter(),
-            |matcher, pat_col, con_col| matcher.resolve_column(pat_col, con_col),
+            |matcher, pat_col, con_col| matcher.resolve_column(pat_col, con_col, context),
         )?;
 
         // Bind this abstract function to the entire concrete expression
@@ -352,6 +360,7 @@ impl DefaultMatcher {
         &mut self,
         pat_binary: &BinaryExpr,
         con_binary: &BinaryExpr,
+        context: &HashMap<Column, Vec<Column>>,
     ) -> Result<(), RuleError> {
         // Check if operators match
         if pat_binary.op != con_binary.op {
@@ -374,7 +383,7 @@ impl DefaultMatcher {
                 self.partition(
                     &pattern_terms,
                     concrete_terms,
-                    |matcher, pat_term, con_term| matcher.resolve_expr(pat_term, con_term),
+                    |matcher, pat_term, con_term| matcher.resolve_expr(pat_term, con_term, context),
                 )?;
 
                 // After partition, consolidate multiple bindings for abstract functions
@@ -383,7 +392,7 @@ impl DefaultMatcher {
                     let Expr::ScalarFunction(func) = pat_term else {
                         continue;
                     };
-                    let Some(abstract_func) = Self::as_abstract_function(func) else {
+                    let Some(abstract_func) = Self::as_abstract_function_opt(func) else {
                         continue;
                     };
                     let Some(exprs) = self.functions.remove(&abstract_func.name) else {
@@ -409,21 +418,25 @@ impl DefaultMatcher {
             }
             _ => {
                 // For non-commutative operators, match structurally
-                self.resolve_expr(&pat_binary.left, &con_binary.left)?;
-                self.resolve_expr(&pat_binary.right, &con_binary.right)
+                self.resolve_expr(&pat_binary.left, &con_binary.left, context)?;
+                self.resolve_expr(&pat_binary.right, &con_binary.right, context)
             }
         }
     }
 
     /// Resolve a column reference (for non-projection contexts like filters)
-    fn resolve_column(&mut self, pat_col: &Column, con_col: &Column) -> Result<(), RuleError> {
+    fn resolve_column(
+        &mut self,
+        pat_col: &Column,
+        con_col: &Column,
+        context: &HashMap<Column, Vec<Column>>,
+    ) -> Result<(), RuleError> {
         // Get the list of allowed columns for this abstract field
-        let allowed_columns =
-            self.fields
-                .get(&pat_col.name)
-                .ok_or_else(|| RuleError::UnboundSymbol {
-                    symbol: pat_col.name.clone(),
-                })?;
+        let allowed_columns = context
+            .get(pat_col)
+            .ok_or_else(|| RuleError::UnboundSymbol {
+                symbol: pat_col.name.clone(),
+            })?;
 
         // Check if concrete column is in the allowed list
         if !allowed_columns.contains(con_col) {
@@ -443,7 +456,7 @@ impl DefaultMatcher {
         match template {
             // Source pattern: look up the bound concrete plan
             LogicalPlan::Extension(ext) => {
-                let source = Self::as_source(ext).ok_or_else(|| RuleError::InvalidPattern {
+                let source = Self::as_source_opt(ext).ok_or_else(|| RuleError::InvalidPattern {
                     reason: format!(
                         "Unexpected extension node in template: {:?}",
                         ext.node.name()
@@ -551,7 +564,7 @@ impl DefaultMatcher {
     /// Instantiate an abstract function by looking up its binding
     fn instantiate_abstract_function(&self, func: &ScalarFunction) -> Result<Vec<Expr>, RuleError> {
         // Templates should only contain abstract functions, not concrete ones
-        let abstract_func = Self::as_abstract_function(func)
+        let abstract_func = Self::as_abstract_function_opt(func)
             .ok_or_else(|| RuleError::InvalidPattern {
                 reason: format!("Concrete function '{}' found in template - only abstract functions are allowed", func.name()),
             })?;
@@ -593,12 +606,16 @@ impl DefaultMatcher {
         match expr {
             Expr::Column(col) => {
                 // Look up this column in the context - it must exist
-                context
+                // context
+                //     .get(&col.name)
+                //     .cloned()
+                //     .ok_or_else(|| RuleError::UnboundSymbol {
+                //         symbol: col.name.clone(),
+                //     })
+                Ok(context
                     .get(&col.name)
                     .cloned()
-                    .ok_or_else(|| RuleError::UnboundSymbol {
-                        symbol: col.name.clone(),
-                    })
+                    .unwrap_or_else(|| expr.clone()))
             }
             Expr::BinaryExpr(binary) => {
                 // Recursively replace in both operands
@@ -771,25 +788,9 @@ impl DefaultMatcher {
     }
 
     /// Instantiate a column by expanding to all concrete columns in its partition
-    fn instantiate_column(&self, column: &Column) -> Result<Vec<Expr>, RuleError> {
-        // Get all concrete columns for this abstract field
-        let concrete_columns =
-            self.fields
-                .get(&column.name)
-                .ok_or_else(|| RuleError::UnboundSymbol {
-                    symbol: column.name.clone(),
-                })?;
-
-        // Create column expressions for each concrete column
-        let mut columns = concrete_columns.iter().collect::<Vec<_>>();
-
-        // Sort by output schema order if we have one
-        columns.sort_by_key(|col| self.output_schema.iter().position(|name| name == &col.name));
-
-        Ok(columns
-            .iter()
-            .map(|&col| Expr::Column(col.clone()))
-            .collect())
+    fn instantiate_column(&self, _column: &Column) -> Result<Vec<Expr>, RuleError> {
+        // TODO: We need proper context to instantiate abstract columns
+        Ok(Vec::new())
     }
 }
 
@@ -804,7 +805,8 @@ impl PatternMatcher for DefaultMatcher {
             .map(|f| f.name().to_string())
             .collect();
 
-        self.resolve_plan(&pattern.plan, concrete)
+        self.resolve_plan(&pattern.plan, concrete)?;
+        Ok(())
     }
 
     fn instantiate(&self, template: &Rel) -> Result<LogicalPlan, RuleError> {

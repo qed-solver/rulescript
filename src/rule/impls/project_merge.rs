@@ -131,11 +131,11 @@ mod tests {
             .build()
             .unwrap();
 
-        // Expected: emp.project((salary + 1000) * 2)
+        // Expected: emp.project((salary + 1000 as x) * 2)
         // The rule should merge the two projections into one
         let expected = LogicalPlanBuilder::from(emp)
             .project(vec![
-                ((col("salary") + lit(1000.0)) * lit(2.0)).alias("result"),
+                ((col("salary") + lit(1000.0)).alias("x") * lit(2.0)).alias("result"),
             ])
             .unwrap()
             .build()
@@ -162,9 +162,9 @@ mod tests {
             .build()
             .unwrap();
 
-        // Expected: dept.project(dname as final_name)
+        // Expected: dept.project(dname as name as final_name)
         let expected = LogicalPlanBuilder::from(dept)
-            .project(vec![col("dname").alias("final_name")])
+            .project(vec![col("dname").alias("name").alias("final_name")])
             .unwrap()
             .build()
             .unwrap();
