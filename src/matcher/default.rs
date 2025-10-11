@@ -21,8 +21,8 @@ pub struct DefaultMatcher {
     /// Abstract functions/predicates -> list of concrete expressions (usually single)
     functions: HashMap<String, Vec<Expr>>,
 
-    /// Abstract sources -> concrete plans (original)
-    sources: HashMap<String, LogicalPlan>,
+    /// Abstract sources -> concrete plan and partitions
+    sources: HashMap<String, (LogicalPlan, HashMap<Column, Vec<Column>>)>,
 
     /// Track the qualified name order of the top-level output columns
     /// Used to preserve column ordering during projection instantiation
@@ -64,7 +64,7 @@ impl DefaultMatcher {
 
             for (pattern, partition) in &mut partitions {
                 // Try matching - Ok means success, Err means try next pattern
-                if try_match(self, &pattern, &item).is_ok() {
+                if try_match(self, pattern, &item).is_ok() {
                     assign = Some(partition);
                     break;
                 }
@@ -145,19 +145,16 @@ impl DefaultMatcher {
     ) -> Result<HashMap<Column, Vec<Column>>, RuleError> {
         // Store original concrete plan for instantiation later (needs to be cloned for storage)
         // Check for consistency if already bound
-        if let Some(existing) = self.sources.get(&source.table_name) {
-            if existing != concrete {
-                return Err(RuleError::InconsistentBinding {
-                    symbol: source.table_name.clone(),
-                    details: BindingConflict::Plan {
-                        previous: Box::new(existing.clone()),
-                        attempted: Box::new(concrete.clone()),
-                    },
-                });
-            }
-        } else {
-            self.sources
-                .insert(source.table_name.clone(), concrete.clone());
+        if let Some((existing, _)) = self.sources.get(&source.table_name)
+            && existing != concrete
+        {
+            return Err(RuleError::InconsistentBinding {
+                symbol: source.table_name.clone(),
+                details: BindingConflict::Plan {
+                    previous: Box::new(existing.clone()),
+                    attempted: Box::new(concrete.clone()),
+                },
+            });
         }
 
         let source_plan = LogicalPlan::Extension(Extension {
@@ -195,7 +192,7 @@ impl DefaultMatcher {
             },
         )?;
 
-        Ok(partitions
+        let context = partitions
             .into_iter()
             .map(|((_, abstract_column), partition)| {
                 (
@@ -206,7 +203,14 @@ impl DefaultMatcher {
                         .collect(),
                 )
             })
-            .collect())
+            .collect::<HashMap<_, _>>();
+
+        self.sources.insert(
+            source.table_name.clone(),
+            (concrete.clone(), context.clone()),
+        );
+
+        Ok(context)
     }
 
     /// Resolve a Filter pattern against a concrete Filter
@@ -268,7 +272,7 @@ impl DefaultMatcher {
                         })?;
 
                 // Check if concrete column is in the allowed list
-                if !(&con_cols == expected_cols) {
+                if &con_cols != expected_cols {
                     return Err(RuleError::UnboundSymbol {
                         symbol: expr_col.name.clone(),
                     });
@@ -452,7 +456,10 @@ impl DefaultMatcher {
     // ===== INSTANTIATION METHODS =====
 
     /// Main dispatcher for instantiating plans
-    fn instantiate_plan(&self, template: &LogicalPlan) -> Result<LogicalPlan, RuleError> {
+    fn instantiate_plan(
+        &self,
+        template: &LogicalPlan,
+    ) -> Result<(LogicalPlan, HashMap<Column, Vec<Column>>), RuleError> {
         match template {
             // Source pattern: look up the bound concrete plan
             LogicalPlan::Extension(ext) => {
@@ -481,7 +488,10 @@ impl DefaultMatcher {
     }
 
     /// Instantiate a Source pattern by looking up the bound plan
-    fn instantiate_source(&self, source: &Source) -> Result<LogicalPlan, RuleError> {
+    fn instantiate_source(
+        &self,
+        source: &Source,
+    ) -> Result<(LogicalPlan, HashMap<Column, Vec<Column>>), RuleError> {
         // Look up the source by table name in our bindings
         self.sources
             .get(&source.table_name)
@@ -492,41 +502,56 @@ impl DefaultMatcher {
     }
 
     /// Instantiate a Filter node by transforming input and predicate
-    fn instantiate_filter(&self, filter: &Filter) -> Result<LogicalPlan, RuleError> {
+    fn instantiate_filter(
+        &self,
+        filter: &Filter,
+    ) -> Result<(LogicalPlan, HashMap<Column, Vec<Column>>), RuleError> {
         // First, recursively instantiate the input
-        let new_input = Arc::new(self.instantiate_plan(&filter.input)?);
+        let (input, context) = self.instantiate_plan(&filter.input)?;
 
         // Instantiate the filter predicate expression
         // For filters, we expect exactly one expression back
-        let new_predicate = self
-            .instantiate_expr(&filter.predicate)?
+        let predicate = self
+            .instantiate_expr(&filter.predicate, &context)?
             .pop()
             .ok_or_else(|| RuleError::InvalidPattern {
                 reason: "Filter predicate must resolve to a single expression".to_string(),
             })?;
 
         // Build new Filter node with instantiated components
-        Ok(LogicalPlan::Filter(Filter::try_new(
-            new_predicate,
-            new_input,
-        )?))
+        Ok((
+            LogicalPlan::Filter(Filter::try_new(predicate, Arc::new(input))?),
+            context,
+        ))
     }
 
     /// Instantiate a Projection node by transforming input and expressions
-    fn instantiate_projection(&self, projection: &Projection) -> Result<LogicalPlan, RuleError> {
+    fn instantiate_projection(
+        &self,
+        projection: &Projection,
+    ) -> Result<(LogicalPlan, HashMap<Column, Vec<Column>>), RuleError> {
         // First, recursively instantiate the input
-        let new_input = Arc::new(self.instantiate_plan(&projection.input)?);
+        let (input, input_context) = self.instantiate_plan(&projection.input)?;
 
-        // Instantiate all projection expressions, flattening results
+        // Get template output columns
+        let temp_cols = LogicalPlan::Projection(projection.clone())
+            .schema()
+            .columns();
+
+        // Instantiate all projection expressions
         let mut all_exprs = Vec::new();
-        for template_expr in &projection.expr {
-            all_exprs.extend(self.instantiate_expr(template_expr)?);
+        for (temp_expr, temp_col) in projection.expr.iter().zip(temp_cols) {
+            all_exprs.extend(
+                self.instantiate_expr(temp_expr, &input_context)?
+                    .into_iter()
+                    .map(|con_expr| (temp_col.clone(), con_expr)),
+            );
         }
 
         // Sort expressions by the original output column order
-        all_exprs.sort_by_key(|expr| {
+        all_exprs.sort_by_key(|(_, con_expr)| {
             // Get the qualified name of the expression
-            let (_table_ref, name) = expr.qualified_name();
+            let (_table_ref, name) = con_expr.qualified_name();
 
             // Find its position in the original order
             self.output_schema
@@ -535,23 +560,47 @@ impl DefaultMatcher {
         });
 
         // Build new Projection node with instantiated and sorted components
-        Ok(LogicalPlan::Projection(Projection::try_new(
-            all_exprs, new_input,
-        )?))
+        let plan = LogicalPlan::Projection(Projection::try_new(
+            all_exprs
+                .iter()
+                .map(|(_, con_expr)| con_expr)
+                .cloned()
+                .collect(),
+            Arc::new(input),
+        )?);
+
+        // Construct output context
+        let output_context = all_exprs
+            .into_iter()
+            .map(|(temp_col, _)| temp_col)
+            .zip(plan.schema().columns())
+            .fold(
+                HashMap::<_, Vec<_>>::new(),
+                |mut context, (temp_col, con_col)| {
+                    context.entry(temp_col).or_default().push(con_col);
+                    context
+                },
+            );
+
+        Ok((plan, output_context))
     }
 
     /// Main dispatcher for instantiating expressions
     /// Returns a Vec because abstract functions can expand to multiple expressions
-    fn instantiate_expr(&self, template: &Expr) -> Result<Vec<Expr>, RuleError> {
+    fn instantiate_expr(
+        &self,
+        template: &Expr,
+        context: &HashMap<Column, Vec<Column>>,
+    ) -> Result<Vec<Expr>, RuleError> {
         match template {
             // Abstract function: look up in bindings and return all bound expressions
-            Expr::ScalarFunction(func) => self.instantiate_abstract_function(func),
+            Expr::ScalarFunction(func) => self.instantiate_abstract_function(func, context),
 
             // Binary expression: recursively instantiate operands (but stay as single expr)
-            Expr::BinaryExpr(binary) => self.instantiate_binary_expr(binary),
+            Expr::BinaryExpr(binary) => self.instantiate_binary_expr(binary, context),
 
             // Column: expand to all concrete columns in the partition
-            Expr::Column(column) => self.instantiate_column(column),
+            Expr::Column(column) => self.instantiate_column(column, context),
 
             // TODO: Handle other expression types as needed
             // Error on unexpected patterns instead of passing through
@@ -562,7 +611,11 @@ impl DefaultMatcher {
     }
 
     /// Instantiate an abstract function by looking up its binding
-    fn instantiate_abstract_function(&self, func: &ScalarFunction) -> Result<Vec<Expr>, RuleError> {
+    fn instantiate_abstract_function(
+        &self,
+        func: &ScalarFunction,
+        context: &HashMap<Column, Vec<Column>>,
+    ) -> Result<Vec<Expr>, RuleError> {
         // Templates should only contain abstract functions, not concrete ones
         let abstract_func = Self::as_abstract_function_opt(func)
             .ok_or_else(|| RuleError::InvalidPattern {
@@ -572,12 +625,12 @@ impl DefaultMatcher {
         // Instantiate all arguments to build the context
         // The context maps column names that appear in the function's arguments
         // to their instantiated expressions
-        let mut context = HashMap::new();
+        let mut eval_context = HashMap::new();
         for arg in &func.args {
-            for expr in self.instantiate_expr(arg)? {
+            for expr in self.instantiate_expr(arg, context)? {
                 // Get the qualified name of the expression
                 let (_table_ref, name) = expr.qualified_name();
-                context.insert(name, expr);
+                eval_context.insert(name, expr);
             }
         }
 
@@ -592,7 +645,7 @@ impl DefaultMatcher {
         // Transform each bound expression by replacing column references with context expressions
         bound_exprs
             .iter()
-            .map(|expr| self.replace_columns_with_context(expr, &context))
+            .map(|expr| self.replace_columns_with_context(expr, &eval_context))
             .collect::<Result<_, _>>()
     }
 
@@ -606,16 +659,12 @@ impl DefaultMatcher {
         match expr {
             Expr::Column(col) => {
                 // Look up this column in the context - it must exist
-                // context
-                //     .get(&col.name)
-                //     .cloned()
-                //     .ok_or_else(|| RuleError::UnboundSymbol {
-                //         symbol: col.name.clone(),
-                //     })
-                Ok(context
+                context
                     .get(&col.name)
                     .cloned()
-                    .unwrap_or_else(|| expr.clone()))
+                    .ok_or_else(|| RuleError::UnboundSymbol {
+                        symbol: col.name.clone(),
+                    })
             }
             Expr::BinaryExpr(binary) => {
                 // Recursively replace in both operands
@@ -765,11 +814,15 @@ impl DefaultMatcher {
     }
 
     /// Instantiate a binary expression by recursively transforming operands
-    fn instantiate_binary_expr(&self, binary: &BinaryExpr) -> Result<Vec<Expr>, RuleError> {
+    fn instantiate_binary_expr(
+        &self,
+        binary: &BinaryExpr,
+        context: &HashMap<Column, Vec<Column>>,
+    ) -> Result<Vec<Expr>, RuleError> {
         // Recursively instantiate left and right operands
         // Each should return exactly one expression
-        let mut left_exprs = self.instantiate_expr(&binary.left)?;
-        let mut right_exprs = self.instantiate_expr(&binary.right)?;
+        let mut left_exprs = self.instantiate_expr(&binary.left, context)?;
+        let mut right_exprs = self.instantiate_expr(&binary.right, context)?;
 
         if left_exprs.len() != 1 || right_exprs.len() != 1 {
             return Err(RuleError::InvalidPattern {
@@ -788,9 +841,19 @@ impl DefaultMatcher {
     }
 
     /// Instantiate a column by expanding to all concrete columns in its partition
-    fn instantiate_column(&self, _column: &Column) -> Result<Vec<Expr>, RuleError> {
-        // TODO: We need proper context to instantiate abstract columns
-        Ok(Vec::new())
+    fn instantiate_column(
+        &self,
+        column: &Column,
+        context: &HashMap<Column, Vec<Column>>,
+    ) -> Result<Vec<Expr>, RuleError> {
+        // Identify the column partition from context
+        let columns = context
+            .get(column)
+            .cloned()
+            .ok_or_else(|| RuleError::UnboundSymbol {
+                symbol: column.name.clone(),
+            })?;
+        Ok(columns.into_iter().map(Expr::Column).collect())
     }
 }
 
@@ -810,6 +873,7 @@ impl PatternMatcher for DefaultMatcher {
     }
 
     fn instantiate(&self, template: &Rel) -> Result<LogicalPlan, RuleError> {
-        self.instantiate_plan(&template.plan)
+        let (plan, _) = self.instantiate_plan(&template.plan)?;
+        Ok(plan)
     }
 }
