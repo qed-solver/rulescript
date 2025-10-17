@@ -12,6 +12,7 @@ use datafusion::logical_expr::col;
 /// Pushes a Filter below a Projection by rewriting the filter predicate
 /// Pattern: Filter(P(y), Project(f(x), source)) → Project(f(x), Filter(P(f(x)), source))
 /// where y are projection output columns and x are source columns
+#[derive(Debug)]
 pub struct FilterProjectTransposeRule;
 
 impl RewriteRule for FilterProjectTransposeRule {

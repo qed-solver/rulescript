@@ -9,4 +9,5 @@ smtlib = "*"
 thiserror = "*"
 
 [dev-dependencies]
-tokio = { version = "1", features = ["rt", "macros"] }
+reedline = "*"
+tokio = { version = "*", features = ["rt", "rt-multi-thread", "macros"] }

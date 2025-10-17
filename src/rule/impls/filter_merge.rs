@@ -11,6 +11,7 @@ use datafusion::logical_expr::col;
 
 /// Merges two consecutive Filter operators into one with AND
 /// Pattern: Filter(P, Filter(Q, source)) → Filter(P AND Q, source)
+#[derive(Debug)]
 pub struct FilterMergeRule;
 
 impl RewriteRule for FilterMergeRule {

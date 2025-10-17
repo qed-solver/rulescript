@@ -11,6 +11,7 @@ use datafusion::logical_expr::col;
 
 /// Merges two consecutive projections via function composition
 /// Pattern: source.project(f).project(g) → source.project(g∘f)
+#[derive(Debug)]
 pub struct ProjectMergeRule;
 
 impl RewriteRule for ProjectMergeRule {

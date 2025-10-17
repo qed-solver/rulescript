@@ -11,6 +11,7 @@ use datafusion::logical_expr::col;
 /// Removes identity projections (when projection outputs all columns in same order)
 /// Pattern: source.project([col]) → source
 /// Where [col] represents ALL columns in order
+#[derive(Debug)]
 pub struct ProjectRemoveRule;
 
 impl RewriteRule for ProjectRemoveRule {

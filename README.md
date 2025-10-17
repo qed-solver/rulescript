@@ -166,6 +166,23 @@ cargo test
 cargo clippy --all-targets
 ```
 
+## Run Interactive Optimizer
+
+Interactive demonstration with dynamic rule selection:
+
+```bash
+cargo run --example optimizer
+```
+
+Features:
+- Choose which optimization rules to apply
+- Switch rules during the session
+- See before/after query plans
+- Real SQL parsing with DataFusion
+- Multiple rules working together
+
+See `examples/README.md` for detailed usage.
+
 ## Theoretical Foundation
 
 Based on the paper "Extensible Rule Language for Query Optimizers" (VLDB 2025), RuleScript addresses the challenge of correctly implementing hundreds of rewrite rules in modern optimizers:
