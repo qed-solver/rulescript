@@ -1,10 +1,10 @@
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
 use datafusion::{
-    common::Column,
+    common::{Column, JoinConstraint},
     logical_expr::{
-        BinaryExpr, Expr, Extension, Filter, LogicalPlan, Operator, Projection,
-        expr::ScalarFunction,
+        BinaryExpr, Expr, Extension, Filter, Join, LogicalPlan, Operator, Projection,
+        build_join_schema, expr::ScalarFunction, lit,
     },
 };
 
@@ -45,6 +45,17 @@ impl DefaultMatcher {
     /// Extract an abstract Function from a ScalarFunction
     fn as_abstract_function_opt(func: &ScalarFunction) -> Option<&Function> {
         func.func.inner().as_any().downcast_ref::<Function>()
+    }
+
+    /// Extract complete filter from a join
+    fn extract_complete_filter(join: &Join) -> Expr {
+        join.on
+            .iter()
+            .cloned()
+            .map(|(left, right)| left.eq(right))
+            .chain(join.filter.clone())
+            .reduce(|acc, expr| acc.and(expr))
+            .unwrap_or(lit(true))
     }
 
     /// Generic partitioning routine: assign each item to first matching pattern
@@ -127,7 +138,12 @@ impl DefaultMatcher {
                 self.resolve_projection(pat_proj, con_proj)
             }
 
-            // TODO: Add other plan types (Join, Union, Aggregate, etc.) as needed
+            // Join patterns match Join nodes
+            (LogicalPlan::Join(pat_join), LogicalPlan::Join(con_join)) => {
+                self.resolve_join(pat_join, con_join)
+            }
+
+            // TODO: Add other plan types (Union, Aggregate, etc.) as needed
 
             // Structure mismatch
             _ => Err(RuleError::StructureMismatch {
@@ -281,6 +297,44 @@ impl DefaultMatcher {
             output_context.insert(pat_col, con_cols);
         }
         Ok(output_context)
+    }
+
+    /// Resolve a Join pattern against a concrete Join
+    fn resolve_join(
+        &mut self,
+        pattern: &Join,
+        concrete: &Join,
+    ) -> Result<HashMap<Column, Vec<Column>>, RuleError> {
+        // Match join type exactly (Inner/Left/Right changes semantics)
+        if pattern.join_type != concrete.join_type {
+            return Err(RuleError::StructureMismatch {
+                pattern: Box::new(LogicalPlan::Join(pattern.clone())),
+                target: Box::new(LogicalPlan::Join(concrete.clone())),
+            });
+        }
+
+        // Recursively match left and right inputs
+        let left_context = self.resolve_plan(&pattern.left, &concrete.left)?;
+        let right_context = self.resolve_plan(&pattern.right, &concrete.right)?;
+
+        // Merge contexts for join condition (can reference both sides)
+        let mut merged_context = left_context.clone();
+        merged_context.extend(right_context.clone());
+
+        // Reconstruct full join predicate expression from pattern join
+        let full_pattern_predicate = Self::extract_complete_filter(&pattern);
+
+        // Reconstruct full join predicate expression from concrete join
+        let full_concrete_predicate = Self::extract_complete_filter(&concrete);
+
+        // Match pattern predicate against reconstructed predicate expressions
+        self.resolve_expr(
+            &full_pattern_predicate,
+            &full_concrete_predicate,
+            &merged_context,
+        )?;
+
+        Ok(merged_context)
     }
 
     /// Main dispatcher for resolving expressions
@@ -478,6 +532,9 @@ impl DefaultMatcher {
             // Projection: instantiate input and expressions
             LogicalPlan::Projection(projection) => self.instantiate_projection(projection),
 
+            // Join: instantiate inputs and conditions
+            LogicalPlan::Join(join) => self.instantiate_join(join),
+
             // TODO: Add other plan types as needed
 
             // Other plan types should not appear in templates
@@ -583,6 +640,55 @@ impl DefaultMatcher {
             );
 
         Ok((plan, output_context))
+    }
+
+    /// Instantiate a Join node by transforming inputs and conditions
+    fn instantiate_join(
+        &self,
+        join: &Join,
+    ) -> Result<(LogicalPlan, HashMap<Column, Vec<Column>>), RuleError> {
+        // Recursively instantiate left and right inputs
+        let (left_input, left_context) = self.instantiate_plan(&join.left)?;
+        let (right_input, right_context) = self.instantiate_plan(&join.right)?;
+
+        // Merge contexts for join output
+        let mut merged_context = left_context.clone();
+        merged_context.extend(right_context.clone());
+
+        // Reconstruct full join predicate expression from pattern join
+        let full_pattern_condition = Self::extract_complete_filter(&join);
+
+        // Instantiate the full join predicate expression
+        // For joins, we expect exactly one expression back
+        let predicate = self
+            .instantiate_expr(&full_pattern_condition, &merged_context)?
+            .pop()
+            .ok_or_else(|| RuleError::InvalidPattern {
+                reason: "Filter predicate must resolve to a single expression".to_string(),
+            })?;
+
+        // Build join schema
+        let join_schema =
+            build_join_schema(left_input.schema(), right_input.schema(), &join.join_type)?;
+
+        // Build new Join node in pre-optimization form:
+        // - on: empty (let optimizer extract equijoins)
+        // - filter: instantiated predicate
+        // - join_constraint: always On
+        // - null_equality: from pattern (should be NullEqualsNothing)
+        Ok((
+            LogicalPlan::Join(Join {
+                left: Arc::new(left_input),
+                right: Arc::new(right_input),
+                on: Vec::new(), // Empty - optimizer will extract equijoins
+                filter: Some(predicate),
+                join_type: join.join_type,
+                join_constraint: JoinConstraint::On, // Always ON
+                schema: Arc::new(join_schema),
+                null_equality: join.null_equality, // Use pattern's null_equality
+            }),
+            merged_context,
+        ))
     }
 
     /// Main dispatcher for instantiating expressions
