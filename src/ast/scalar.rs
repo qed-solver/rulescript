@@ -160,7 +160,7 @@ impl Scalar {
 /// # Examples
 /// ```
 /// use rulescript::functions;
-/// 
+///
 /// functions! {
 ///     P(T) -> Bool,           // Predicate on type T
 ///     f(T) -> U,              // Transform from T to U

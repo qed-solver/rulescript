@@ -24,7 +24,7 @@ crate::rule! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rule::{test::utils::*, ApplicableRule};
+    use crate::rule::{ApplicableRule, test::utils::*};
     use datafusion::logical_expr::{LogicalPlanBuilder, col, lit};
 
     #[test]

@@ -79,19 +79,19 @@ impl Schema {
 /// # Examples
 /// ```
 /// use rulescript::schema;
-/// 
+///
 /// // Single nullable field
 /// let _s = schema!(col: T);
-/// 
+///
 /// // Explicitly nullable
 /// let _s = schema!(col: T nullable);
-/// 
+///
 /// // Non-nullable field
 /// let _s = schema!(col: T not_null);
-/// 
+///
 /// // Multiple fields (all nullable)
 /// let _s = schema!(x: T, y: U);
-/// 
+///
 /// // Mixed nullability
 /// let _s = schema!(x: T, y: U not_null, z: V nullable);
 /// ```

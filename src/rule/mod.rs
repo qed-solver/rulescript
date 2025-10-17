@@ -137,7 +137,7 @@ where
 /// # Syntax
 /// ```
 /// use rulescript::{rule, filter};
-/// 
+///
 /// rule! {
 ///     MyFilterRule {
 ///         schemas: {
@@ -157,7 +157,7 @@ where
 /// Simple filter merge:
 /// ```
 /// use rulescript::{rule, filter};
-/// 
+///
 /// rule! {
 ///     FilterMergeRule {
 ///         schemas: {
@@ -176,7 +176,7 @@ where
 /// Join rule with multiple schemas:
 /// ```
 /// use rulescript::{rule, filter, join};
-/// 
+///
 /// rule! {
 ///     FilterIntoJoin {
 ///         schemas: {
