@@ -1,6 +1,6 @@
-/// Removes identity projections (when projection outputs all columns in same order)
-/// Pattern: source.project([col]) → source
-/// Where [col] represents ALL columns in order
+// Removes identity projections (when projection outputs all columns in same order)
+// Pattern: source.project([col]) → source
+// Where [col] represents ALL columns in order
 crate::rule! {
     ProjectRemoveRule {
         schemas: {

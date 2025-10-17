@@ -214,91 +214,7 @@ impl Rel {
 }
 
 // ============================================================================
-// Internal helper macros for expression parsing
-// ============================================================================
-
-/// Internal helper to parse expression lists using incremental munching
-/// Handles: f(x), f(x, y), g(f(x)), g(a, f(x), b), etc.
-/// Also handles aliases: x as y, f(x) as result (for projections)
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __parse_exprs {
-    // Base case: empty args
-    (@accum [] []) => { Vec::<datafusion::prelude::Expr>::new() };
-
-    // Done processing: return accumulated results
-    (@accum [$($result:expr),*] []) => { vec![$($result),*] };
-
-    // Munch: function call with alias (with optional comma + rest)
-    (@accum [$($result:expr),*] [$func:ident($($args:tt)*) as $alias:ident $(, $($rest:tt)*)?]) => {
-        $crate::__parse_exprs!(@accum [$($result,)* $crate::__parse_expr!($func($($args)*)).alias(stringify!($alias))] [$($($rest)*)?])
-    };
-
-    // Munch: identifier with alias (with optional comma + rest)
-    (@accum [$($result:expr),*] [$id:ident as $alias:ident $(, $($rest:tt)*)?]) => {
-        $crate::__parse_exprs!(@accum [$($result,)* datafusion::prelude::col(stringify!($id)).alias(stringify!($alias))] [$($($rest)*)?])
-    };
-
-    // Munch: function call (with optional comma + rest)
-    (@accum [$($result:expr),*] [$func:ident($($args:tt)*) $(, $($rest:tt)*)?]) => {
-        $crate::__parse_exprs!(@accum [$($result,)* $crate::__parse_expr!($func($($args)*))] [$($($rest)*)?])
-    };
-
-    // Munch: identifier (with optional comma + rest)
-    (@accum [$($result:expr),*] [$id:ident $(, $($rest:tt)*)?]) => {
-        $crate::__parse_exprs!(@accum [$($result,)* datafusion::prelude::col(stringify!($id))] [$($($rest)*)?])
-    };
-
-    // Entry point: start with empty accumulator
-    ($($tt:tt)*) => {
-        $crate::__parse_exprs!(@accum [] [$($tt)*])
-    };
-}
-
-/// Internal: Parse expression (identifier or function call)
-/// Truly recursive - handles any nesting depth
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __parse_expr {
-    // Function call: f(x), g(f(x)), etc.
-    ($func:ident($($inside:tt)*)) => {
-        $func.call($crate::__parse_exprs!($($inside)*))
-    };
-
-    // Plain identifier: x
-    ($ident:ident) => {
-        datafusion::prelude::col(stringify!($ident))
-    };
-}
-
-/// Internal: Parse predicate (handles &&, ||, and nested calls)
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __parse_predicate {
-    // AND: P(...) && Q(...)
-    ($p:ident($($arg1:tt)*) && $q:ident($($arg2:tt)*)) => {
-        $p.and(
-            $crate::__parse_exprs!($($arg1)*),
-            $crate::__parse_expr!($q($($arg2)*))
-        )
-    };
-
-    // OR: P(...) || Q(...)
-    ($p:ident($($arg1:tt)*) || $q:ident($($arg2:tt)*)) => {
-        $p.or(
-            $crate::__parse_exprs!($($arg1)*),
-            $crate::__parse_expr!($q($($arg2)*))
-        )
-    };
-
-    // Simple function call: P(...)
-    ($func:ident($($args:tt)*)) => {
-        $func.call($crate::__parse_exprs!($($args)*))
-    };
-}
-
-// ============================================================================
-// Public operator macros
+// Relational operator macros
 // ============================================================================
 
 /// Creates a Filter logical plan node
@@ -417,13 +333,6 @@ macro_rules! project {
 ///
 /// // Left join with AND condition
 /// let _plan = join!(left, right, Left, pred(l, r) && pred2(l, r));
-/// ```
-///
-/// # Examples
-/// ```ignore
-/// join!(left, right, Inner, pred(l, r))
-/// join!(left, right, Left, pred(l, r) && pred2(l, r))
-/// join!(left, right, Inner, pred(a, f(x), b))  // Mixed args - now supported!
 /// ```
 #[macro_export]
 macro_rules! join {

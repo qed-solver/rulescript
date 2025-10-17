@@ -322,10 +322,10 @@ impl DefaultMatcher {
         merged_context.extend(right_context.clone());
 
         // Reconstruct full join predicate expression from pattern join
-        let full_pattern_predicate = Self::extract_complete_filter(&pattern);
+        let full_pattern_predicate = Self::extract_complete_filter(pattern);
 
-        // Reconstruct full join predicate expression from concrete join
-        let full_concrete_predicate = Self::extract_complete_filter(&concrete);
+        // Extract complete filter predicate from concrete plan
+        let full_concrete_predicate = Self::extract_complete_filter(concrete);
 
         // Match pattern predicate against reconstructed predicate expressions
         self.resolve_expr(
@@ -656,7 +656,7 @@ impl DefaultMatcher {
         merged_context.extend(right_context.clone());
 
         // Reconstruct full join predicate expression from pattern join
-        let full_pattern_condition = Self::extract_complete_filter(&join);
+        let full_pattern_condition = Self::extract_complete_filter(join);
 
         // Instantiate the full join predicate expression
         // For joins, we expect exactly one expression back

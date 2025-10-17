@@ -1,5 +1,5 @@
-/// Merges two consecutive projections via function composition
-/// Pattern: source.project(f).project(g) → source.project(g∘f)
+// Merges two consecutive projections via function composition
+// Pattern: source.project(f).project(g) → source.project(g∘f)
 crate::rule! {
     ProjectMergeRule {
         schemas: {

@@ -1,6 +1,6 @@
-/// Pushes a Filter below a Projection by rewriting the filter predicate
-/// Pattern: Filter(P(y), Project(f(x), source)) → Project(f(x), Filter(P(f(x)), source))
-/// where y are projection output columns and x are source columns
+// Pushes a Filter below a Projection by rewriting the filter predicate
+// Pattern: Filter(P(y), Project(f(x), source)) → Project(f(x), Filter(P(f(x)), source))
+// where y are projection output columns and x are source columns
 crate::rule! {
     FilterProjectTransposeRule {
         schemas: {

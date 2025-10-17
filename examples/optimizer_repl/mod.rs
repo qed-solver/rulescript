@@ -303,14 +303,14 @@ impl OptimizerRepl {
                             if let Ok(rule_num) = rule_num_str.parse::<usize>() {
                                 if let Some(query) = self.get_example_query(rule_num) {
                                     let rules = Self::available_rules();
-                                    if let Some(rule) = rules.get(rule_num.wrapping_sub(1)) {
-                                        if !self.active_rules.contains(&rule.name.to_string()) {
-                                            println!(
-                                                "\n⚠️  Rule '{}' is not enabled. Use 'set {}' to enable it first.\n",
-                                                rule.name, rule_num
-                                            );
-                                            continue;
-                                        }
+                                    if let Some(rule) = rules.get(rule_num.wrapping_sub(1))
+                                        && !self.active_rules.contains(&rule.name.to_string())
+                                    {
+                                        println!(
+                                            "\n⚠️  Rule '{}' is not enabled. Use 'set {}' to enable it first.\n",
+                                            rule.name, rule_num
+                                        );
+                                        continue;
                                     }
                                     println!("\n🚀 Running example for rule {}:\n", rule_num);
                                     println!("{}\n", query);
