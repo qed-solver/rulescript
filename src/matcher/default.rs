@@ -237,7 +237,7 @@ impl DefaultMatcher {
         // First, recursively match the inputs
         let input_context = self.resolve_plan(&pattern.input, &concrete.input)?;
 
-        // Then, partition the projection exxpressions
+        // Then, partition the projection expressions
         let partitions = self.partition(
             &pattern.expr,
             LogicalPlan::Projection(concrete.clone())

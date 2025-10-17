@@ -47,11 +47,9 @@ The `P` and `Q` are uninterpreted predicates - they can represent ANY boolean ex
 - **Optimized codebase** with minimal cloning overhead
 - **Clean error types** with descriptive messages and concrete values
 - **Concrete rule implementations** in `src/rule/impls/`:
-  - FilterMergeRule ✅ - Fully working with tests
-  - ProjectRemoveRule ✅ - Fully working with tests  
-  - ProjectMergeRule ⚠️ - Pattern compiles, needs abstract functions for full matching
-  - FilterProjectTransposeRule ⚠️ - Pattern compiles, needs abstract functions
-  - ProjectFilterTransposeRule ⚠️ - Pattern compiles, needs abstract functions
+  - FilterMergeRule ✅ - Fully working with 3 passing tests
+  - ProjectRemoveRule ✅ - Fully working with 5 passing tests
+  - ProjectMergeRule ✅ - Fully working with 3 passing tests (function composition works!)
 - **Smart column pattern matching**:
   - Column patterns in projections match ordered sequences
   - Column patterns in function arguments match any from partition
@@ -62,7 +60,7 @@ The `P` and `Q` are uninterpreted predicates - they can represent ANY boolean ex
   - Tests run in milliseconds
 
 ### In Progress 🚧
-- **Full rule testing** - Need to create plans with abstract functions for complete pattern matching
+- **Transpose rules** - Proper encoding of FilterProjectTranspose and ProjectFilterTranspose
 - **Additional plan types** - Support for Join, Union, Aggregate in matcher
 
 ### Architecture
@@ -89,9 +87,15 @@ src/
   - `functions`: Abstract function → List of concrete expressions
   - `sources`: Source name → Original LogicalPlan
 - Context-preserving principle: expressions bound in one context stay in that context
-- Column patterns match differently based on context:
-  - Direct projection expressions: match full ordered sequence
-  - Function arguments: match any column from partition
+- **Column matching is abstract and context-dependent**:
+  - Column patterns can match multiple concrete columns based on field partitions
+  - In projections: column patterns match ordered sequences of columns
+  - In function arguments: column patterns can match any columns from their partition
+  - Enables flexible matching while preserving schema relationships
+- **Abstract function matching**:
+  - Abstract functions bind to concrete expressions based on column dependencies
+  - A single abstract function can match arbitrary expressions (e.g., `P` matches `salary > 50000`)
+  - Enables pattern-based rewriting without knowing specific expression structure
 - Efficient pattern partitioning with descriptive error reporting
 
 ## Example Usage
@@ -189,9 +193,10 @@ RuleScript solves this by:
 - [x] ~~Implement `DefaultMatcher` pattern matching logic~~ ✅ Complete
 - [x] ~~Implement `instantiate` method for template transformation~~ ✅ Complete
 - [x] ~~DataFusion optimizer integration~~ ✅ Complete via RuleWrapper
-- [ ] Create concrete rule examples with real DataFusion plans
-- [ ] Test function composition with chained projections
-- [ ] More rule examples (ProjectionPushdown, JoinAssociate)
+- [x] ~~Create concrete rule examples with real DataFusion plans~~ ✅ 3 rules working
+- [x] ~~Test function composition with chained projections~~ ✅ ProjectMergeRule works
+- [ ] Properly encode transpose rules (FilterProjectTranspose, ProjectFilterTranspose)
+- [ ] More rule examples (FilterIntoJoin, JoinAssociate, AggregateRemove)
 
 **Short-term**
 - [ ] Support additional plan types (Join, Union, Aggregate) in matcher
@@ -214,9 +219,8 @@ RuleScript solves this by:
 ## Known Limitations
 
 ### Current Implementation
-- **Plan Types**: Only Filter and Projection are fully supported in matcher
+- **Plan Types**: Only Filter and Projection are fully supported in matcher (Join, Union, Aggregate helpers exist)
 - **Expression Types**: Some complex expressions not yet handled in instantiation (SIMILAR TO, LIKE with escape chars)
-- **Pattern Matching**: Abstract functions can't match regular binary expressions (need plans with abstract functions)
 - **Performance**: No optimizations for pattern matching efficiency
 
 ### Design Decisions
@@ -227,6 +231,8 @@ RuleScript solves this by:
 
 ## Status
 
-Active development. API unstable. Not production ready.
+Active development. Core pattern matching complete. API stabilizing.
 
-The project emphasizes rapid prototyping over completeness. We build the minimum required to validate ideas, then iterate based on real usage.
+**Test Status**: 11/11 tests passing ✅
+
+The project emphasizes rapid prototyping over completeness. Pattern matching and instantiation are fully implemented with 3 working rules demonstrating the approach works with real DataFusion plans.

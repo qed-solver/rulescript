@@ -70,14 +70,14 @@ The `instantiate` method successfully transforms template plans using captured b
 - ✅ Function composition support through context mapping
 - ✅ Proper handling of column ordering preservation
 
-### 1.2 Testing with Concrete Examples (IN PROGRESS)
+### 1.2 Testing with Concrete Examples ✅ COMPLETED
 
-Need to create comprehensive tests:
-- [ ] FilterMerge rule against real DataFusion plans
-- [ ] Function composition with chained projections
-- [ ] Test error cases (inconsistent bindings, missing patterns)
-- [ ] Validate context preservation
-- [ ] Examples with proper DataFusion query plans
+Successfully implemented and tested:
+- ✅ FilterMerge rule with 3 tests against real DataFusion plans
+- ✅ ProjectRemove rule with 5 tests including edge cases
+- ✅ ProjectMerge rule with 3 tests including function composition
+- ✅ All 11 tests passing with concrete DataFusion plans
+- ✅ Error cases validated (negative tests for invalid patterns)
 
 ## Phase 2: Export for Verification
 
@@ -244,17 +244,19 @@ impl RewriteRule {
 - DataFusion optimizer integration via RuleWrapper
 - Code optimization and cleanup
 
-### Current Sprint (Week 4) 🚧
-- Create concrete rule examples with real DataFusion plans
-- Test function composition with chained projections
-- Add support for more plan types (Join, Union, Aggregate)
-- Build comprehensive test suite
+### Current Sprint (Week 4) ✅ COMPLETED
+- ✅ Created 3 concrete rule examples with real DataFusion plans
+- ✅ Tested function composition with chained projections (ProjectMergeRule)
+- ✅ Built comprehensive test suite (11 tests, all passing)
+- 🚧 Add support for more plan types (Join, Union, Aggregate) - deferred
 
 ### Upcoming (Week 5+)
+- Properly encode transpose rules (FilterProjectTranspose, ProjectFilterTranspose)
+- Support for Join, Union, Aggregate plan types in matcher
+- More rule implementations (FilterIntoJoin, JoinAssociate, AggregateRemove)
 - QED export for verification
 - Performance optimizations
 - Rule enumeration with meta-variables
-- Documentation and examples
 - SMT solver integration
 
 ## Notes from Paper for Implementation

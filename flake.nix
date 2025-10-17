@@ -1,9 +1,15 @@
 {
   inputs = {
-    devenv.url = "github:cachix/devenv";
+    devenv = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:cachix/devenv";
+    };
     flake-utils.url = "github:numtide/flake-utils";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nixpkgs-python.url = "github:cachix/nixpkgs-python";
+    nixpkgs-python = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:cachix/nixpkgs-python";
+    };
   };
 
   outputs = inputs @ {

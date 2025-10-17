@@ -16,25 +16,18 @@ This directory contains concrete implementations of query optimization rules, in
 - **Status**: Fully working with tests
 - **Notes**: Uses smart column pattern matching - a single column pattern matches the full ordered list of columns. Only matches true identity projections (all columns in same order).
 
-### ProjectMergeRule ⚠️
+### ProjectMergeRule ✅
 - **File**: `project_merge.rs`
-- **Pattern**: `Project(f, Project(g, source))` → `Project(f∘g, source)`
-- **Status**: Pattern compiles correctly, but full matching requires abstract functions in concrete plans
-- **Notes**: Uses function composition to merge consecutive projections. Pattern uses aliased outputs for proper column referencing.
+- **Pattern**: `Project(g, Project(f, source))` → `Project(g∘f, source)`
+- **Status**: Fully working with 3 passing tests
+- **Tests**: `test_project_merge_calcite_style`, `test_project_merge_with_column_rename`, `test_no_match_single_projection`
+- **Notes**: Successfully merges consecutive projections using function composition. Works with concrete DataFusion plans.
 
-### FilterProjectTransposeRule ⚠️
-- **File**: `filter_project_transpose.rs`
-- **Pattern**: `Filter(P(f(x)), Project(f(x), source))` → `Project(f(x), Filter(P(x), source))`
-- **Status**: Pattern compiles correctly, but full matching requires abstract functions
-- **Notes**: Pushes filter below projection. Would require predicate rewriting in real implementation.
+## In Progress 🚧
 
-### ProjectFilterTransposeRule ⚠️
-- **File**: `project_filter_transpose.rs`
-- **Pattern**: `Project(f(x), Filter(P(x), source))` → `Filter(P(f(x)), Project(f(x), source))`
-- **Status**: Pattern compiles correctly, but full matching requires abstract functions
-- **Notes**: Pulls projection above filter. Would require inverse function mapping in real implementation.
-
-## Not Implemented / Cannot Support
+### Transpose Rules (FilterProjectTranspose, ProjectFilterTranspose)
+- **Status**: Rule encoding in progress
+- **Note**: These rules require careful encoding of patterns and templates to properly handle column references and schema changes across operators. Implementation will be added after proper rule definition.
 
 ### FilterRemoveRule ❌
 - **Reason**: Requires constant evaluation to detect `TRUE` predicates
@@ -56,23 +49,24 @@ Test utilities are located in `src/rule/test.rs` and provide:
 
 ### Current State
 - Tests are minimal and fast (no async, no CSV files, no SessionContext)
-- Simple rules (FilterMerge, ProjectRemove) have working end-to-end tests
-- Complex rules with abstract functions have pattern compilation tests only
-
-### Pattern vs Concrete Matching
-- **Issue**: Patterns use abstract functions (ScalarFunction with UDFs) 
-- **Concrete plans**: Use regular expressions (BinaryExpr, Column, etc.)
-- **Result**: Abstract functions can't match regular binary expressions
-- **Solution**: For full testing, would need to create plans with abstract functions
+- All implemented rules (FilterMerge, ProjectRemove, ProjectMerge) have working end-to-end tests
+- Transpose rules require proper encoding - implementation in progress
 
 ## Pattern Matching Behavior
 
-### Column Patterns
-Column patterns behave differently depending on context:
-- **In projections**: A column pattern matches an ordered sequence of columns from its partition
-  - Example: Pattern `project([col("a")])` where "a" maps to [col1, col2, col3] matches concrete `project([col1, col2, col3])` exactly
-- **In function arguments**: A column pattern matches any single column from its partition
-  - Example: Pattern `F(col("a"))` where "a" maps to [col1, col2, col3] can match `F(col2)` or `F(col3)`
+### Column Patterns (Abstract Matching)
+Column patterns are abstract and match based on field partitions and context:
+- **Column patterns match multiple columns**: A single pattern column like `col("a")` can bind to multiple concrete columns [col1, col2, col3] based on the field partition
+- **Context determines matching behavior**:
+  - In projections: matches ordered sequences (identity projection detection)
+  - In function arguments: matches based on dependencies
+- **Example**: Pattern `project([col("a")])` where "a" binds to partition [col1, col2, col3] matches concrete `project([col1, col2, col3])`
+
+### Abstract Function Matching
+Abstract functions bind to concrete expressions based on dependencies:
+- **Pattern**: `P(col("a"))` can match any predicate expression like `salary > 50000` or `deptno = 10`
+- **Binding**: Function name (e.g., "P") binds to the entire concrete expression
+- **Dependencies**: Matcher validates that concrete expression only uses columns from the pattern's partition
 
 ### Alias Handling
 - Matcher handles Alias in both pattern and concrete expressions
@@ -81,8 +75,14 @@ Column patterns behave differently depending on context:
 
 ## Implementation Status Legend
 - ✅ Fully working with end-to-end tests
-- ⚠️ Pattern compiles but requires abstract functions for full matching
-- ❌ Not implemented or has known issues
+- ❌ Not supported due to fundamental limitations
+
+## Test Summary
+- **Total Tests**: 11
+- **Status**: All passing ✅
+- **FilterMergeRule**: 3 tests
+- **ProjectRemoveRule**: 5 tests
+- **ProjectMergeRule**: 3 tests
 
 ## Adding New Rules
 
