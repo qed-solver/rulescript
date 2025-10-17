@@ -38,13 +38,32 @@ The optimizer uses DataFusion's `Optimizer` with `RuleWrapper` to apply rules re
 
 ```
 Available Rules:
-  1. filter-project-transpose - Push filter below projection
-  2. project-merge - Merge consecutive projections
-  3. filter-merge - Merge consecutive filters
-  4. project-remove - Remove identity projections
-  5. all - Enable all rules
+    1. filter-project-transpose - Push filter below projection
+    2. project-merge - Merge consecutive projections
+    3. filter-merge - Merge consecutive filters
+    4. project-remove - Remove identity projections
+    5. all - Enable all rules
 
-Select rules (comma-separated numbers, e.g., 1,2,3 or 'all'): 1,2
+Commands:
+  • Type SQL query to see optimization
+  • 'rules' - Show active and available rules
+  • 'help <number>' - Show detailed explanation for a rule (e.g., 'help 1')
+  • 'try <number>' - Run the example query for a rule (e.g., 'try 1')
+  • 'set <numbers>' - Activate rules (e.g., 'set 1,2,3' or 'set all')
+  • 'clear' - Deactivate all rules
+  • 'verbose' - Toggle verbose mode
+  • 'help' - Show this message
+  • 'quit' or 'exit' or Ctrl+D - Exit
+
+📊 Current Configuration:
+  • Rules: None
+  • Verbose: OFF
+
+sql> set 1,2
+
+📊 Current Configuration:
+  • Rules: filter-project-transpose, project-merge
+  • Verbose: OFF
 
 sql> SELECT * FROM (SELECT salary * 1.1 AS raised, deptno FROM emp) WHERE raised > 55000
 
@@ -62,8 +81,65 @@ Projection: raised, emp.deptno
 
 ✅ Query plan optimized!
 
-sql> set 3,4
-✓ Active rules: filter-merge, project-remove
+sql> help 1
+
+╔══════════════════════════════════════════════════════════════════════════╗
+║ Rule 1: filter-project-transpose
+╚══════════════════════════════════════════════════════════════════════════╝
+
+📝 Description:
+   Push filter below projection
+
+🔍 How it works:
+   Pushes a filter condition below a projection by rewriting the filter to use the projection's input columns. This enables earlier filtering of data before computing expensive expressions.
+   Pattern: Filter(P(y), Project(f(x), source)) → Project(f(x), Filter(P(f(x)), source))
+
+💡 Example query:
+   -- Filter on projected column gets pushed below projection
+   SELECT * FROM (SELECT salary * 1.1 AS raised, deptno FROM emp) WHERE raised > 55000
+
+💻 Tip: Use 'try 1' to run this example (rule must be enabled with 'set 1')
+
+sql> set 1
+
+📊 Current Configuration:
+  • Rules: filter-project-transpose
+  • Verbose: OFF
+
+sql> try 1
+
+🚀 Running example for rule 1:
+
+SELECT * FROM (
+    SELECT salary * 1.1 AS raised, deptno 
+    FROM emp
+) WHERE raised > 55000
+
+🔍 Logical Plan (BEFORE optimization):
+Projection: raised, deptno
+  Filter: raised > Float64(55000)
+    Projection: emp.salary * Float64(1.1) AS raised, emp.deptno
+      TableScan: emp
+
+✨ Logical Plan (AFTER optimization):
+Projection: raised, deptno
+  Projection: emp.salary * Float64(1.1) AS raised, emp.deptno
+    Filter: emp.salary * Float64(1.1) > Float64(55000)
+      TableScan: emp
+
+✅ Query plan optimized!
+
+sql> verbose
+
+📊 Current Configuration:
+  • Rules: filter-project-transpose, project-merge
+  • Verbose: ON
+
+sql> clear
+
+📊 Current Configuration:
+  • Rules: None
+  • Verbose: ON
 
 sql> quit
 Goodbye!
@@ -73,6 +149,8 @@ Goodbye!
 
 - **SQL query** - Type any SQL query to see optimization
 - `rules` - Show active and available rules with checkmarks
+- `help <number>` - Show detailed explanation and example for a rule (e.g., `help 1`)
+- `try <number>` - Run the example query for a rule (e.g., `try 1`)
 - `set <numbers>` - Activate specific rules (e.g., `set 1,2,3`)
 - `set all` - Enable all rules
 - `clear` - Deactivate all rules
@@ -84,28 +162,51 @@ Goodbye!
 ## Features
 
 - ✅ **Dynamic rule selection** - Choose and switch rules interactively
-- ✅ **Multiple rules** - Apply multiple rules together
+- ✅ **Multiple rules** - Apply multiple rules together (rules often work best in combination)
 - ✅ **Recursive optimization** - Rules apply throughout the plan tree
 - ✅ **Line editing** - Arrow keys, history (↑/↓)
 - ✅ **Verbose mode** - Toggle detailed error messages
 - ✅ **Real SQL parsing** - Uses DataFusion's SQL parser
 
+## Tips
+
+- **Combine rules**: Some optimizations work best when multiple rules are enabled together. For example:
+  - `set 3,4` - filter-merge + project-remove (removes identity projections that block filter merge)
+  - `set 1,2` - filter-project-transpose + project-merge (pushes filters and merges projections)
+  - `set all` - Enable all rules to see comprehensive optimization
+
+- **DataFusion adds projections**: The SQL parser often adds `SELECT *` projections which can interfere with some rules. Use specific column lists or enable `project-remove` to clean them up.
+
 ## Example Queries
 
 ### Filter-Project Transpose
 ```sql
-SELECT * FROM (SELECT salary * 1.1 AS raised FROM emp) WHERE raised > 55000
-SELECT * FROM (SELECT salary, commission * 2 AS doubled FROM emp) WHERE doubled < 1000
+-- Filter gets pushed below the projection
+SELECT * FROM (
+    SELECT salary * 1.1 AS raised, deptno 
+    FROM emp
+) WHERE raised > 55000
 ```
 
 ### Project Merge
 ```sql
-SELECT result FROM (SELECT x * 2 AS result FROM (SELECT salary + 1000 AS x FROM emp))
+-- Two projections merged into one
+SELECT doubled FROM (
+    SELECT increased * 2 AS doubled FROM (
+        SELECT salary + 1000 AS increased 
+        FROM emp
+    )
+)
 ```
 
 ### Filter Merge
 ```sql
-SELECT * FROM emp WHERE deptno = 10 AND salary > 50000
+-- Nested filters merged into one
+-- Note: Also enable project-remove (set 3,4) to see full optimization
+SELECT empno, salary FROM (
+    SELECT empno, salary FROM emp 
+    WHERE deptno = 10
+) WHERE salary > 50000
 ```
 
 ## Architecture
