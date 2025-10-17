@@ -23,11 +23,28 @@ This directory contains concrete implementations of query optimization rules, in
 - **Tests**: `test_project_merge_calcite_style`, `test_project_merge_with_column_rename`, `test_no_match_single_projection`
 - **Notes**: Successfully merges consecutive projections using function composition. Works with concrete DataFusion plans.
 
-## In Progress 🚧
+### FilterProjectTransposeRule ✅
+- **File**: `filter_project_transpose.rs`
+- **Pattern**: `Filter(P(y), Project(f(x), source))` → `Project(f(x), Filter(P(f(x)), source))`
+- **Status**: Fully working with 6 passing tests
+- **Tests**: 
+  - `test_filter_project_transpose_basic` - Basic column projection with simple filter
+  - `test_filter_project_transpose_multiple_columns` - Filter with AND condition on multiple columns
+  - `test_filter_project_transpose_with_expression` - Projection with expression (deptno * 2)
+  - `test_filter_project_transpose_subset_columns` - Single column projection
+  - `test_filter_project_transpose_complex_predicate` - Filter with OR condition
+  - `test_no_match_filter_only` - Negative test
+- **Notes**: Pushes filter below projection by composing predicate with projection function. Uses nested function calls `P(f(x))` to rewrite column references through function composition mechanism. Handles both simple column projections and complex expressions.
 
-### Transpose Rules (FilterProjectTranspose, ProjectFilterTranspose)
-- **Status**: Rule encoding in progress
-- **Note**: These rules require careful encoding of patterns and templates to properly handle column references and schema changes across operators. Implementation will be added after proper rule definition.
+## Future Work 🔮
+
+### ProjectFilterTranspose ⚠️ (Encodable but Limited Matcher Support)
+- **Pattern**: `Project([g(x)], Filter(P(x), source(x, y)))` → `Project([g(x)], Filter(P(x), Project([x], source(x, y))))`
+- **Status**: Can be encoded, but DefaultMatcher cannot optimize it effectively
+- **What it does**: Pulls projection above filter by inserting intermediate projection with only needed columns
+- **Limitation**: DefaultMatcher will match everything to `x`, making the intermediate projection identical to source (no optimization benefit)
+- **Requires**: Advanced matcher with dependency analysis to determine minimal column set `x` that satisfies both `P` and `g`
+- **Note**: Rule is theoretically correct but requires matcher enhancements for practical benefit
 
 ### FilterRemoveRule ❌
 - **Reason**: Requires constant evaluation to detect `TRUE` predicates
@@ -78,11 +95,12 @@ Abstract functions bind to concrete expressions based on dependencies:
 - ❌ Not supported due to fundamental limitations
 
 ## Test Summary
-- **Total Tests**: 11
+- **Total Tests**: 17
 - **Status**: All passing ✅
 - **FilterMergeRule**: 3 tests
 - **ProjectRemoveRule**: 5 tests
 - **ProjectMergeRule**: 3 tests
+- **FilterProjectTransposeRule**: 6 tests (inspired by Calcite test cases)
 
 ## Adding New Rules
 

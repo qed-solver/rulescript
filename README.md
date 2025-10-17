@@ -50,6 +50,7 @@ The `P` and `Q` are uninterpreted predicates - they can represent ANY boolean ex
   - FilterMergeRule ✅ - Fully working with 3 passing tests
   - ProjectRemoveRule ✅ - Fully working with 5 passing tests
   - ProjectMergeRule ✅ - Fully working with 3 passing tests (function composition works!)
+  - FilterProjectTransposeRule ✅ - Fully working with 6 passing tests (push filter below projection)
 - **Smart column pattern matching**:
   - Column patterns in projections match ordered sequences
   - Column patterns in function arguments match any from partition
@@ -60,8 +61,8 @@ The `P` and `Q` are uninterpreted predicates - they can represent ANY boolean ex
   - Tests run in milliseconds
 
 ### In Progress 🚧
-- **Transpose rules** - Proper encoding of FilterProjectTranspose and ProjectFilterTranspose
 - **Additional plan types** - Support for Join, Union, Aggregate in matcher
+- **More rules** - FilterIntoJoin, JoinAssociate, AggregateRemove, etc.
 
 ### Architecture
 ```
@@ -193,10 +194,11 @@ RuleScript solves this by:
 - [x] ~~Implement `DefaultMatcher` pattern matching logic~~ ✅ Complete
 - [x] ~~Implement `instantiate` method for template transformation~~ ✅ Complete
 - [x] ~~DataFusion optimizer integration~~ ✅ Complete via RuleWrapper
-- [x] ~~Create concrete rule examples with real DataFusion plans~~ ✅ 3 rules working
+- [x] ~~Create concrete rule examples with real DataFusion plans~~ ✅ 4 rules working
 - [x] ~~Test function composition with chained projections~~ ✅ ProjectMergeRule works
-- [ ] Properly encode transpose rules (FilterProjectTranspose, ProjectFilterTranspose)
+- [x] ~~Implement FilterProjectTranspose rule~~ ✅ Complete with 6 tests
 - [ ] More rule examples (FilterIntoJoin, JoinAssociate, AggregateRemove)
+- [ ] ProjectFilterTranspose (requires matcher enhancements for practical benefit)
 
 **Short-term**
 - [ ] Support additional plan types (Join, Union, Aggregate) in matcher
@@ -233,6 +235,6 @@ RuleScript solves this by:
 
 Active development. Core pattern matching complete. API stabilizing.
 
-**Test Status**: 11/11 tests passing ✅
+**Test Status**: 17/17 tests passing ✅
 
-The project emphasizes rapid prototyping over completeness. Pattern matching and instantiation are fully implemented with 3 working rules demonstrating the approach works with real DataFusion plans.
+The project emphasizes rapid prototyping over completeness. Pattern matching and instantiation are fully implemented with 4 working rules demonstrating the approach works with real DataFusion plans, including complex function composition for transpose rules.
