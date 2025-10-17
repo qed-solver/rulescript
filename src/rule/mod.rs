@@ -131,3 +131,118 @@ where
         }
     }
 }
+
+/// Declaratively define a rewrite rule
+///
+/// # Syntax
+/// ```
+/// use rulescript::{rule, filter};
+/// 
+/// rule! {
+///     MyFilterRule {
+///         schemas: {
+///             source: (col: T),
+///         },
+///         functions: {
+///             P(T) -> Bool,
+///         },
+///         from: filter!(source, P(col)),
+///         to: source,
+///     }
+/// }
+/// ```
+///
+/// # Examples
+///
+/// Simple filter merge:
+/// ```
+/// use rulescript::{rule, filter};
+/// 
+/// rule! {
+///     FilterMergeRule {
+///         schemas: {
+///             source: (col: T),
+///         },
+///         functions: {
+///             P(T) -> Bool,
+///             Q(T) -> Bool,
+///         },
+///         from: filter!(filter!(source, Q(col)), P(col)),
+///         to: filter!(source, P(col) && Q(col)),
+///     }
+/// }
+/// ```
+///
+/// Join rule with multiple schemas:
+/// ```
+/// use rulescript::{rule, filter, join};
+/// 
+/// rule! {
+///     FilterIntoJoin {
+///         schemas: {
+///             left: (col_l: TL),
+///             right: (col_r: TR),
+///         },
+///         functions: {
+///             join_cond(TL, TR) -> Bool,
+///             filter_pred(TL, TR) -> Bool,
+///         },
+///         from: filter!(join!(left, right, Inner, join_cond(col_l, col_r)), filter_pred(col_l, col_r)),
+///         to: join!(left, right, Inner, join_cond(col_l, col_r) && filter_pred(col_l, col_r)),
+///     }
+/// }
+/// ```
+#[macro_export]
+macro_rules! rule {
+    (
+        $name:ident {
+            schemas: {
+                $($schema_name:ident: $schema_def:tt),+ $(,)?
+            },
+            functions: {
+                $($func_defs:tt)*
+            },
+            from: $from_expr:expr,
+            to: $to_expr:expr,
+        }
+    ) => {
+        #[derive(Debug)]
+        pub struct $name;
+
+        impl $crate::rule::RewriteRule for $name {
+            fn from(&self) -> $crate::ast::relational::Rel {
+                // Generate schemas as sources
+                $(let $schema_name = $crate::ast::relational::Rel::source(
+                    stringify!($schema_name).to_string(),
+                    $crate::schema!$schema_def
+                );)+
+
+                // Generate functions
+                $crate::functions! { $($func_defs)* }
+
+                // Build pattern
+                $from_expr
+            }
+
+            fn to(&self) -> $crate::ast::relational::Rel {
+                // Generate schemas as sources (same as from)
+                $(let $schema_name = $crate::ast::relational::Rel::source(
+                    stringify!($schema_name).to_string(),
+                    $crate::schema!$schema_def
+                );)+
+
+                // Generate functions (same as from)
+                $crate::functions! { $($func_defs)* }
+
+                // Build replacement
+                $to_expr
+            }
+
+            fn name(&self) -> &str {
+                stringify!($name)
+            }
+        }
+
+        impl $crate::rule::ApplicableRule<$crate::matcher::DefaultMatcher> for $name {}
+    };
+}

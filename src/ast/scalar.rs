@@ -158,54 +158,51 @@ impl Scalar {
 /// Creates local variable bindings for each function.
 ///
 /// # Examples
-/// ```ignore
+/// ```
+/// use rulescript::functions;
+/// 
 /// functions! {
 ///     P(T) -> Bool,           // Predicate on type T
 ///     f(T) -> U,              // Transform from T to U
 ///     g(U, V) -> W,           // Binary function
 /// }
 /// // After expansion, P, f, and g are available as variables
+/// assert_eq!(P.name, "P");
+/// assert_eq!(f.name, "f");
+/// assert_eq!(g.name, "g");
 /// ```
 #[macro_export]
 macro_rules! functions {
     // Empty case - no functions to define
     {} => {};
 
-    // Single function returning Bool
+    // One or more functions with comma separation
     {
-        $name:ident($($arg_ty:ident),+ $(,)?) -> Bool
+        $($name:ident($($arg_ty:ident),+ $(,)?) -> $ret_ty:tt),+ $(,)?
     } => {
-        let $name = $crate::ast::scalar::Function::new(
-            stringify!($name).to_string(),
-            vec![$($crate::ast::opaque::Type::Generic {
-                id: stringify!($arg_ty).to_string(),
-            }),+],
-            $crate::ast::opaque::Type::Boolean,
-        );
+        $(
+            let $name = $crate::ast::scalar::Function::new(
+                stringify!($name).to_string(),
+                vec![$($crate::ast::opaque::Type::Generic {
+                    id: stringify!($arg_ty).to_string(),
+                }),+],
+                $crate::__function_ret_type!($ret_ty),
+            );
+        )+
     };
+}
 
-    // Single function returning generic type
-    {
-        $name:ident($($arg_ty:ident),+ $(,)?) -> $ret_ty:ident
-    } => {
-        let $name = $crate::ast::scalar::Function::new(
-            stringify!($name).to_string(),
-            vec![$($crate::ast::opaque::Type::Generic {
-                id: stringify!($arg_ty).to_string(),
-            }),+],
-            $crate::ast::opaque::Type::Generic {
-                id: stringify!($ret_ty).to_string(),
-            },
-        );
+/// Internal helper to handle Bool vs generic return types
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __function_ret_type {
+    (Bool) => {
+        $crate::ast::opaque::Type::Boolean
     };
-
-    // Multiple functions (recursive case)
-    {
-        $name:ident($($arg_ty:ident),+ $(,)?) -> $ret_ty:tt,
-        $($rest:tt)*
-    } => {
-        functions! { $name($($arg_ty),+) -> $ret_ty }
-        functions! { $($rest)* }
+    ($ty:ident) => {
+        $crate::ast::opaque::Type::Generic {
+            id: stringify!($ty).to_string(),
+        }
     };
 }
 

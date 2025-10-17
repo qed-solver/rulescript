@@ -77,12 +77,23 @@ impl Schema {
 /// Declaratively create a Schema with abstract types
 ///
 /// # Examples
-/// ```ignore
-/// schema!(col: T)                                  // Single nullable field
-/// schema!(col: T nullable)                         // Explicitly nullable
-/// schema!(col: T not_null)                         // Non-nullable field
-/// schema!(x: T, y: U)                              // Multiple fields (all nullable)
-/// schema!(x: T, y: U not_null, z: V nullable)      // Mixed nullability
+/// ```
+/// use rulescript::schema;
+/// 
+/// // Single nullable field
+/// let _s = schema!(col: T);
+/// 
+/// // Explicitly nullable
+/// let _s = schema!(col: T nullable);
+/// 
+/// // Non-nullable field
+/// let _s = schema!(col: T not_null);
+/// 
+/// // Multiple fields (all nullable)
+/// let _s = schema!(x: T, y: U);
+/// 
+/// // Mixed nullability
+/// let _s = schema!(x: T, y: U not_null, z: V nullable);
 /// ```
 #[macro_export]
 macro_rules! schema {

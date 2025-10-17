@@ -1,114 +1,30 @@
-use crate::{
-    ast::{
-        opaque::{Field, Schema, Type},
-        relational::Rel,
-        scalar::Function,
-    },
-    matcher::DefaultMatcher,
-    rule::{ApplicableRule, RewriteRule},
-};
-use datafusion::logical_expr::col;
-
 /// Pushes a Filter below a Projection by rewriting the filter predicate
 /// Pattern: Filter(P(y), Project(f(x), source)) → Project(f(x), Filter(P(f(x)), source))
 /// where y are projection output columns and x are source columns
-#[derive(Debug)]
-pub struct FilterProjectTransposeRule;
-
-impl RewriteRule for FilterProjectTransposeRule {
-    fn from(&self) -> Rel {
-        // Schema with a single abstract field representing all source columns
-        let schema = Schema {
-            fields: vec![Field {
-                name: "x".to_string(),
-                data_type: Type::Generic {
-                    id: "T".to_string(),
-                },
-                nullable: true,
-            }],
-        };
-
-        // Abstract projection function f: maps source columns to projection outputs
-        let f = Function::new(
-            "f".to_string(),
-            vec![Type::Generic {
-                id: "T".to_string(),
-            }],
-            Type::Generic {
-                id: "Tf".to_string(),
-            },
-        );
-
-        // Abstract predicate P: operates on projection output columns
-        let p = Function::new(
-            "P".to_string(),
-            vec![Type::Generic {
-                id: "Tf".to_string(),
-            }],
-            Type::Boolean,
-        );
-
-        let source = Rel::source("source".to_string(), schema);
-
-        // Pattern: source.project(f(x) as f_output).filter(P(f_output))
-        let proj = source
-            .project(vec![f.call(vec![col("x")]).alias("f_output")])
-            .unwrap();
-
-        proj.filter(p.call(vec![col("f_output")])).unwrap()
-    }
-
-    fn to(&self) -> Rel {
-        let schema = Schema {
-            fields: vec![Field {
-                name: "x".to_string(),
-                data_type: Type::Generic {
-                    id: "T".to_string(),
-                },
-                nullable: true,
-            }],
-        };
-
-        let f = Function::new(
-            "f".to_string(),
-            vec![Type::Generic {
-                id: "T".to_string(),
-            }],
-            Type::Generic {
-                id: "Tf".to_string(),
-            },
-        );
-
-        let p = Function::new(
-            "P".to_string(),
-            vec![Type::Generic {
-                id: "Tf".to_string(),
-            }],
-            Type::Boolean,
-        );
-
-        let source = Rel::source("source".to_string(), schema);
-
-        // Replacement: source.filter(P(f(x))).project(f(x))
-        // The nested call P(f(x)) performs the column reference rewriting
-        source
-            .filter(p.call(vec![f.call(vec![col("x")])]))
-            .unwrap()
-            .project(vec![f.call(vec![col("x")])])
-            .unwrap()
-    }
-
-    fn name(&self) -> &str {
-        "FilterProjectTransposeRule"
+crate::rule! {
+    FilterProjectTransposeRule {
+        schemas: {
+            source: (x: T),
+        },
+        functions: {
+            f(T) -> Tf,
+            P(Tf) -> Bool,
+        },
+        from: {
+            let inner = crate::project!(source, [f(x) as f_output]);
+            crate::filter!(inner, P(f_output))
+        },
+        to: {
+            let filtered = crate::filter!(source, P(f(x)));
+            crate::project!(filtered, [f(x)])
+        },
     }
 }
-
-impl ApplicableRule<DefaultMatcher> for FilterProjectTransposeRule {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rule::test::utils::*;
+    use crate::rule::{test::utils::*, ApplicableRule};
     use datafusion::logical_expr::{LogicalPlanBuilder, col, lit};
 
     #[test]

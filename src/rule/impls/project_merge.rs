@@ -1,119 +1,26 @@
-use crate::{
-    ast::{
-        opaque::{Field, Schema, Type},
-        relational::Rel,
-        scalar::Function,
-    },
-    matcher::DefaultMatcher,
-    rule::{ApplicableRule, RewriteRule},
-};
-use datafusion::logical_expr::col;
-
 /// Merges two consecutive projections via function composition
 /// Pattern: source.project(f).project(g) → source.project(g∘f)
-#[derive(Debug)]
-pub struct ProjectMergeRule;
-
-impl RewriteRule for ProjectMergeRule {
-    fn from(&self) -> Rel {
-        // Create a simple single-column schema
-        let schema = Schema {
-            fields: vec![Field {
-                name: "col".to_string(),
-                data_type: Type::Generic {
-                    id: "Tc".to_string(),
-                },
-                nullable: true,
-            }],
-        };
-
-        // Create abstract projection functions with explicit types
-        let f = Function::new(
-            "f".to_string(),
-            vec![Type::Generic {
-                id: "Tc".to_string(),
-            }],
-            Type::Generic {
-                id: "Tf".to_string(),
-            },
-        );
-        let g = Function::new(
-            "g".to_string(),
-            vec![Type::Generic {
-                id: "Tf".to_string(),
-            }],
-            Type::Generic {
-                id: "Tg".to_string(),
-            },
-        );
-
-        // Pattern: source.project(f(a)).project(g(f_output))
-        // The second projection references the output of the first
-        let source = Rel::source("source".to_string(), schema);
-
-        // First projection creates new columns with an alias
-        let first_proj = source
-            .project(vec![f.call(vec![col("col")]).alias("f_output")])
-            .unwrap();
-
-        // Second projection operates on the output of the first
-        // Now it can reference the aliased column
-        first_proj
-            .project(vec![g.call(vec![col("f_output")])])
-            .unwrap()
-    }
-
-    fn to(&self) -> Rel {
-        // Same single-column schema
-        let schema = Schema {
-            fields: vec![Field {
-                name: "col".to_string(),
-                data_type: Type::Generic {
-                    id: "Tc".to_string(),
-                },
-                nullable: true,
-            }],
-        };
-
-        // Create abstract functions with explicit types matching the pattern
-        let f = Function::new(
-            "f".to_string(),
-            vec![Type::Generic {
-                id: "Tc".to_string(),
-            }],
-            Type::Generic {
-                id: "Tf".to_string(),
-            },
-        );
-        let g = Function::new(
-            "g".to_string(),
-            vec![Type::Generic {
-                id: "Tf".to_string(),
-            }],
-            Type::Generic {
-                id: "Tg".to_string(),
-            },
-        );
-
-        // Replacement: source.project(g(f(a)))
-        // This represents the composition g∘f
-        let source = Rel::source("source".to_string(), schema);
-        source
-            .project(vec![g.call(vec![f.call(vec![col("col")])])])
-            .unwrap()
-    }
-
-    fn name(&self) -> &str {
-        "ProjectMergeRule"
+crate::rule! {
+    ProjectMergeRule {
+        schemas: {
+            source: (col: Tc),
+        },
+        functions: {
+            f(Tc) -> Tf,
+            g(Tf) -> Tg,
+        },
+        from: {
+            let inner = crate::project!(source, [f(col) as f_output]);
+            crate::project!(inner, [g(f_output)])
+        },
+        to: crate::project!(source, [g(f(col))]),
     }
 }
-
-impl ApplicableRule<DefaultMatcher> for ProjectMergeRule {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rule::test::utils::*;
+    use crate::rule::{test::utils::*, ApplicableRule};
     use datafusion::logical_expr::{LogicalPlanBuilder, col, lit};
 
     #[test]
