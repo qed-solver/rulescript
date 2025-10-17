@@ -73,3 +73,63 @@ impl Schema {
         )
     }
 }
+
+/// Declaratively create a Schema with abstract types
+///
+/// # Examples
+/// ```ignore
+/// schema!(col: T)                                  // Single nullable field
+/// schema!(col: T nullable)                         // Explicitly nullable
+/// schema!(col: T not_null)                         // Non-nullable field
+/// schema!(x: T, y: U)                              // Multiple fields (all nullable)
+/// schema!(x: T, y: U not_null, z: V nullable)      // Mixed nullability
+/// ```
+#[macro_export]
+macro_rules! schema {
+    // General case: one or more fields with optional nullability modifiers
+    ($($name:ident: $ty:ident $($modifier:ident)?),+ $(,)?) => {
+        $crate::ast::opaque::Schema {
+            fields: vec![
+                $($crate::__schema_field!($name: $ty $($modifier)?)),+
+            ],
+        }
+    };
+}
+
+/// Internal helper macro to parse individual field specifications
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __schema_field {
+    // Field with not_null modifier
+    ($name:ident: $ty:ident not_null) => {
+        $crate::ast::opaque::Field {
+            name: stringify!($name).to_string(),
+            data_type: $crate::ast::opaque::Type::Generic {
+                id: stringify!($ty).to_string(),
+            },
+            nullable: false,
+        }
+    };
+
+    // Field with nullable modifier
+    ($name:ident: $ty:ident nullable) => {
+        $crate::ast::opaque::Field {
+            name: stringify!($name).to_string(),
+            data_type: $crate::ast::opaque::Type::Generic {
+                id: stringify!($ty).to_string(),
+            },
+            nullable: true,
+        }
+    };
+
+    // Field without modifier (defaults to nullable)
+    ($name:ident: $ty:ident) => {
+        $crate::ast::opaque::Field {
+            name: stringify!($name).to_string(),
+            data_type: $crate::ast::opaque::Type::Generic {
+                id: stringify!($ty).to_string(),
+            },
+            nullable: true,
+        }
+    };
+}

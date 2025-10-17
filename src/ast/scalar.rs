@@ -152,3 +152,143 @@ impl Scalar {
         self.expr.clone().alias(name)
     }
 }
+
+/// Declaratively define abstract functions for pattern matching
+///
+/// Creates local variable bindings for each function.
+///
+/// # Examples
+/// ```ignore
+/// functions! {
+///     P(T) -> Bool,           // Predicate on type T
+///     f(T) -> U,              // Transform from T to U
+///     g(U, V) -> W,           // Binary function
+/// }
+/// // After expansion, P, f, and g are available as variables
+/// ```
+#[macro_export]
+macro_rules! functions {
+    // Empty case - no functions to define
+    {} => {};
+
+    // Single function returning Bool
+    {
+        $name:ident($($arg_ty:ident),+ $(,)?) -> Bool
+    } => {
+        let $name = $crate::ast::scalar::Function::new(
+            stringify!($name).to_string(),
+            vec![$($crate::ast::opaque::Type::Generic {
+                id: stringify!($arg_ty).to_string(),
+            }),+],
+            $crate::ast::opaque::Type::Boolean,
+        );
+    };
+
+    // Single function returning generic type
+    {
+        $name:ident($($arg_ty:ident),+ $(,)?) -> $ret_ty:ident
+    } => {
+        let $name = $crate::ast::scalar::Function::new(
+            stringify!($name).to_string(),
+            vec![$($crate::ast::opaque::Type::Generic {
+                id: stringify!($arg_ty).to_string(),
+            }),+],
+            $crate::ast::opaque::Type::Generic {
+                id: stringify!($ret_ty).to_string(),
+            },
+        );
+    };
+
+    // Multiple functions (recursive case)
+    {
+        $name:ident($($arg_ty:ident),+ $(,)?) -> $ret_ty:tt,
+        $($rest:tt)*
+    } => {
+        functions! { $name($($arg_ty),+) -> $ret_ty }
+        functions! { $($rest)* }
+    };
+}
+
+// ============================================================================
+// Expression parsing helper macros
+// ============================================================================
+
+/// Internal helper to parse expression lists using incremental munching
+/// Handles: f(x), f(x, y), g(f(x)), g(a, f(x), b), etc.
+/// Also handles aliases: x as y, f(x) as result (for projections)
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __parse_exprs {
+    // Base case: empty
+    (@accum [] []) => { Vec::<datafusion::prelude::Expr>::new() };
+    
+    // Done processing: return accumulated results
+    (@accum [$($result:expr),*] []) => { vec![$($result),*] };
+    
+    // Munch: function call with alias (with optional comma + rest)
+    (@accum [$($result:expr),*] [$func:ident($($args:tt)*) as $alias:ident $(, $($rest:tt)*)?]) => {
+        $crate::__parse_exprs!(@accum [$($result,)* $crate::__parse_expr!($func($($args)*)).alias(stringify!($alias))] [$($($rest)*)?])
+    };
+    
+    // Munch: identifier with alias (with optional comma + rest)
+    (@accum [$($result:expr),*] [$id:ident as $alias:ident $(, $($rest:tt)*)?]) => {
+        $crate::__parse_exprs!(@accum [$($result,)* datafusion::prelude::col(stringify!($id)).alias(stringify!($alias))] [$($($rest)*)?])
+    };
+    
+    // Munch: function call (with optional comma + rest)
+    (@accum [$($result:expr),*] [$func:ident($($args:tt)*) $(, $($rest:tt)*)?]) => {
+        $crate::__parse_exprs!(@accum [$($result,)* $crate::__parse_expr!($func($($args)*))] [$($($rest)*)?])
+    };
+    
+    // Munch: identifier (with optional comma + rest)
+    (@accum [$($result:expr),*] [$id:ident $(, $($rest:tt)*)?]) => {
+        $crate::__parse_exprs!(@accum [$($result,)* datafusion::prelude::col(stringify!($id))] [$($($rest)*)?])
+    };
+    
+    // Entry point: start with empty accumulator
+    ($($tt:tt)*) => {
+        $crate::__parse_exprs!(@accum [] [$($tt)*])
+    };
+}
+
+/// Internal: Parse expression (identifier or function call)
+/// Truly recursive - handles any nesting depth
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __parse_expr {
+    // Function call: f(x), g(f(x)), etc.
+    ($func:ident($($inside:tt)*)) => {
+        $func.call($crate::__parse_exprs!($($inside)*))
+    };
+    
+    // Plain identifier: x
+    ($ident:ident) => {
+        datafusion::prelude::col(stringify!($ident))
+    };
+}
+
+/// Internal: Parse predicate (handles &&, ||, and nested calls)
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __parse_predicate {
+    // AND: P(...) && Q(...)
+    ($p:ident($($arg1:tt)*) && $q:ident($($arg2:tt)*)) => {
+        $p.and(
+            $crate::__parse_exprs!($($arg1)*),
+            $crate::__parse_expr!($q($($arg2)*))
+        )
+    };
+
+    // OR: P(...) || Q(...)
+    ($p:ident($($arg1:tt)*) || $q:ident($($arg2:tt)*)) => {
+        $p.or(
+            $crate::__parse_exprs!($($arg1)*),
+            $crate::__parse_expr!($q($($arg2)*))
+        )
+    };
+
+    // Simple function call: P(...)
+    ($func:ident($($args:tt)*)) => {
+        $func.call($crate::__parse_exprs!($($args)*))
+    };
+}
