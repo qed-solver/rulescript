@@ -11,7 +11,7 @@ use datafusion::{
     common::tree_node::{Transformed, TreeNode},
     error::Result as DataFusionResult,
     logical_expr::LogicalPlan,
-    optimizer::{OptimizerConfig, OptimizerRule},
+    optimizer::{ApplyOrder, OptimizerConfig, OptimizerRule},
 };
 
 use crate::{
@@ -104,7 +104,7 @@ where
         self.rule.name()
     }
 
-    fn apply_order(&self) -> Option<datafusion::optimizer::ApplyOrder> {
+    fn apply_order(&self) -> Option<ApplyOrder> {
         None
     }
 

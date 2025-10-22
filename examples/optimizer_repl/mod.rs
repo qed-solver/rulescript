@@ -10,10 +10,13 @@ use datafusion::{
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 use rulescript::rule::{
     RuleWrapper,
-    impls::{FilterMergeRule, FilterProjectTransposeRule, ProjectMergeRule, ProjectRemoveRule},
+    impls::{
+        FilterIntoJoinRule, FilterMergeRule, FilterProjectTransposeRule, JoinConditionPushRule,
+        ProjectMergeRule, ProjectRemoveRule,
+    },
 };
 use std::sync::Arc;
-use wrappers::BiasedJoinCommuteRule;
+use wrappers::{BiasedJoinCommuteRule, BiasedJoinExtractFilterRule};
 
 pub struct RuleInfo {
     pub name: &'static str,
@@ -89,7 +92,38 @@ impl OptimizerRepl {
                              projection to preserve the original column order. This enables other \
                              optimizations and can improve join performance.\n\
                              Pattern: Join(Inner, P(l, r), left, right) → Project([l, r], Join(Inner, P(r, l), right, left))\n\n\
-                             💡 TIP: Must combine with project-remove (set 4,5) as SQL queries have a projection on top.",
+                             💡 TIP: Must combine with project-remove (set 4,5) as SQL queries have a projection on top.\n\
+                             💡 NOTE: Uses lexicographic bias to prevent infinite loops - only swaps when left > right.",
+                example_query: "SELECT * FROM emp INNER JOIN dept ON emp.deptno = dept.deptno",
+            },
+            RuleInfo {
+                name: "filter-into-join",
+                description: "Merge filter into join condition",
+                explanation: "Merges a filter above an inner join into the join condition by ANDing \
+                             the predicates together. This consolidates conditions and can enable \
+                             better join execution strategies.\n\
+                             Pattern: Filter(pred, Join(Inner, cond, L, R)) → Join(Inner, cond AND pred, L, R)\n\n\
+                             💡 TIP: Works best on queries with WHERE clauses after joins.",
+                example_query: "SELECT * FROM emp INNER JOIN dept ON emp.deptno = dept.deptno WHERE emp.salary > 50000",
+            },
+            RuleInfo {
+                name: "join-condition-push",
+                description: "Push join predicates to inputs",
+                explanation: "Pushes single-table predicates from join condition down as filters on join inputs. \
+                             This enables earlier filtering of data before the join operation.\n\
+                             Pattern: Join(Inner, LeftCond AND RightCond AND CrossCond, L, R) → \
+                             Join(Inner, CrossCond, Filter(LeftCond, L), Filter(RightCond, R))\n\n\
+                             💡 TIP: Best combined with filter-into-join (set 6,7) to first consolidate predicates.",
+                example_query: "SELECT * FROM emp INNER JOIN dept ON emp.deptno = dept.deptno AND emp.salary > 50000 AND dept.deptno > 10",
+            },
+            RuleInfo {
+                name: "join-extract-filter",
+                description: "Extract join condition to filter",
+                explanation: "Extracts the join condition as a filter above a cartesian join. This is \
+                             the inverse of filter-into-join.\n\
+                             Pattern: Join(Inner, cond, L, R) → Filter(cond, Join(Inner, TRUE, L, R))\n\n\
+                             💡 TIP: Must combine with project-remove (set 4,8) as SQL queries have a projection on top.\n\
+                             💡 NOTE: Does not apply if condition is already TRUE (prevents infinite loops).",
                 example_query: "SELECT * FROM emp INNER JOIN dept ON emp.deptno = dept.deptno",
             },
         ]
@@ -244,6 +278,15 @@ impl OptimizerRepl {
                 }
                 "join-commute" => {
                     rules.push(Arc::new(BiasedJoinCommuteRule::new()));
+                }
+                "filter-into-join" => {
+                    rules.push(Arc::new(RuleWrapper::new(FilterIntoJoinRule)));
+                }
+                "join-condition-push" => {
+                    rules.push(Arc::new(RuleWrapper::new(JoinConditionPushRule)));
+                }
+                "join-extract-filter" => {
+                    rules.push(Arc::new(BiasedJoinExtractFilterRule::new()));
                 }
                 _ => {}
             }
