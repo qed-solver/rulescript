@@ -4,10 +4,12 @@
 
 pub mod filter_merge;
 pub mod filter_project_transpose;
+pub mod join_commute;
 pub mod project_merge;
 pub mod project_remove;
 
 pub use filter_merge::FilterMergeRule;
 pub use filter_project_transpose::FilterProjectTransposeRule;
+pub use join_commute::JoinCommuteRule;
 pub use project_merge::ProjectMergeRule;
 pub use project_remove::ProjectRemoveRule;

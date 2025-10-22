@@ -62,6 +62,44 @@ pub mod utils {
             .unwrap()
     }
 
+    /// Create a sales table for join testing
+    /// Schema: sale_id INTEGER, product_id INTEGER, quantity INTEGER
+    pub fn sales_table() -> LogicalPlan {
+        let schema = Arc::new(ArrowSchema::new(vec![
+            Field::new("sale_id", DataType::Int32, false),
+            Field::new("product_id", DataType::Int32, false),
+            Field::new("quantity", DataType::Int32, false),
+        ]));
+
+        let table_source = Arc::new(datafusion::logical_expr::builder::LogicalTableSource::new(
+            schema,
+        ));
+
+        LogicalPlanBuilder::scan("sales", table_source, None)
+            .unwrap()
+            .build()
+            .unwrap()
+    }
+
+    /// Create a product table for join testing
+    /// Schema: product_id INTEGER, name VARCHAR, price FLOAT
+    pub fn product_table() -> LogicalPlan {
+        let schema = Arc::new(ArrowSchema::new(vec![
+            Field::new("product_id", DataType::Int32, false),
+            Field::new("name", DataType::Utf8, false),
+            Field::new("price", DataType::Float64, false),
+        ]));
+
+        let table_source = Arc::new(datafusion::logical_expr::builder::LogicalTableSource::new(
+            schema,
+        ));
+
+        LogicalPlanBuilder::scan("product", table_source, None)
+            .unwrap()
+            .build()
+            .unwrap()
+    }
+
     /// Create a test table with Binary columns for abstract function testing
     pub fn table_with_binary_columns(column_names: Vec<&str>) -> LogicalPlan {
         let fields: Vec<Field> = column_names

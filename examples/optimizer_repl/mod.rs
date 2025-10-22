@@ -1,6 +1,7 @@
 //! Interactive REPL for demonstrating query optimization rules
 
 pub mod tables;
+pub mod wrappers;
 
 use datafusion::{
     optimizer::{Optimizer, OptimizerContext},
@@ -12,6 +13,7 @@ use rulescript::rule::{
     impls::{FilterMergeRule, FilterProjectTransposeRule, ProjectMergeRule, ProjectRemoveRule},
 };
 use std::sync::Arc;
+use wrappers::BiasedJoinCommuteRule;
 
 pub struct RuleInfo {
     pub name: &'static str,
@@ -52,8 +54,7 @@ impl OptimizerRepl {
                              to use the projection's input columns. This enables earlier filtering \
                              of data before computing expensive expressions.\n\
                              Pattern: Filter(P(y), Project(f(x), source)) → Project(f(x), Filter(P(f(x)), source))",
-                example_query: "-- Filter on projected column gets pushed below projection\n\
-                               SELECT * FROM (SELECT salary * 1.1 AS raised, deptno FROM emp) WHERE raised > 55000",
+                example_query: "SELECT * FROM (SELECT salary * 1.1 AS raised, deptno FROM emp) WHERE raised > 55000",
             },
             RuleInfo {
                 name: "project-merge",
@@ -62,17 +63,16 @@ impl OptimizerRepl {
                              function composition. The outer projection's expressions are composed \
                              with the inner projection's expressions.\n\
                              Pattern: Project(g, Project(f, source)) → Project(g∘f, source)",
-                example_query: "-- Two projections merged into one\n\
-                               SELECT doubled FROM (SELECT increased * 2 AS doubled FROM (SELECT salary + 1000 AS increased FROM emp))",
+                example_query: "SELECT doubled FROM (SELECT increased * 2 AS doubled FROM (SELECT salary + 1000 AS increased FROM emp))",
             },
             RuleInfo {
                 name: "filter-merge",
                 description: "Merge consecutive filters",
                 explanation: "Combines two consecutive filter operations into a single filter with \
                              an AND condition. This reduces the number of operators in the plan.\n\
-                             Pattern: Filter(P, Filter(Q, source)) → Filter(P AND Q, source)",
-                example_query: "-- Nested filters merged into one (also enable project-remove with 'set 3,4')\n\
-                               SELECT empno, salary FROM (SELECT empno, salary FROM emp WHERE deptno = 10) WHERE salary > 50000",
+                             Pattern: Filter(P, Filter(Q, source)) → Filter(P AND Q, source)\n\n\
+                             💡 TIP: Combine with project-remove (set 3,4) to see both rules in action.",
+                example_query: "SELECT empno, salary FROM (SELECT empno, salary FROM emp WHERE deptno = 10) WHERE salary > 50000",
             },
             RuleInfo {
                 name: "project-remove",
@@ -80,9 +80,17 @@ impl OptimizerRepl {
                 explanation: "Removes a projection that simply selects all columns in their original \
                              order without any transformations. This is a no-op that can be eliminated.\n\
                              Pattern: Project([col1, col2, ...], source) → source (if identity)",
-                example_query: "-- Projection that selects all columns unchanged\n\
-                               SELECT empno, ename, job, mgr, hiredate, salary, commission, deptno \n\
-                               FROM emp",
+                example_query: "SELECT empno, ename, job, mgr, hiredate, salary, commission, deptno FROM emp",
+            },
+            RuleInfo {
+                name: "join-commute",
+                description: "Swap join inputs",
+                explanation: "Permutes the inputs to a join, swapping left and right sides. Adds a \
+                             projection to preserve the original column order. This enables other \
+                             optimizations and can improve join performance.\n\
+                             Pattern: Join(Inner, P(l, r), left, right) → Project([l, r], Join(Inner, P(r, l), right, left))\n\n\
+                             💡 TIP: Must combine with project-remove (set 4,5) as SQL queries have a projection on top.",
+                example_query: "SELECT * FROM emp INNER JOIN dept ON emp.deptno = dept.deptno",
             },
         ]
     }
@@ -233,6 +241,9 @@ impl OptimizerRepl {
                 }
                 "project-remove" => {
                     rules.push(Arc::new(RuleWrapper::new(ProjectRemoveRule)));
+                }
+                "join-commute" => {
+                    rules.push(Arc::new(BiasedJoinCommuteRule::new()));
                 }
                 _ => {}
             }

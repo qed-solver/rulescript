@@ -218,30 +218,30 @@ macro_rules! __function_ret_type {
 macro_rules! __parse_exprs {
     // Base case: empty
     (@accum [] []) => { Vec::<datafusion::prelude::Expr>::new() };
-    
+
     // Done processing: return accumulated results
     (@accum [$($result:expr),*] []) => { vec![$($result),*] };
-    
+
     // Munch: function call with alias (with optional comma + rest)
     (@accum [$($result:expr),*] [$func:ident($($args:tt)*) as $alias:ident $(, $($rest:tt)*)?]) => {
         $crate::__parse_exprs!(@accum [$($result,)* $crate::__parse_expr!($func($($args)*)).alias(stringify!($alias))] [$($($rest)*)?])
     };
-    
+
     // Munch: identifier with alias (with optional comma + rest)
     (@accum [$($result:expr),*] [$id:ident as $alias:ident $(, $($rest:tt)*)?]) => {
         $crate::__parse_exprs!(@accum [$($result,)* datafusion::prelude::col(stringify!($id)).alias(stringify!($alias))] [$($($rest)*)?])
     };
-    
+
     // Munch: function call (with optional comma + rest)
     (@accum [$($result:expr),*] [$func:ident($($args:tt)*) $(, $($rest:tt)*)?]) => {
         $crate::__parse_exprs!(@accum [$($result,)* $crate::__parse_expr!($func($($args)*))] [$($($rest)*)?])
     };
-    
+
     // Munch: identifier (with optional comma + rest)
     (@accum [$($result:expr),*] [$id:ident $(, $($rest:tt)*)?]) => {
         $crate::__parse_exprs!(@accum [$($result,)* datafusion::prelude::col(stringify!($id))] [$($($rest)*)?])
     };
-    
+
     // Entry point: start with empty accumulator
     ($($tt:tt)*) => {
         $crate::__parse_exprs!(@accum [] [$($tt)*])
@@ -257,7 +257,7 @@ macro_rules! __parse_expr {
     ($func:ident($($inside:tt)*)) => {
         $func.call($crate::__parse_exprs!($($inside)*))
     };
-    
+
     // Plain identifier: x
     ($ident:ident) => {
         datafusion::prelude::col(stringify!($ident))

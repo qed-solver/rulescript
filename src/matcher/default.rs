@@ -24,9 +24,9 @@ pub struct DefaultMatcher {
     /// Abstract sources -> concrete plan and partitions
     sources: HashMap<String, (LogicalPlan, HashMap<Column, Vec<Column>>)>,
 
-    /// Track the qualified name order of the top-level output columns
+    /// Track the qualified columns of the top-level output schema
     /// Used to preserve column ordering during projection instantiation
-    output_schema: Vec<String>,
+    output_schema: Vec<Column>,
 }
 
 impl DefaultMatcher {
@@ -607,13 +607,14 @@ impl DefaultMatcher {
 
         // Sort expressions by the original output column order
         all_exprs.sort_by_key(|(_, con_expr)| {
-            // Get the qualified name of the expression
-            let (_table_ref, name) = con_expr.qualified_name();
-
-            // Find its position in the original order
-            self.output_schema
-                .iter()
-                .position(|output_name| output_name == &name)
+            // If this is a column expression, find its position in the original schema
+            if let Expr::Column(col) = con_expr {
+                self.output_schema
+                    .iter()
+                    .position(|output_col| output_col == col)
+            } else {
+                None
+            }
         });
 
         // Build new Projection node with instantiated and sorted components
@@ -729,14 +730,16 @@ impl DefaultMatcher {
             })?;
 
         // Instantiate all arguments to build the context
-        // The context maps column names that appear in the function's arguments
-        // to their instantiated expressions
-        let mut eval_context = HashMap::new();
+        // The context maps qualified names (table_ref, column_name) to their instantiated expressions
+        // Using the full qualified name ensures we can distinguish between columns with the same name
+        // from different tables (e.g., emp.deptno vs dept.deptno)
+        let mut eval_context: HashMap<(Option<String>, String), Expr> = HashMap::new();
         for arg in &func.args {
             for expr in self.instantiate_expr(arg, context)? {
-                // Get the qualified name of the expression
-                let (_table_ref, name) = expr.qualified_name();
-                eval_context.insert(name, expr);
+                // Use the qualified name as the key for all expressions
+                let (table_ref, name) = expr.qualified_name();
+                let key = (table_ref.map(|t| t.to_string()), name);
+                eval_context.insert(key, expr);
             }
         }
 
@@ -760,16 +763,19 @@ impl DefaultMatcher {
     fn replace_columns_with_context(
         &self,
         expr: &Expr,
-        context: &HashMap<String, Expr>,
+        context: &HashMap<(Option<String>, String), Expr>,
     ) -> Result<Expr, RuleError> {
         match expr {
             Expr::Column(col) => {
-                // Look up this column in the context - it must exist
+                // Look up this column in the context using its qualified name
+                let (table_ref, name) = Expr::Column(col.clone()).qualified_name();
+                let key = (table_ref.map(|t| t.to_string()), name.clone());
+
                 context
-                    .get(&col.name)
+                    .get(&key)
                     .cloned()
                     .ok_or_else(|| RuleError::UnboundSymbol {
-                        symbol: col.name.clone(),
+                        symbol: format!("{:?}", key),
                     })
             }
             Expr::BinaryExpr(binary) => {
@@ -965,14 +971,9 @@ impl DefaultMatcher {
 
 impl PatternMatcher for DefaultMatcher {
     fn resolve(&mut self, pattern: &Rel, concrete: &LogicalPlan) -> Result<(), RuleError> {
-        // Track the output column names of the concrete plan for ordering
-        // Get the schema field names from the concrete plan
+        // Track the output columns of the concrete plan for ordering
         let schema = concrete.schema();
-        self.output_schema = schema
-            .fields()
-            .iter()
-            .map(|f| f.name().to_string())
-            .collect();
+        self.output_schema = schema.columns().into_iter().collect();
 
         self.resolve_plan(&pattern.plan, concrete)?;
         Ok(())
