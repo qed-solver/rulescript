@@ -709,6 +709,9 @@ impl DefaultMatcher {
             // Column: expand to all concrete columns in the partition
             Expr::Column(column) => self.instantiate_column(column, context),
 
+            // Literal: pass through as-is
+            Expr::Literal(_, _) => Ok(vec![template.clone()]),
+
             // TODO: Handle other expression types as needed
             // Error on unexpected patterns instead of passing through
             other => Err(RuleError::InvalidPattern {
