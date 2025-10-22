@@ -21,7 +21,7 @@ crate::rule! {
 mod tests {
     use super::*;
     use crate::rule::{ApplicableRule, test::utils::*};
-    use datafusion::logical_expr::{JoinType, LogicalPlan, LogicalPlanBuilder, col};
+    use datafusion::logical_expr::{JoinType, LogicalPlanBuilder, col};
 
     #[test]
     fn test_join_commute_basic() {
@@ -57,12 +57,12 @@ mod tests {
             .build()
             .unwrap();
 
-        let emp_cols: Vec<_> = emp.schema().columns().into_iter().map(|c| col(c)).collect();
+        let emp_cols: Vec<_> = emp.schema().columns().into_iter().map(col).collect();
         let dept_cols: Vec<_> = dept
             .schema()
             .columns()
             .into_iter()
-            .map(|c| col(c))
+            .map(col)
             .collect();
         let mut proj_exprs = emp_cols;
         proj_exprs.extend(dept_cols);
@@ -119,13 +119,13 @@ mod tests {
             .schema()
             .columns()
             .into_iter()
-            .map(|c| col(c))
+            .map(col)
             .collect();
         let product_cols: Vec<_> = product
             .schema()
             .columns()
             .into_iter()
-            .map(|c| col(c))
+            .map(col)
             .collect();
         let mut proj_exprs = sales_cols;
         proj_exprs.extend(product_cols);
