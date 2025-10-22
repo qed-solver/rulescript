@@ -58,12 +58,7 @@ mod tests {
             .unwrap();
 
         let emp_cols: Vec<_> = emp.schema().columns().into_iter().map(col).collect();
-        let dept_cols: Vec<_> = dept
-            .schema()
-            .columns()
-            .into_iter()
-            .map(col)
-            .collect();
+        let dept_cols: Vec<_> = dept.schema().columns().into_iter().map(col).collect();
         let mut proj_exprs = emp_cols;
         proj_exprs.extend(dept_cols);
 
@@ -115,18 +110,8 @@ mod tests {
             .build()
             .unwrap();
 
-        let sales_cols: Vec<_> = sales
-            .schema()
-            .columns()
-            .into_iter()
-            .map(col)
-            .collect();
-        let product_cols: Vec<_> = product
-            .schema()
-            .columns()
-            .into_iter()
-            .map(col)
-            .collect();
+        let sales_cols: Vec<_> = sales.schema().columns().into_iter().map(col).collect();
+        let product_cols: Vec<_> = product.schema().columns().into_iter().map(col).collect();
         let mut proj_exprs = sales_cols;
         proj_exprs.extend(product_cols);
 

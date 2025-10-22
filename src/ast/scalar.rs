@@ -264,10 +264,18 @@ macro_rules! __parse_expr {
     };
 }
 
-/// Internal: Parse predicate (handles &&, ||, and nested calls)
+/// Internal: Parse predicate (handles boolean literals, &&, ||, nested calls)
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __parse_predicate {
+    // Boolean literal: true or false
+    (true) => {
+        datafusion::prelude::lit(true)
+    };
+    (false) => {
+        datafusion::prelude::lit(false)
+    };
+
     // AND: P(...) && Q(...)
     ($p:ident($($arg1:tt)*) && $q:ident($($arg2:tt)*)) => {
         $p.and(

@@ -2,14 +2,18 @@
 // Allow uppercase function names for mathematical notation (P, Q, etc.)
 #![allow(non_snake_case)]
 
+pub mod filter_into_join;
 pub mod filter_merge;
 pub mod filter_project_transpose;
 pub mod join_commute;
+pub mod join_extract_filter;
 pub mod project_merge;
 pub mod project_remove;
 
+pub use filter_into_join::FilterIntoJoinRule;
 pub use filter_merge::FilterMergeRule;
 pub use filter_project_transpose::FilterProjectTransposeRule;
 pub use join_commute::JoinCommuteRule;
+pub use join_extract_filter::JoinExtractFilterRule;
 pub use project_merge::ProjectMergeRule;
 pub use project_remove::ProjectRemoveRule;
