@@ -276,19 +276,21 @@ macro_rules! __parse_predicate {
         datafusion::prelude::lit(false)
     };
 
-    // AND: P(...) && Q(...)
-    ($p:ident($($arg1:tt)*) && $q:ident($($arg2:tt)*)) => {
+    // AND (chained): P(...) && <rest>
+    // Recursively parse the right-hand side to support chains like P(...) && Q(...) && R(...)
+    ($p:ident($($arg1:tt)*) && $($rest:tt)+) => {
         $p.and(
             $crate::__parse_exprs!($($arg1)*),
-            $crate::__parse_expr!($q($($arg2)*))
+            $crate::__parse_predicate!($($rest)+)
         )
     };
 
-    // OR: P(...) || Q(...)
-    ($p:ident($($arg1:tt)*) || $q:ident($($arg2:tt)*)) => {
+    // OR (chained): P(...) || <rest>
+    // Recursively parse the right-hand side to support chains like P(...) || Q(...) || R(...)
+    ($p:ident($($arg1:tt)*) || $($rest:tt)+) => {
         $p.or(
             $crate::__parse_exprs!($($arg1)*),
-            $crate::__parse_expr!($q($($arg2)*))
+            $crate::__parse_predicate!($($rest)+)
         )
     };
 
