@@ -420,14 +420,6 @@ impl DefaultMatcher {
         con_binary: &BinaryExpr,
         context: &HashMap<Column, Vec<Column>>,
     ) -> Result<(), RuleError> {
-        // Check if operators match
-        if pat_binary.op != con_binary.op {
-            return Err(RuleError::ExpressionMismatch {
-                pattern: Box::new(Expr::BinaryExpr(pat_binary.clone())),
-                target: Box::new(Expr::BinaryExpr(con_binary.clone())),
-            });
-        }
-
         match pat_binary.op {
             Operator::And | Operator::Or => {
                 // For commutative AND/OR, flatten and use partition_items
@@ -474,8 +466,15 @@ impl DefaultMatcher {
 
                 Ok(())
             }
-            _ => {
-                // For non-commutative operators, match structurally
+            op => {
+                // For unknown operators, they must match exactly
+                if op != con_binary.op {
+                    return Err(RuleError::ExpressionMismatch {
+                        pattern: Box::new(Expr::BinaryExpr(pat_binary.clone())),
+                        target: Box::new(Expr::BinaryExpr(con_binary.clone())),
+                    });
+                }
+                // Match structurally
                 self.resolve_expr(&pat_binary.left, &con_binary.left, context)?;
                 self.resolve_expr(&pat_binary.right, &con_binary.right, context)
             }
