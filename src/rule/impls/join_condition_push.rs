@@ -151,12 +151,32 @@ mod tests {
         assert_eq!(result, expected);
     }
 
-    // TODO: Test for edge case where only cross-table predicates exist
-    // Currently fails due to matcher limitation: failed match attempts leave residual bindings
-    // Pattern: LeftCond && RightCond && CrossCond
-    // Concrete: emp.deptno = dept.deptno (only cross-table)
-    // Expected: LeftCond and RightCond should bind to lit(true)
-    // Actual: They bind to columns from failed match attempts
+    #[test]
+    fn test_join_condition_push_only_cross_table() {
+        // Edge case: only cross-table predicate exists (no single-table predicates to push)
+        // SQL: SELECT * FROM emp JOIN dept ON emp.deptno = dept.deptno
+        // Pattern: Join(LeftCond AND RightCond AND CrossCond, emp, dept)
+        // Result: Should not match (LeftCond and RightCond remain unbound)
+
+        let emp = emp_table();
+        let dept = dept_table();
+
+        let join_cond = col("emp.deptno").eq(col("dept.deptno"));
+
+        let input = LogicalPlanBuilder::from(emp.clone())
+            .join(
+                dept.clone(),
+                JoinType::Inner,
+                (Vec::<String>::new(), Vec::<String>::new()),
+                Some(join_cond),
+            )
+            .unwrap()
+            .build()
+            .unwrap();
+
+        let rule = JoinConditionPushRule;
+        assert!(rule.try_apply(&input).is_err());
+    }
 
     #[test]
     fn test_no_match_single_table() {

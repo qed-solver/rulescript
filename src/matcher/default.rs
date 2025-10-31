@@ -16,7 +16,7 @@ use crate::ast::{
 use super::{BindingConflict, PatternMatcher, RuleError};
 
 /// Default pattern matcher that tracks bindings internally
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct DefaultMatcher {
     /// Abstract functions/predicates -> list of concrete expressions (usually single)
     functions: HashMap<String, Vec<Expr>>,
@@ -59,7 +59,10 @@ impl DefaultMatcher {
     }
 
     /// Generic partitioning routine: assign each item to first matching pattern
-    fn partition<P, I: Debug>(
+    /// Uses two-phase approach to prevent state pollution from failed matches:
+    /// Phase 1: Try matches on clones to discover which pattern matches each item
+    /// Phase 2: Commit successful matches to the real self
+    fn partition<P, I: Clone + Debug>(
         &mut self,
         patterns: impl IntoIterator<Item = P>,
         items: impl IntoIterator<Item = I>,
@@ -70,23 +73,33 @@ impl DefaultMatcher {
             .map(|p| (p, Vec::new()))
             .collect::<Vec<_>>();
 
-        for item in items {
-            let mut assign = None;
+        let items = items.into_iter().collect::<Vec<_>>();
+
+        // Phase 1: Discovery - try matches on clones to avoid state pollution
+        for item in &items {
+            let mut matched = false;
 
             for (pattern, partition) in &mut partitions {
-                // Try matching - Ok means success, Err means try next pattern
-                if try_match(self, pattern, &item).is_ok() {
-                    assign = Some(partition);
+                // Try matching on a clone - failed matches won't pollute self
+                let mut cloned_self = self.clone();
+                if try_match(&mut cloned_self, pattern, item).is_ok() {
+                    partition.push(item.clone());
+                    matched = true;
                     break;
                 }
             }
 
-            if let Some(partition) = assign {
-                partition.push(item);
-            } else {
+            if !matched {
                 return Err(RuleError::NoMatchingPattern {
                     item: format!("{:?}", item),
                 });
+            }
+        }
+
+        // Phase 2: Commit - replay all successful matches on the real self
+        for (pattern, items) in &partitions {
+            for item in items {
+                try_match(self, pattern, item)?;
             }
         }
 
@@ -427,7 +440,7 @@ impl DefaultMatcher {
                 let pattern_terms = Self::flatten_binary_op(&pattern_expr, &pat_binary.op);
 
                 let concrete_expr = Expr::BinaryExpr(con_binary.clone());
-                let concrete_terms = Self::flatten_binary_op(&concrete_expr, &con_binary.op);
+                let concrete_terms = Self::flatten_binary_op(&concrete_expr, &pat_binary.op);
 
                 // Use partition to match concrete terms to pattern terms
                 self.partition(
