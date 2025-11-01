@@ -87,6 +87,16 @@ This directory contains concrete implementations of query optimization rules, in
   - `test_no_match_left_projection_only` - Negative test (wrong side)
 - **Notes**: Pulls projection from right input of inner join up above the join. Rewrites join condition to reference original right columns. Only applies to inner joins on right input. Mirror of JoinLeftProjectTransposeRule.
 
+### JoinAssociateRule ✅
+- **File**: `join_associate.rs`
+- **Pattern**: `(Q0 ⋈[P0(x,y)] Q1) ⋈[P1(y,z)] Q2` → `Q0 ⋈[P0(x,y)] (Q1 ⋈[P1(y,z)] Q2)`
+- **Status**: Fully working with 3 passing tests
+- **Tests**:
+  - `test_join_associate_basic` - Basic associativity transformation
+  - `test_no_match_single_join` - Negative test (single join)
+  - `test_no_match_single_table` - Negative test (no join)
+- **Notes**: Changes join tree shape using associativity. Only applies to INNER joins. Q1 is the "pivot" table appearing in both joins. Simplified version with 2 predicates (vs 4 predicates in full paper version).
+
 ## Future Work 🔮
 
 ### ProjectFilterTranspose ⚠️ (Encodable but Limited Matcher Support)
@@ -146,7 +156,7 @@ Abstract functions bind to concrete expressions based on dependencies:
 - ❌ Not supported due to fundamental limitations
 
 ## Test Summary
-- **Total Tests**: 41
+- **Total Tests**: 44
 - **Status**: All passing ✅
 - **FilterMergeRule**: 3 tests
 - **ProjectRemoveRule**: 6 tests (includes ProjectJoinRemoveRule case)
@@ -158,6 +168,7 @@ Abstract functions bind to concrete expressions based on dependencies:
 - **FilterIntoJoinRule**: 3 tests
 - **JoinLeftProjectTransposeRule**: 3 tests
 - **JoinRightProjectTransposeRule**: 3 tests
+- **JoinAssociateRule**: 3 tests
 
 ## Adding New Rules
 
