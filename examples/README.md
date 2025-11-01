@@ -28,11 +28,19 @@ The optimizer uses DataFusion's `Optimizer` with `RuleWrapper` to apply rules re
 2. **project-merge** - Merge consecutive projections  
 3. **filter-merge** - Merge consecutive filters
 4. **project-remove** - Remove identity projections
+5. **join-commute** - Swap join inputs
+6. **filter-into-join** - Merge filter into join condition
+7. **join-condition-push** - Push join predicates to inputs
+8. **join-extract-filter** - Extract join condition to filter
+9. **join-left-project-transpose** - Pull projection from left join input
+10. **join-right-project-transpose** - Pull projection from right join input
+11. **join-associate** - Restructure nested joins
 
 ## Available Tables
 
 - **emp** - Employee table (empno, ename, job, mgr, hiredate, salary, commission, deptno)
 - **dept** - Department table (deptno, dname, loc)
+- **sales** - Sales table (sale_id, product_id, quantity)
 
 ## Example Session
 

@@ -11,7 +11,8 @@ use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 use rulescript::rule::{
     RuleWrapper,
     impls::{
-        FilterIntoJoinRule, FilterMergeRule, FilterProjectTransposeRule, JoinConditionPushRule,
+        FilterIntoJoinRule, FilterMergeRule, FilterProjectTransposeRule, JoinAssociateRule,
+        JoinConditionPushRule, JoinLeftProjectTransposeRule, JoinRightProjectTransposeRule,
         ProjectMergeRule, ProjectRemoveRule,
     },
 };
@@ -125,6 +126,38 @@ impl OptimizerRepl {
                              💡 TIP: Must combine with project-remove (set 4,8) as SQL queries have a projection on top.\n\
                              💡 NOTE: Does not apply if condition is already TRUE (prevents infinite loops).",
                 example_query: "SELECT * FROM emp INNER JOIN dept ON emp.deptno = dept.deptno",
+            },
+            RuleInfo {
+                name: "join-left-project-transpose",
+                description: "Pull projection from left join input",
+                explanation: "Pulls a projection from the left input of an inner join up above the join. \
+                             Rewrites join condition to reference original left columns.\n\
+                             Pattern: Join(Inner, P(l', r), Project(f(l), left), right) → \
+                             Project(f(l), r, Join(Inner, P(f(l), r), left, right))\n\n\
+                             💡 TIP: Must combine with project-remove (set 4,9) as SQL queries have a projection on top.\n\
+                             💡 NOTE: Only applies to INNER joins on left input.",
+                example_query: "SELECT * FROM (SELECT ename, deptno FROM emp) a JOIN dept b ON a.deptno = b.deptno",
+            },
+            RuleInfo {
+                name: "join-right-project-transpose",
+                description: "Pull projection from right join input",
+                explanation: "Pulls a projection from the right input of an inner join up above the join. \
+                             Rewrites join condition to reference original right columns.\n\
+                             Pattern: Join(Inner, P(l, r'), left, Project(f(r), right)) → \
+                             Project(l, f(r), Join(Inner, P(l, f(r)), left, right))\n\n\
+                             💡 TIP: Must combine with project-remove (set 4,10) as SQL queries have a projection on top.\n\
+                             💡 NOTE: Only applies to INNER joins on right input.",
+                example_query: "SELECT * FROM emp a JOIN (SELECT deptno, dname FROM dept) b ON a.deptno = b.deptno",
+            },
+            RuleInfo {
+                name: "join-associate",
+                description: "Restructure nested joins",
+                explanation: "Changes join tree shape using associativity. Restructures nested joins \
+                             while preserving semantics.\n\
+                             Pattern: (Q0 ⋈[P0(x,y)] Q1) ⋈[P1(y,z)] Q2 → Q0 ⋈[P0(x,y)] (Q1 ⋈[P1(y,z)] Q2)\n\n\
+                             💡 NOTE: Only applies to INNER joins. Q1 is the 'pivot' table in both joins.\n\
+                             💡 NOTE: This demo only has 'emp' and 'dept' tables, so cannot demonstrate this rule.",
+                example_query: "SELECT * FROM (emp JOIN dept ON emp.deptno = dept.deptno) JOIN dept AS dept2 ON dept.deptno = dept2.deptno",
             },
         ]
     }
@@ -287,6 +320,15 @@ impl OptimizerRepl {
                 }
                 "join-extract-filter" => {
                     rules.push(Arc::new(BiasedJoinExtractFilterRule::new()));
+                }
+                "join-left-project-transpose" => {
+                    rules.push(Arc::new(RuleWrapper::new(JoinLeftProjectTransposeRule)));
+                }
+                "join-right-project-transpose" => {
+                    rules.push(Arc::new(RuleWrapper::new(JoinRightProjectTransposeRule)));
+                }
+                "join-associate" => {
+                    rules.push(Arc::new(RuleWrapper::new(JoinAssociateRule)));
                 }
                 _ => {}
             }
