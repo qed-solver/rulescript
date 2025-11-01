@@ -13,8 +13,15 @@ This directory contains concrete implementations of query optimization rules, in
 ### ProjectRemoveRule ✅
 - **File**: `project_remove.rs`
 - **Pattern**: `Project([col], source)` → `source`
-- **Status**: Fully working with tests
-- **Notes**: Uses smart column pattern matching - a single column pattern matches the full ordered list of columns. Only matches true identity projections (all columns in same order).
+- **Status**: Fully working with 6 passing tests
+- **Tests**:
+  - `test_project_remove_identity_dept` - Identity projection over table
+  - `test_project_remove_identity_emp` - Identity projection over table
+  - `test_project_remove_identity_over_join` - Identity projection over join (also serves as ProjectJoinRemoveRule)
+  - `test_no_match_reordered` - Negative test (reordered columns)
+  - `test_no_match_subset` - Negative test (subset of columns)
+  - `test_no_match_with_expressions` - Negative test (expressions)
+- **Notes**: Uses smart column pattern matching - a single column pattern matches the full ordered list of columns. Only matches true identity projections (all columns in same order). **Generic over source type** - works with any input (table, join, filter, etc.), so it also serves as ProjectJoinRemoveRule without needing a separate implementation.
 
 ### ProjectMergeRule ✅
 - **File**: `project_merge.rs`
@@ -139,10 +146,10 @@ Abstract functions bind to concrete expressions based on dependencies:
 - ❌ Not supported due to fundamental limitations
 
 ## Test Summary
-- **Total Tests**: 40
+- **Total Tests**: 41
 - **Status**: All passing ✅
 - **FilterMergeRule**: 3 tests
-- **ProjectRemoveRule**: 5 tests
+- **ProjectRemoveRule**: 6 tests (includes ProjectJoinRemoveRule case)
 - **ProjectMergeRule**: 3 tests
 - **FilterProjectTransposeRule**: 6 tests
 - **JoinCommuteRule**: 3 tests

@@ -107,4 +107,38 @@ mod tests {
         let rule = ProjectRemoveRule;
         assert!(rule.try_apply(&plan).is_err());
     }
+
+    #[test]
+    fn test_project_remove_identity_over_join() {
+        // Test with join as source (also serves as ProjectJoinRemoveRule)
+        // Identity projection over join: all columns in same order
+        use datafusion::logical_expr::JoinType;
+        
+        let emp = emp_table();
+        let dept = dept_table();
+
+        let joined = LogicalPlanBuilder::from(emp.clone())
+            .join(
+                dept.clone(),
+                JoinType::Inner,
+                (vec!["deptno"], vec!["deptno"]),
+                None,
+            )
+            .unwrap()
+            .build()
+            .unwrap();
+
+        let join_schema = joined.schema();
+        let all_cols: Vec<_> = join_schema.columns().into_iter().map(col).collect();
+        
+        let input = LogicalPlanBuilder::from(joined.clone())
+            .project(all_cols)
+            .unwrap()
+            .build()
+            .unwrap();
+
+        let rule = ProjectRemoveRule;
+        let result = rule.try_apply(&input).unwrap();
+        assert_eq!(result, joined);
+    }
 }
