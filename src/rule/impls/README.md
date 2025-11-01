@@ -36,6 +36,50 @@ This directory contains concrete implementations of query optimization rules, in
   - `test_no_match_filter_only` - Negative test
 - **Notes**: Pushes filter below projection by composing predicate with projection function. Uses nested function calls `P(f(x))` to rewrite column references through function composition mechanism. Handles both simple column projections and complex expressions.
 
+### JoinCommuteRule ✅
+- **File**: `join_commute.rs`
+- **Pattern**: `Join(Inner, P(l, r), left, right)` → `Project([l, r], Join(Inner, P(r, l), right, left))`
+- **Status**: Fully working with 3 passing tests
+- **Notes**: Swaps join inputs and adds projection to preserve output column order. Field references in join condition are swapped.
+
+### JoinConditionPushRule ✅
+- **File**: `join_condition_push.rs`
+- **Pattern**: `Join(Inner, LeftCond ∧ RightCond ∧ CrossCond, L, R)` → `Join(Inner, CrossCond, Filter(LeftCond, L), Filter(RightCond, R))`
+- **Status**: Fully working with 4 passing tests
+- **Notes**: Decomposes join condition by analyzing which predicates reference which inputs. Pushes single-table predicates down as filters.
+
+### JoinExtractFilterRule ✅
+- **File**: `join_extract_filter.rs`
+- **Pattern**: `Join(Inner, condition, L, R)` → `Filter(condition, Join(Inner, TRUE, L, R))`
+- **Status**: Fully working with 4 passing tests
+- **Notes**: Extracts join condition as filter above cartesian product. Inverse of FilterIntoJoin. Enables filter merge opportunities.
+
+### FilterIntoJoinRule ✅
+- **File**: `filter_into_join.rs`
+- **Pattern**: `Filter(pred, Join(Inner, cond, L, R))` → `Join(Inner, AND(cond, pred), L, R)`
+- **Status**: Fully working with 3 passing tests
+- **Notes**: Merges filter above join into join condition. Simple predicate merge for inner joins.
+
+### JoinLeftProjectTransposeRule ✅
+- **File**: `join_left_project_transpose.rs`
+- **Pattern**: `Join(Inner, P(l', r), Project(f(l), left), right)` → `Project(f(l), r, Join(Inner, P(f(l), r), left, right))`
+- **Status**: Fully working with 3 passing tests
+- **Tests**:
+  - `test_join_left_project_transpose_basic` - Basic projection pull-up
+  - `test_no_match_no_left_projection` - Negative test (no projection)
+  - `test_no_match_right_projection_only` - Negative test (wrong side)
+- **Notes**: Pulls projection from left input of inner join up above the join. Rewrites join condition to reference original left columns. Only applies to inner joins on left input.
+
+### JoinRightProjectTransposeRule ✅
+- **File**: `join_right_project_transpose.rs`
+- **Pattern**: `Join(Inner, P(l, r'), left, Project(f(r), right))` → `Project(l, f(r), Join(Inner, P(l, f(r)), left, right))`
+- **Status**: Fully working with 3 passing tests
+- **Tests**:
+  - `test_join_right_project_transpose_basic` - Basic projection pull-up
+  - `test_no_match_no_right_projection` - Negative test (no projection)
+  - `test_no_match_left_projection_only` - Negative test (wrong side)
+- **Notes**: Pulls projection from right input of inner join up above the join. Rewrites join condition to reference original right columns. Only applies to inner joins on right input. Mirror of JoinLeftProjectTransposeRule.
+
 ## Future Work 🔮
 
 ### ProjectFilterTranspose ⚠️ (Encodable but Limited Matcher Support)
@@ -95,12 +139,18 @@ Abstract functions bind to concrete expressions based on dependencies:
 - ❌ Not supported due to fundamental limitations
 
 ## Test Summary
-- **Total Tests**: 17
+- **Total Tests**: 40
 - **Status**: All passing ✅
 - **FilterMergeRule**: 3 tests
 - **ProjectRemoveRule**: 5 tests
 - **ProjectMergeRule**: 3 tests
-- **FilterProjectTransposeRule**: 6 tests (inspired by Calcite test cases)
+- **FilterProjectTransposeRule**: 6 tests
+- **JoinCommuteRule**: 3 tests
+- **JoinConditionPushRule**: 4 tests
+- **JoinExtractFilterRule**: 4 tests
+- **FilterIntoJoinRule**: 3 tests
+- **JoinLeftProjectTransposeRule**: 3 tests
+- **JoinRightProjectTransposeRule**: 3 tests
 
 ## Adding New Rules
 
