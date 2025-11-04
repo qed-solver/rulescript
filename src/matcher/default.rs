@@ -3,14 +3,14 @@ use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use datafusion::{
     common::{Column, JoinConstraint},
     logical_expr::{
-        BinaryExpr, Expr, Extension, Filter, Join, LogicalPlan, Operator, Projection,
+        Aggregate, BinaryExpr, Expr, Extension, Filter, Join, LogicalPlan, Operator, Projection,
         build_join_schema, expr::ScalarFunction, lit,
     },
 };
 
 use crate::ast::{
     relational::{Rel, Source},
-    scalar::Function,
+    scalar::{AggregateFunction, Function},
 };
 
 use super::{BindingConflict, PatternMatcher, RuleError};
@@ -45,6 +45,17 @@ impl DefaultMatcher {
     /// Extract an abstract Function from a ScalarFunction
     fn as_abstract_function_opt(func: &ScalarFunction) -> Option<&Function> {
         func.func.inner().as_any().downcast_ref::<Function>()
+    }
+
+    /// Extract an abstract AggregateFunction from an Expr::AggregateFunction
+    fn as_abstract_aggregate_function_opt(
+        agg_func: &datafusion::logical_expr::expr::AggregateFunction,
+    ) -> Option<&AggregateFunction> {
+        agg_func
+            .func
+            .inner()
+            .as_any()
+            .downcast_ref::<AggregateFunction>()
     }
 
     /// Extract complete filter from a join
@@ -151,12 +162,17 @@ impl DefaultMatcher {
                 self.resolve_projection(pat_proj, con_proj)
             }
 
+            // Aggregate patterns match Aggregate nodes
+            (LogicalPlan::Aggregate(pat_agg), LogicalPlan::Aggregate(con_agg)) => {
+                self.resolve_aggregate(pat_agg, con_agg)
+            }
+
             // Join patterns match Join nodes
             (LogicalPlan::Join(pat_join), LogicalPlan::Join(con_join)) => {
                 self.resolve_join(pat_join, con_join)
             }
 
-            // TODO: Add other plan types (Union, Aggregate, etc.) as needed
+            // TODO: Add other plan types (Union, etc.) as needed
 
             // Structure mismatch
             _ => Err(RuleError::StructureMismatch {
@@ -312,6 +328,95 @@ impl DefaultMatcher {
         Ok(output_context)
     }
 
+    /// Resolve an Aggregate pattern against a concrete Aggregate
+    fn resolve_aggregate(
+        &mut self,
+        pattern: &Aggregate,
+        concrete: &Aggregate,
+    ) -> Result<HashMap<Column, Vec<Column>>, RuleError> {
+        // First, recursively match the inputs
+        let input_context = self.resolve_plan(&pattern.input, &concrete.input)?;
+
+        // Partition the GROUP BY expressions
+        let group_partitions = self.partition(
+            &pattern.group_expr,
+            LogicalPlan::Aggregate(concrete.clone())
+                .schema()
+                .columns()
+                .into_iter()
+                .take(concrete.group_expr.len()) // GROUP BY columns come first
+                .zip(&concrete.group_expr),
+            |matcher, pat_expr, (_, con_expr)| {
+                matcher.resolve_expr(pat_expr, con_expr, &input_context)
+            },
+        )?;
+
+        // Partition the aggregate expressions
+        let agg_partitions = self.partition(
+            &pattern.aggr_expr,
+            LogicalPlan::Aggregate(concrete.clone())
+                .schema()
+                .columns()
+                .into_iter()
+                .skip(concrete.group_expr.len()) // Aggregate columns come after GROUP BY
+                .zip(&concrete.aggr_expr),
+            |matcher, pat_expr, (_, con_expr)| {
+                matcher.resolve_expr(pat_expr, con_expr, &input_context)
+            },
+        )?;
+
+        // Build output context: GROUP BY columns + aggregate result columns
+        let mut output_context = HashMap::new();
+
+        // Add GROUP BY columns to context
+        for (pat_col, (pat_expr, con_exprs)) in LogicalPlan::Aggregate(pattern.clone())
+            .schema()
+            .columns()
+            .into_iter()
+            .take(pattern.group_expr.len())
+            .zip(group_partitions)
+        {
+            let con_cols = con_exprs
+                .into_iter()
+                .map(|(con_col, _)| con_col.clone())
+                .collect::<Vec<_>>();
+
+            // Validate column references for GROUP BY expressions
+            if let Expr::Column(expr_col) = pat_expr {
+                let expected_cols =
+                    input_context
+                        .get(expr_col)
+                        .ok_or_else(|| RuleError::UnboundSymbol {
+                            symbol: expr_col.name.clone(),
+                        })?;
+
+                if &con_cols != expected_cols {
+                    return Err(RuleError::UnboundSymbol {
+                        symbol: expr_col.name.clone(),
+                    });
+                }
+            }
+            output_context.insert(pat_col, con_cols);
+        }
+
+        // Add aggregate result columns to context
+        for (pat_col, (_, con_exprs)) in LogicalPlan::Aggregate(pattern.clone())
+            .schema()
+            .columns()
+            .into_iter()
+            .skip(pattern.group_expr.len())
+            .zip(agg_partitions)
+        {
+            let con_cols = con_exprs
+                .into_iter()
+                .map(|(con_col, _)| con_col.clone())
+                .collect::<Vec<_>>();
+            output_context.insert(pat_col, con_cols);
+        }
+
+        Ok(output_context)
+    }
+
     /// Resolve a Join pattern against a concrete Join
     fn resolve_join(
         &mut self,
@@ -358,9 +463,27 @@ impl DefaultMatcher {
         context: &HashMap<Column, Vec<Column>>,
     ) -> Result<(), RuleError> {
         match (pattern, concrete) {
-            // Abstract function can match any expression
+            // Abstract scalar function can match any expression
             (Expr::ScalarFunction(pat_func), con_expr) => {
-                self.resolve_abstract_function(pat_func, con_expr, context)
+                // Try to get our abstract Function from the ScalarFunction
+                let abstract_func = Self::as_abstract_function_opt(pat_func).ok_or_else(|| {
+                    RuleError::ExpressionMismatch {
+                        pattern: Box::new(pattern.clone()),
+                        target: Box::new(con_expr.clone()),
+                    }
+                })?;
+                self.resolve_abstract_function(&abstract_func.name, pattern, con_expr, context)
+            }
+
+            // Abstract aggregate function can match any expression containing aggregates
+            (Expr::AggregateFunction(pat_agg), con_expr) => {
+                // Try to get our abstract AggregateFunction
+                let abstract_agg_func = Self::as_abstract_aggregate_function_opt(pat_agg)
+                    .ok_or_else(|| RuleError::ExpressionMismatch {
+                        pattern: Box::new(pattern.clone()),
+                        target: Box::new(con_expr.clone()),
+                    })?;
+                self.resolve_abstract_function(&abstract_agg_func.name, pattern, con_expr, context)
             }
 
             // Binary expressions
@@ -386,24 +509,16 @@ impl DefaultMatcher {
         }
     }
 
-    /// Resolve an abstract function against a concrete expression
+    /// Resolve an abstract function (scalar or aggregate) against a concrete expression
     fn resolve_abstract_function(
         &mut self,
-        pat_func: &ScalarFunction,
+        abstract_name: &str,
+        pattern: &Expr,
         concrete: &Expr,
         context: &HashMap<Column, Vec<Column>>,
     ) -> Result<(), RuleError> {
-        // Try to get our abstract Function from the ScalarFunction
-        let pattern_expr = Expr::ScalarFunction(pat_func.clone());
-        let abstract_func = Self::as_abstract_function_opt(pat_func).ok_or_else(|| {
-            RuleError::ExpressionMismatch {
-                pattern: Box::new(pattern_expr.clone()),
-                target: Box::new(concrete.clone()),
-            }
-        })?;
-
-        // Get pattern's column references directly from the function args (assumes well-formed pattern)
-        let pattern_columns = pattern_expr.column_refs();
+        // Get pattern's column references
+        let pattern_columns = pattern.column_refs();
 
         // Get concrete expression's column references
         let concrete_columns = concrete.column_refs();
@@ -417,9 +532,8 @@ impl DefaultMatcher {
         )?;
 
         // Bind this abstract function to the entire concrete expression
-        // Add to the list of expressions bound to this function (usually just one)
         self.functions
-            .entry(abstract_func.name.clone())
+            .entry(abstract_name.to_string())
             .or_default()
             .push(concrete.clone());
 
@@ -544,6 +658,9 @@ impl DefaultMatcher {
             // Projection: instantiate input and expressions
             LogicalPlan::Projection(projection) => self.instantiate_projection(projection),
 
+            // Aggregate: instantiate input and expressions
+            LogicalPlan::Aggregate(aggregate) => self.instantiate_aggregate(aggregate),
+
             // Join: instantiate inputs and conditions
             LogicalPlan::Join(join) => self.instantiate_join(join),
 
@@ -655,6 +772,87 @@ impl DefaultMatcher {
         Ok((plan, output_context))
     }
 
+    /// Instantiate an Aggregate node by transforming input and expressions
+    fn instantiate_aggregate(
+        &self,
+        aggregate: &Aggregate,
+    ) -> Result<(LogicalPlan, HashMap<Column, Vec<Column>>), RuleError> {
+        // First, recursively instantiate the input
+        let (input, input_context) = self.instantiate_plan(&aggregate.input)?;
+
+        // Get template output columns
+        let temp_cols = LogicalPlan::Aggregate(aggregate.clone()).schema().columns();
+
+        // Instantiate GROUP BY expressions
+        let mut all_group_exprs = Vec::new();
+        for (temp_expr, temp_col) in aggregate
+            .group_expr
+            .iter()
+            .zip(temp_cols.iter().take(aggregate.group_expr.len()))
+        {
+            all_group_exprs.extend(
+                self.instantiate_expr(temp_expr, &input_context)?
+                    .into_iter()
+                    .map(|con_expr| (temp_col.clone(), con_expr)),
+            );
+        }
+
+        // Sort group expressions by the original output column order
+        all_group_exprs.sort_by_key(|(_, con_expr)| {
+            if let Expr::Column(col) = con_expr {
+                self.output_schema
+                    .iter()
+                    .position(|output_col| output_col == col)
+            } else {
+                None
+            }
+        });
+
+        // Instantiate aggregate expressions
+        let mut all_agg_exprs = Vec::new();
+        for (temp_expr, temp_col) in aggregate
+            .aggr_expr
+            .iter()
+            .zip(temp_cols.iter().skip(aggregate.group_expr.len()))
+        {
+            all_agg_exprs.extend(
+                self.instantiate_expr(temp_expr, &input_context)?
+                    .into_iter()
+                    .map(|con_expr| (temp_col.clone(), con_expr)),
+            );
+        }
+
+        // Build new Aggregate node with instantiated components
+        let plan = LogicalPlan::Aggregate(Aggregate::try_new(
+            Arc::new(input),
+            all_group_exprs
+                .iter()
+                .map(|(_, con_expr)| con_expr)
+                .cloned()
+                .collect(),
+            all_agg_exprs
+                .iter()
+                .map(|(_, con_expr)| con_expr)
+                .cloned()
+                .collect(),
+        )?);
+
+        // Construct output context
+        let output_context = all_group_exprs
+            .into_iter()
+            .chain(all_agg_exprs)
+            .zip(plan.schema().columns())
+            .fold(
+                HashMap::<_, Vec<_>>::new(),
+                |mut context, ((temp_col, _), con_col)| {
+                    context.entry(temp_col).or_default().push(con_col);
+                    context
+                },
+            );
+
+        Ok((plan, output_context))
+    }
+
     /// Instantiate a Join node by transforming inputs and conditions
     fn instantiate_join(
         &self,
@@ -712,8 +910,23 @@ impl DefaultMatcher {
         context: &HashMap<Column, Vec<Column>>,
     ) -> Result<Vec<Expr>, RuleError> {
         match template {
-            // Abstract function: look up in bindings and return all bound expressions
-            Expr::ScalarFunction(func) => self.instantiate_abstract_function(func, context),
+            // Abstract scalar function: look up in bindings and return all bound expressions
+            Expr::ScalarFunction(func) => {
+                let abstract_func = Self::as_abstract_function_opt(func)
+                    .ok_or_else(|| RuleError::InvalidPattern {
+                        reason: format!("Concrete function '{}' found in template - only abstract functions are allowed", func.name()),
+                    })?;
+                self.instantiate_abstract_function(&abstract_func.name, &func.args, context)
+            }
+
+            // Abstract aggregate function: look up in bindings
+            Expr::AggregateFunction(agg_func) => {
+                let abstract_agg_func = Self::as_abstract_aggregate_function_opt(agg_func)
+                    .ok_or_else(|| RuleError::InvalidPattern {
+                        reason: format!("Concrete aggregate function '{}' found in template - only abstract aggregate functions are allowed", agg_func.func.name()),
+                    })?;
+                self.instantiate_abstract_function(&abstract_agg_func.name, &agg_func.params.args, context)
+            }
 
             // Binary expression: recursively instantiate operands (but stay as single expr)
             Expr::BinaryExpr(binary) => self.instantiate_binary_expr(binary, context),
@@ -732,24 +945,19 @@ impl DefaultMatcher {
         }
     }
 
-    /// Instantiate an abstract function by looking up its binding
+    /// Instantiate an abstract function (scalar or aggregate) by looking up its binding
     fn instantiate_abstract_function(
         &self,
-        func: &ScalarFunction,
+        abstract_name: &str,
+        args: &[Expr],
         context: &HashMap<Column, Vec<Column>>,
     ) -> Result<Vec<Expr>, RuleError> {
-        // Templates should only contain abstract functions, not concrete ones
-        let abstract_func = Self::as_abstract_function_opt(func)
-            .ok_or_else(|| RuleError::InvalidPattern {
-                reason: format!("Concrete function '{}' found in template - only abstract functions are allowed", func.name()),
-            })?;
-
-        // Instantiate all arguments to build the context
+        // Instantiate all arguments to build the evaluation context
         // The context maps qualified names (table_ref, column_name) to their instantiated expressions
         // Using the full qualified name ensures we can distinguish between columns with the same name
         // from different tables (e.g., emp.deptno vs dept.deptno)
         let mut eval_context: HashMap<(Option<String>, String), Expr> = HashMap::new();
-        for arg in &func.args {
+        for arg in args {
             for expr in self.instantiate_expr(arg, context)? {
                 // Use the qualified name as the key for all expressions
                 let (table_ref, name) = expr.qualified_name();
@@ -759,12 +967,11 @@ impl DefaultMatcher {
         }
 
         // Get the bound expressions for this function
-        let bound_exprs =
-            self.functions
-                .get(&abstract_func.name)
-                .ok_or_else(|| RuleError::UnboundSymbol {
-                    symbol: abstract_func.name.clone(),
-                })?;
+        let bound_exprs = self.functions.get(abstract_name).ok_or_else(|| {
+            RuleError::UnboundSymbol {
+                symbol: abstract_name.to_string(),
+            }
+        })?;
 
         // Transform each bound expression by replacing column references with context expressions
         bound_exprs

@@ -5,9 +5,8 @@ use datafusion::{
     common::Column,
     error::{DataFusionError, Result},
     logical_expr::{
-        AggregateUDF, AggregateUDFImpl, Accumulator,
-        BinaryExpr, ColumnarValue, Expr, Operator, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl,
-        Signature, Volatility, expr::ScalarFunction,
+        Accumulator, AggregateUDF, AggregateUDFImpl, BinaryExpr, ColumnarValue, Expr, Operator,
+        ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility, expr::ScalarFunction,
         function::AccumulatorArgs,
     },
     scalar::ScalarValue,

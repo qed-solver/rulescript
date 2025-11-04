@@ -5,6 +5,10 @@
       url = "github:cachix/devenv";
     };
     flake-utils.url = "github:numtide/flake-utils";
+    nix-ai-tools = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:numtide/nix-ai-tools";
+    };
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     nixpkgs-python = {
       inputs.nixpkgs.follows = "nixpkgs";
@@ -16,6 +20,7 @@
     self,
     devenv,
     flake-utils,
+    nix-ai-tools,
     nixpkgs,
     ...
   }:
@@ -23,6 +28,7 @@
       pkgs = import nixpkgs {
         inherit system;
         config.allowUnfree = true;
+        overlays = [(_: _: nix-ai-tools.packages.${system})];
       };
     in {
       packages = {
