@@ -12,8 +12,8 @@ use rulescript::rule::{
     RuleWrapper,
     impls::{
         FilterIntoJoinRule, FilterMergeRule, FilterProjectTransposeRule, JoinAssociateRule,
-        JoinConditionPushRule, JoinLeftProjectTransposeRule, JoinRightProjectTransposeRule,
-        ProjectMergeRule, ProjectRemoveRule,
+        JoinLeftConditionPushRule, JoinLeftProjectTransposeRule, JoinRightConditionPushRule,
+        JoinRightProjectTransposeRule, ProjectMergeRule, ProjectRemoveRule,
     },
 };
 use std::sync::Arc;
@@ -108,22 +108,32 @@ impl OptimizerRepl {
                 example_query: "SELECT * FROM emp INNER JOIN dept ON emp.deptno = dept.deptno WHERE emp.salary > 50000",
             },
             RuleInfo {
-                name: "join-condition-push",
-                description: "Push join predicates to inputs",
-                explanation: "Pushes single-table predicates from join condition down as filters on join inputs. \
-                             This enables earlier filtering of data before the join operation.\n\
-                             Pattern: Join(Inner, LeftCond AND RightCond AND CrossCond, L, R) → \
-                             Join(Inner, CrossCond, Filter(LeftCond, L), Filter(RightCond, R))\n\n\
-                             💡 TIP: Best combined with filter-into-join (set 6,7) to first consolidate predicates.",
-                example_query: "SELECT * FROM emp INNER JOIN dept ON emp.deptno = dept.deptno AND emp.salary > 50000 AND dept.deptno > 10",
+                name: "join-left-condition-push",
+                description: "Push left predicates to left input",
+                explanation: "Pushes left-table predicates from join condition down as filter on left input. \
+                             More flexible than join-condition-push as it doesn't require right predicates.\n\
+                             Pattern: Join(Inner, LeftCond(l) ∧ JoinCond(l, r), L, R) → \
+                             Join(Inner, JoinCond(l, r), Filter(LeftCond(l), L), R)\n\n\
+                             💡 TIP: Use when you only have left-side predicates to push.",
+                example_query: "SELECT * FROM emp INNER JOIN dept ON emp.deptno = dept.deptno AND emp.salary > 50000",
+            },
+            RuleInfo {
+                name: "join-right-condition-push",
+                description: "Push right predicates to right input",
+                explanation: "Pushes right-table predicates from join condition down as filter on right input. \
+                             More flexible than join-condition-push as it doesn't require left predicates.\n\
+                             Pattern: Join(Inner, RightCond(r) ∧ JoinCond(l, r), L, R) → \
+                             Join(Inner, JoinCond(l, r), L, Filter(RightCond(r), R))\n\n\
+                             💡 TIP: Use when you only have right-side predicates to push.",
+                example_query: "SELECT * FROM emp INNER JOIN dept ON emp.deptno = dept.deptno AND dept.deptno > 10",
             },
             RuleInfo {
                 name: "join-extract-filter",
                 description: "Extract join condition to filter",
                 explanation: "Extracts the join condition as a filter above a cartesian join. This is \
                              the inverse of filter-into-join.\n\
-                             Pattern: Join(Inner, cond, L, R) → Filter(cond, Join(Inner, TRUE, L, R))\n\n\
-                             💡 TIP: Must combine with project-remove (set 4,8) as SQL queries have a projection on top.\n\
+                              Pattern: Join(Inner, cond, L, R) → Filter(cond, Join(Inner, TRUE, L, R))\n\n\
+                             💡 TIP: Must combine with project-remove (set 4,9) as SQL queries have a projection on top.\n\
                              💡 NOTE: Does not apply if condition is already TRUE (prevents infinite loops).",
                 example_query: "SELECT * FROM emp INNER JOIN dept ON emp.deptno = dept.deptno",
             },
@@ -132,9 +142,9 @@ impl OptimizerRepl {
                 description: "Pull projection from left join input",
                 explanation: "Pulls a projection from the left input of an inner join up above the join. \
                              Rewrites join condition to reference original left columns.\n\
-                             Pattern: Join(Inner, P(l', r), Project(f(l), left), right) → \
+                              Pattern: Join(Inner, P(l', r), Project(f(l), left), right) → \
                              Project(f(l), r, Join(Inner, P(f(l), r), left, right))\n\n\
-                             💡 TIP: Must combine with project-remove (set 4,9) as SQL queries have a projection on top.\n\
+                             💡 TIP: Must combine with project-remove (set 4,10) as SQL queries have a projection on top.\n\
                              💡 NOTE: Only applies to INNER joins on left input.",
                 example_query: "SELECT * FROM (SELECT ename, deptno FROM emp) a JOIN dept b ON a.deptno = b.deptno",
             },
@@ -143,9 +153,9 @@ impl OptimizerRepl {
                 description: "Pull projection from right join input",
                 explanation: "Pulls a projection from the right input of an inner join up above the join. \
                              Rewrites join condition to reference original right columns.\n\
-                             Pattern: Join(Inner, P(l, r'), left, Project(f(r), right)) → \
+                              Pattern: Join(Inner, P(l, r'), left, Project(f(r), right)) → \
                              Project(l, f(r), Join(Inner, P(l, f(r)), left, right))\n\n\
-                             💡 TIP: Must combine with project-remove (set 4,10) as SQL queries have a projection on top.\n\
+                             💡 TIP: Must combine with project-remove (set 4,11) as SQL queries have a projection on top.\n\
                              💡 NOTE: Only applies to INNER joins on right input.",
                 example_query: "SELECT * FROM emp a JOIN (SELECT deptno, dname FROM dept) b ON a.deptno = b.deptno",
             },
@@ -155,7 +165,7 @@ impl OptimizerRepl {
                 explanation: "Changes join tree shape using associativity. Restructures nested joins \
                              while preserving semantics.\n\
                              Pattern: (Q0 ⋈[P0(x,y)] Q1) ⋈[P1(y,z)] Q2 → Q0 ⋈[P0(x,y)] (Q1 ⋈[P1(y,z)] Q2)\n\n\
-                             💡 NOTE: Only applies to INNER joins. Q1 is the 'pivot' table in both joins.\n\
+                              💡 NOTE: Only applies to INNER joins. Q1 is the 'pivot' table in both joins.\n\
                              💡 NOTE: This demo only has 'emp' and 'dept' tables, so cannot demonstrate this rule.",
                 example_query: "SELECT * FROM (emp JOIN dept ON emp.deptno = dept.deptno) JOIN dept AS dept2 ON dept.deptno = dept2.deptno",
             },
@@ -315,8 +325,12 @@ impl OptimizerRepl {
                 "filter-into-join" => {
                     rules.push(Arc::new(RuleWrapper::new(FilterIntoJoinRule)));
                 }
-                "join-condition-push" => {
-                    rules.push(Arc::new(RuleWrapper::new(JoinConditionPushRule)));
+
+                "join-left-condition-push" => {
+                    rules.push(Arc::new(RuleWrapper::new(JoinLeftConditionPushRule)));
+                }
+                "join-right-condition-push" => {
+                    rules.push(Arc::new(RuleWrapper::new(JoinRightConditionPushRule)));
                 }
                 "join-extract-filter" => {
                     rules.push(Arc::new(BiasedJoinExtractFilterRule::new()));

@@ -49,11 +49,17 @@ This directory contains concrete implementations of query optimization rules, in
 - **Status**: Fully working with 3 passing tests
 - **Notes**: Swaps join inputs and adds projection to preserve output column order. Field references in join condition are swapped.
 
-### JoinConditionPushRule ✅
-- **File**: `join_condition_push.rs`
-- **Pattern**: `Join(Inner, LeftCond ∧ RightCond ∧ CrossCond, L, R)` → `Join(Inner, CrossCond, Filter(LeftCond, L), Filter(RightCond, R))`
+### JoinLeftConditionPushRule ✅
+- **File**: `join_left_condition_push.rs`
+- **Pattern**: `Join(Inner, LeftCond(l) ∧ JoinCond(l, r), L, R)` → `Join(Inner, JoinCond(l, r), Filter(LeftCond(l), L), R)`
 - **Status**: Fully working with 4 passing tests
-- **Notes**: Decomposes join condition by analyzing which predicates reference which inputs. Pushes single-table predicates down as filters.
+- **Notes**: Pushes left-table predicates only. More flexible than JoinConditionPushRule as it doesn't require right predicates.
+
+### JoinRightConditionPushRule ✅
+- **File**: `join_right_condition_push.rs`
+- **Pattern**: `Join(Inner, RightCond(r) ∧ JoinCond(l, r), L, R)` → `Join(Inner, JoinCond(l, r), L, Filter(RightCond(r), R))`
+- **Status**: Fully working with 4 passing tests
+- **Notes**: Pushes right-table predicates only. More flexible than JoinConditionPushRule as it doesn't require left predicates.
 
 ### JoinExtractFilterRule ✅
 - **File**: `join_extract_filter.rs`
@@ -156,14 +162,15 @@ Abstract functions bind to concrete expressions based on dependencies:
 - ❌ Not supported due to fundamental limitations
 
 ## Test Summary
-- **Total Tests**: 44
+- **Total Tests**: 48
 - **Status**: All passing ✅
 - **FilterMergeRule**: 3 tests
 - **ProjectRemoveRule**: 6 tests (includes ProjectJoinRemoveRule case)
 - **ProjectMergeRule**: 3 tests
 - **FilterProjectTransposeRule**: 6 tests
 - **JoinCommuteRule**: 3 tests
-- **JoinConditionPushRule**: 4 tests
+- **JoinLeftConditionPushRule**: 4 tests
+- **JoinRightConditionPushRule**: 4 tests
 - **JoinExtractFilterRule**: 4 tests
 - **FilterIntoJoinRule**: 3 tests
 - **JoinLeftProjectTransposeRule**: 3 tests

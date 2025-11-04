@@ -42,7 +42,8 @@ The `P` and `Q` are uninterpreted predicates - they can represent ANY boolean ex
 
 **Join Rules:**
 - JoinCommuteRule - Swap join inputs
-- JoinConditionPushRule - Push join predicates down as filters
+- JoinLeftConditionPushRule - Push left-table predicates down as filter on left input
+- JoinRightConditionPushRule - Push right-table predicates down as filter on right input
 - JoinExtractFilterRule - Extract join condition as filter above join
 - FilterIntoJoinRule - Merge filter into join condition
 - JoinLeftProjectTransposeRule - Pull projection from left join input up
