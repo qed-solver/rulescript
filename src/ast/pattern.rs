@@ -14,17 +14,17 @@ use datafusion::{
 
 use crate::ast::opaque::Type;
 
-/// Function that can take a configurable number of inputs
-/// This integrates with DataFusion's scalar function system
+/// Pattern for matching scalar functions with uninterpreted symbols
+/// This integrates with DataFusion's scalar function system for pattern matching
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Function {
+pub struct ScalarPattern {
     pub name: String,
     pub input_types: Vec<Type>,
     pub return_type: Type,
     signature: Signature,
 }
 
-impl Function {
+impl ScalarPattern {
     pub fn new(name: String, input_types: Vec<Type>, return_type: Type) -> Self {
         // Create signature based on input types - all abstract types map to Binary
         let datafusion_types = vec![DataType::Binary; input_types.len()];
@@ -43,11 +43,11 @@ impl Function {
         self.input_types.len()
     }
 
-    /// Create a DataFusion Expr that calls this abstract function with given arguments
+    /// Create a DataFusion Expr that calls this pattern with given arguments
     pub fn call(&self, args: Vec<Expr>) -> Expr {
         if args.len() != self.input_types.len() {
             panic!(
-                "Function '{}' expects {} arguments, got {}",
+                "ScalarPattern '{}' expects {} arguments, got {}",
                 self.name,
                 self.input_types.len(),
                 args.len()
@@ -86,7 +86,7 @@ impl Function {
     }
 }
 
-impl ScalarUDFImpl for Function {
+impl ScalarUDFImpl for ScalarPattern {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -113,17 +113,17 @@ impl ScalarUDFImpl for Function {
     }
 }
 
-/// Abstract aggregate function for pattern matching
-/// Like Function, this is for patterns only - not concrete execution
+/// Pattern for matching aggregate functions with uninterpreted symbols
+/// Like ScalarPattern, this is for pattern matching only - not concrete execution
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct AggregateFunction {
+pub struct AggregatePattern {
     pub name: String,
     pub input_types: Vec<Type>,
     pub return_type: Type,
     signature: Signature,
 }
 
-impl AggregateFunction {
+impl AggregatePattern {
     pub fn new(name: String, input_types: Vec<Type>, return_type: Type) -> Self {
         // All abstract types map to Binary for uniformity
         let datafusion_types = vec![DataType::Binary; input_types.len()];
@@ -137,11 +137,11 @@ impl AggregateFunction {
         }
     }
 
-    /// Create a DataFusion Expr that calls this abstract aggregate function
+    /// Create a DataFusion Expr that calls this pattern with given arguments
     pub fn call(&self, args: Vec<Expr>) -> Expr {
         if args.len() != self.input_types.len() {
             panic!(
-                "Aggregate function '{}' expects {} arguments, got {}",
+                "AggregatePattern '{}' expects {} arguments, got {}",
                 self.name,
                 self.input_types.len(),
                 args.len()
@@ -153,7 +153,7 @@ impl AggregateFunction {
     }
 }
 
-impl AggregateUDFImpl for AggregateFunction {
+impl AggregateUDFImpl for AggregatePattern {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -172,7 +172,7 @@ impl AggregateUDFImpl for AggregateFunction {
 
     fn accumulator(&self, _acc_args: AccumulatorArgs) -> Result<Box<dyn Accumulator>> {
         Err(DataFusionError::NotImplemented(format!(
-            "Aggregate function '{}' is for pattern matching, not execution",
+            "AggregatePattern '{}' is for pattern matching, not execution",
             self.name
         )))
     }
@@ -192,7 +192,7 @@ impl Scalar {
         return_type: Type,
         args: Vec<Expr>,
     ) -> Self {
-        let func = Function::new(name, input_types, return_type);
+        let func = ScalarPattern::new(name, input_types, return_type);
         Self {
             expr: func.call(args),
         }
@@ -253,7 +253,7 @@ macro_rules! functions {
             @accum
             [
                 $($done)*
-                let $name = $crate::ast::scalar::Function::new(
+                let $name = $crate::ast::pattern::ScalarPattern::new(
                     stringify!($name).to_string(),
                     vec![$($crate::ast::opaque::Type::Generic {
                         id: stringify!($arg_ty).to_string(),
@@ -273,7 +273,7 @@ macro_rules! functions {
             @accum
             [
                 $($done)*
-                let $name = $crate::ast::scalar::Function::new(
+                let $name = $crate::ast::pattern::ScalarPattern::new(
                     stringify!($name).to_string(),
                     vec![$($crate::ast::opaque::Type::Generic {
                         id: stringify!($arg_ty).to_string(),
@@ -294,7 +294,7 @@ macro_rules! functions {
             @accum
             [
                 $($done)*
-                let $name = $crate::ast::scalar::Function::new(
+                let $name = $crate::ast::pattern::ScalarPattern::new(
                     stringify!($name).to_string(),
                     vec![],
                     $crate::__function_ret_type!($ret_ty),
@@ -312,7 +312,7 @@ macro_rules! functions {
             @accum
             [
                 $($done)*
-                let $name = $crate::ast::scalar::Function::new(
+                let $name = $crate::ast::pattern::ScalarPattern::new(
                     stringify!($name).to_string(),
                     vec![],
                     $crate::__function_ret_type!($ret_ty),
@@ -331,7 +331,7 @@ macro_rules! functions {
             @accum
             [
                 $($done)*
-                let $name = $crate::ast::scalar::AggregateFunction::new(
+                let $name = $crate::ast::pattern::AggregatePattern::new(
                     stringify!($name).to_string(),
                     vec![$($crate::ast::opaque::Type::Generic {
                         id: stringify!($arg_ty).to_string(),
@@ -351,7 +351,7 @@ macro_rules! functions {
             @accum
             [
                 $($done)*
-                let $name = $crate::ast::scalar::AggregateFunction::new(
+                let $name = $crate::ast::pattern::AggregatePattern::new(
                     stringify!($name).to_string(),
                     vec![$($crate::ast::opaque::Type::Generic {
                         id: stringify!($arg_ty).to_string(),
@@ -372,7 +372,7 @@ macro_rules! functions {
             @accum
             [
                 $($done)*
-                let $name = $crate::ast::scalar::AggregateFunction::new(
+                let $name = $crate::ast::pattern::AggregatePattern::new(
                     stringify!($name).to_string(),
                     vec![],
                     $crate::__function_ret_type!($ret_ty),
@@ -390,7 +390,7 @@ macro_rules! functions {
             @accum
             [
                 $($done)*
-                let $name = $crate::ast::scalar::AggregateFunction::new(
+                let $name = $crate::ast::pattern::AggregatePattern::new(
                     stringify!($name).to_string(),
                     vec![],
                     $crate::__function_ret_type!($ret_ty),

@@ -4,13 +4,15 @@ use datafusion::{
     common::{Column, JoinConstraint},
     logical_expr::{
         Aggregate, BinaryExpr, Expr, Extension, Filter, Join, LogicalPlan, Operator, Projection,
-        build_join_schema, expr::ScalarFunction, lit,
+        build_join_schema,
+        expr::{AggregateFunction, ScalarFunction},
+        lit,
     },
 };
 
 use crate::ast::{
+    pattern::{AggregatePattern, ScalarPattern},
     relational::{Rel, Source},
-    scalar::{AggregateFunction, Function},
 };
 
 use super::{BindingConflict, PatternMatcher, RuleError};
@@ -42,20 +44,18 @@ impl DefaultMatcher {
         ext.node.as_any().downcast_ref::<Source>()
     }
 
-    /// Extract an abstract Function from a ScalarFunction
-    fn as_abstract_function_opt(func: &ScalarFunction) -> Option<&Function> {
-        func.func.inner().as_any().downcast_ref::<Function>()
+    /// Extract a ScalarPattern from a DataFusion ScalarFunction
+    fn as_scalar_pattern_opt(func: &ScalarFunction) -> Option<&ScalarPattern> {
+        func.func.inner().as_any().downcast_ref::<ScalarPattern>()
     }
 
-    /// Extract an abstract AggregateFunction from an Expr::AggregateFunction
-    fn as_abstract_aggregate_function_opt(
-        agg_func: &datafusion::logical_expr::expr::AggregateFunction,
-    ) -> Option<&AggregateFunction> {
+    /// Extract an AggregatePattern from a DataFusion AggregateFunction
+    fn as_aggregate_pattern_opt(agg_func: &AggregateFunction) -> Option<&AggregatePattern> {
         agg_func
             .func
             .inner()
             .as_any()
-            .downcast_ref::<AggregateFunction>()
+            .downcast_ref::<AggregatePattern>()
     }
 
     /// Extract complete filter from a join
@@ -463,27 +463,29 @@ impl DefaultMatcher {
         context: &HashMap<Column, Vec<Column>>,
     ) -> Result<(), RuleError> {
         match (pattern, concrete) {
-            // Abstract scalar function can match any expression
+            // Scalar pattern can match any expression
             (Expr::ScalarFunction(pat_func), con_expr) => {
-                // Try to get our abstract Function from the ScalarFunction
-                let abstract_func = Self::as_abstract_function_opt(pat_func).ok_or_else(|| {
+                // Try to get our ScalarPattern from the ScalarFunction
+                let scalar_pattern = Self::as_scalar_pattern_opt(pat_func).ok_or_else(|| {
                     RuleError::ExpressionMismatch {
                         pattern: Box::new(pattern.clone()),
                         target: Box::new(con_expr.clone()),
                     }
                 })?;
-                self.resolve_abstract_function(&abstract_func.name, pattern, con_expr, context)
+                self.resolve_pattern(&scalar_pattern.name, pattern, con_expr, context)
             }
 
-            // Abstract aggregate function can match any expression containing aggregates
+            // Aggregate pattern can match any expression containing aggregates
             (Expr::AggregateFunction(pat_agg), con_expr) => {
-                // Try to get our abstract AggregateFunction
-                let abstract_agg_func = Self::as_abstract_aggregate_function_opt(pat_agg)
-                    .ok_or_else(|| RuleError::ExpressionMismatch {
-                        pattern: Box::new(pattern.clone()),
-                        target: Box::new(con_expr.clone()),
+                // Try to get our AggregatePattern
+                let aggregate_pattern =
+                    Self::as_aggregate_pattern_opt(pat_agg).ok_or_else(|| {
+                        RuleError::ExpressionMismatch {
+                            pattern: Box::new(pattern.clone()),
+                            target: Box::new(con_expr.clone()),
+                        }
                     })?;
-                self.resolve_abstract_function(&abstract_agg_func.name, pattern, con_expr, context)
+                self.resolve_pattern(&aggregate_pattern.name, pattern, con_expr, context)
             }
 
             // Binary expressions
@@ -509,10 +511,10 @@ impl DefaultMatcher {
         }
     }
 
-    /// Resolve an abstract function (scalar or aggregate) against a concrete expression
-    fn resolve_abstract_function(
+    /// Resolve a pattern (scalar or aggregate) against a concrete expression
+    fn resolve_pattern(
         &mut self,
-        abstract_name: &str,
+        pattern_name: &str,
         pattern: &Expr,
         concrete: &Expr,
         context: &HashMap<Column, Vec<Column>>,
@@ -531,9 +533,9 @@ impl DefaultMatcher {
             |matcher, pat_col, con_col| matcher.resolve_column(pat_col, con_col, context),
         )?;
 
-        // Bind this abstract function to the entire concrete expression
+        // Bind this pattern to the entire concrete expression
         self.functions
-            .entry(abstract_name.to_string())
+            .entry(pattern_name.to_string())
             .or_default()
             .push(concrete.clone());
 
@@ -563,16 +565,16 @@ impl DefaultMatcher {
                     |matcher, pat_term, con_term| matcher.resolve_expr(pat_term, con_term, context),
                 )?;
 
-                // After partition, consolidate multiple bindings for abstract functions
+                // After partition, consolidate multiple bindings for patterns
                 // that appeared in this flattened expression
                 for pat_term in &pattern_terms {
                     let Expr::ScalarFunction(func) = pat_term else {
                         continue;
                     };
-                    let Some(abstract_func) = Self::as_abstract_function_opt(func) else {
+                    let Some(scalar_pattern) = Self::as_scalar_pattern_opt(func) else {
                         continue;
                     };
-                    let Some(exprs) = self.functions.remove(&abstract_func.name) else {
+                    let Some(exprs) = self.functions.remove(&scalar_pattern.name) else {
                         continue;
                     };
 
@@ -588,7 +590,7 @@ impl DefaultMatcher {
                         })
                         .unwrap_or_default();
                     self.functions
-                        .insert(abstract_func.name.clone(), vec![combined]);
+                        .insert(scalar_pattern.name.clone(), vec![combined]);
                 }
 
                 Ok(())
@@ -903,29 +905,29 @@ impl DefaultMatcher {
     }
 
     /// Main dispatcher for instantiating expressions
-    /// Returns a Vec because abstract functions can expand to multiple expressions
+    /// Returns a Vec because patterns can expand to multiple expressions
     fn instantiate_expr(
         &self,
         template: &Expr,
         context: &HashMap<Column, Vec<Column>>,
     ) -> Result<Vec<Expr>, RuleError> {
         match template {
-            // Abstract scalar function: look up in bindings and return all bound expressions
+            // Scalar pattern: look up in bindings and return all bound expressions
             Expr::ScalarFunction(func) => {
-                let abstract_func = Self::as_abstract_function_opt(func)
+                let scalar_pattern = Self::as_scalar_pattern_opt(func)
                     .ok_or_else(|| RuleError::InvalidPattern {
-                        reason: format!("Concrete function '{}' found in template - only abstract functions are allowed", func.name()),
+                        reason: format!("Concrete function '{}' found in template - only pattern functions are allowed", func.name()),
                     })?;
-                self.instantiate_abstract_function(&abstract_func.name, &func.args, context)
+                self.instantiate_pattern(&scalar_pattern.name, &func.args, context)
             }
 
-            // Abstract aggregate function: look up in bindings
+            // Aggregate pattern: look up in bindings
             Expr::AggregateFunction(agg_func) => {
-                let abstract_agg_func = Self::as_abstract_aggregate_function_opt(agg_func)
+                let aggregate_pattern = Self::as_aggregate_pattern_opt(agg_func)
                     .ok_or_else(|| RuleError::InvalidPattern {
-                        reason: format!("Concrete aggregate function '{}' found in template - only abstract aggregate functions are allowed", agg_func.func.name()),
+                        reason: format!("Concrete aggregate function '{}' found in template - only pattern functions are allowed", agg_func.func.name()),
                     })?;
-                self.instantiate_abstract_function(&abstract_agg_func.name, &agg_func.params.args, context)
+                self.instantiate_pattern(&aggregate_pattern.name, &agg_func.params.args, context)
             }
 
             // Binary expression: recursively instantiate operands (but stay as single expr)
@@ -945,10 +947,10 @@ impl DefaultMatcher {
         }
     }
 
-    /// Instantiate an abstract function (scalar or aggregate) by looking up its binding
-    fn instantiate_abstract_function(
+    /// Instantiate a pattern (scalar or aggregate) by looking up its binding
+    fn instantiate_pattern(
         &self,
-        abstract_name: &str,
+        pattern_name: &str,
         args: &[Expr],
         context: &HashMap<Column, Vec<Column>>,
     ) -> Result<Vec<Expr>, RuleError> {
@@ -966,12 +968,13 @@ impl DefaultMatcher {
             }
         }
 
-        // Get the bound expressions for this function
-        let bound_exprs = self.functions.get(abstract_name).ok_or_else(|| {
-            RuleError::UnboundSymbol {
-                symbol: abstract_name.to_string(),
-            }
-        })?;
+        // Get the bound expressions for this pattern
+        let bound_exprs =
+            self.functions
+                .get(pattern_name)
+                .ok_or_else(|| RuleError::UnboundSymbol {
+                    symbol: pattern_name.to_string(),
+                })?;
 
         // Transform each bound expression by replacing column references with context expressions
         bound_exprs

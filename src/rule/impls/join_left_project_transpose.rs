@@ -34,7 +34,7 @@ mod tests {
         // SQL: SELECT * FROM (SELECT ename, deptno FROM emp) a JOIN dept b ON a.deptno = b.deptno
         // Pattern: Join(Project(ename, deptno, emp), dept)
         // Result: Project(ename, deptno, dept.*, Join(emp, dept))
-        
+
         let emp = emp_table();
         let dept = dept_table();
 
@@ -69,7 +69,12 @@ mod tests {
             .build()
             .unwrap();
 
-        let dept_cols: Vec<_> = dept.schema().columns().into_iter().map(|c| col(format!("dept.{}", c.name))).collect();
+        let dept_cols: Vec<_> = dept
+            .schema()
+            .columns()
+            .into_iter()
+            .map(|c| col(format!("dept.{}", c.name)))
+            .collect();
         let mut proj_exprs = vec![col("emp.ename"), col("emp.deptno")];
         proj_exprs.extend(dept_cols);
 

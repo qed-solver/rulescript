@@ -34,10 +34,10 @@ mod tests {
 
     #[test]
     fn test_join_condition_push_all_three_types() {
-        // SQL: SELECT * FROM emp JOIN dept 
+        // SQL: SELECT * FROM emp JOIN dept
         //      ON emp.deptno = dept.deptno AND emp.salary > 1000 AND dept.deptno > 10
         // Pattern: Join(emp.deptno = dept.deptno AND emp.salary > 1000 AND dept.deptno > 10, emp, dept)
-        // Result: Filter(emp.salary > 1000, emp) JOIN Filter(dept.deptno > 10, dept) 
+        // Result: Filter(emp.salary > 1000, emp) JOIN Filter(dept.deptno > 10, dept)
         //         ON emp.deptno = dept.deptno
 
         let emp = emp_table();
@@ -45,9 +45,9 @@ mod tests {
 
         // Build join with all three predicate types
         let join_cond = col("emp.deptno")
-            .eq(col("dept.deptno"))                    // Cross-table
-            .and(col("emp.salary").gt(lit(1000.0)))     // Left-only
-            .and(col("dept.deptno").gt(lit(10)));       // Right-only
+            .eq(col("dept.deptno")) // Cross-table
+            .and(col("emp.salary").gt(lit(1000.0))) // Left-only
+            .and(col("dept.deptno").gt(lit(10))); // Right-only
 
         let input = LogicalPlanBuilder::from(emp.clone())
             .join(
@@ -92,7 +92,7 @@ mod tests {
     #[test]
     fn test_join_condition_push_multiple_left_predicates() {
         // Test multiple predicates on same side
-        // SQL: SELECT * FROM sales JOIN product ON sales.product_id = product.product_id 
+        // SQL: SELECT * FROM sales JOIN product ON sales.product_id = product.product_id
         //      AND sales.sale_id > 100 AND sales.quantity > 5 AND product.price > 50
         // Pattern: Join(cross AND left1 AND left2 AND right, sales, product)
         // Result: Filter(left1 AND left2, sales) JOIN Filter(right, product) ON cross
@@ -102,10 +102,10 @@ mod tests {
 
         // Build join with multiple left-only predicates
         let join_cond = col("sales.product_id")
-            .eq(col("product.product_id"))                 // Cross-table
-            .and(col("sales.sale_id").gt(lit(100)))        // Left-only 1
-            .and(col("sales.quantity").gt(lit(5)))         // Left-only 2
-            .and(col("product.price").gt(lit(50.0)));      // Right-only
+            .eq(col("product.product_id")) // Cross-table
+            .and(col("sales.sale_id").gt(lit(100))) // Left-only 1
+            .and(col("sales.quantity").gt(lit(5))) // Left-only 2
+            .and(col("product.price").gt(lit(50.0))); // Right-only
 
         let input = LogicalPlanBuilder::from(sales.clone())
             .join(

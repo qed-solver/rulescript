@@ -34,7 +34,7 @@ mod tests {
         // Based on Calcite's testJoinAssociateRuleWithBottomAlwaysTrueCondition
         // SQL: SELECT * FROM (emp JOIN dept ON emp.deptno = dept.deptno) JOIN sales ON dept.deptno = sales.product_id
         // Pattern: ((emp JOIN dept) JOIN sales) → (emp JOIN (dept JOIN sales))
-        
+
         let emp = emp_table();
         let dept = dept_table();
         let sales = sales_table();

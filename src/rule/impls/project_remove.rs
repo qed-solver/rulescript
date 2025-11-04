@@ -16,7 +16,10 @@ crate::rule! {
 mod tests {
     use super::*;
     use crate::rule::{ApplicableRule, test::utils::*};
-    use datafusion::logical_expr::{LogicalPlanBuilder, col};
+    use datafusion::{
+        common::JoinType,
+        logical_expr::{LogicalPlanBuilder, col},
+    };
 
     #[test]
     fn test_project_remove_identity_dept() {
@@ -112,8 +115,7 @@ mod tests {
     fn test_project_remove_identity_over_join() {
         // Test with join as source (also serves as ProjectJoinRemoveRule)
         // Identity projection over join: all columns in same order
-        use datafusion::logical_expr::JoinType;
-        
+
         let emp = emp_table();
         let dept = dept_table();
 
@@ -130,7 +132,7 @@ mod tests {
 
         let join_schema = joined.schema();
         let all_cols: Vec<_> = join_schema.columns().into_iter().map(col).collect();
-        
+
         let input = LogicalPlanBuilder::from(joined.clone())
             .project(all_cols)
             .unwrap()

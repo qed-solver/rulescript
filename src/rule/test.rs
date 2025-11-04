@@ -1,6 +1,6 @@
 #[cfg(test)]
 pub mod utils {
-    use crate::ast::{opaque::Type, scalar::Function};
+    use crate::ast::{opaque::Type, pattern::ScalarPattern};
     use datafusion::{
         arrow::datatypes::{DataType, Field, Schema as ArrowSchema},
         logical_expr::{Expr, LogicalPlan, LogicalPlanBuilder, col},
@@ -119,19 +119,19 @@ pub mod utils {
     }
 
     /// Create an abstract function for testing
-    pub fn test_function(name: &str, input_type: Type, output_type: Type) -> Function {
-        Function::new(name.to_string(), vec![input_type], output_type)
+    pub fn test_function(name: &str, input_type: Type, output_type: Type) -> ScalarPattern {
+        ScalarPattern::new(name.to_string(), vec![input_type], output_type)
     }
 
     /// Create a binary predicate function
-    pub fn test_predicate(name: &str, input_type: Type) -> Function {
-        Function::new(name.to_string(), vec![input_type], Type::Boolean)
+    pub fn test_predicate(name: &str, input_type: Type) -> ScalarPattern {
+        ScalarPattern::new(name.to_string(), vec![input_type], Type::Boolean)
     }
 
     /// Build a projection with an abstract function
     pub fn project_with_function(
         input: LogicalPlan,
-        func: &Function,
+        func: &ScalarPattern,
         arg_col: &str,
         alias: &str,
     ) -> LogicalPlan {
@@ -145,7 +145,7 @@ pub mod utils {
     /// Build a filter with an abstract predicate
     pub fn filter_with_predicate(
         input: LogicalPlan,
-        pred: &Function,
+        pred: &ScalarPattern,
         arg_expr: Expr,
     ) -> LogicalPlan {
         LogicalPlanBuilder::from(input)

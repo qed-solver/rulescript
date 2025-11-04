@@ -34,7 +34,7 @@ mod tests {
         // SQL: SELECT * FROM emp a JOIN (SELECT deptno, dname FROM dept) b ON a.deptno = b.deptno
         // Pattern: Join(emp, Project(deptno, dname, dept))
         // Result: Project(emp.*, deptno, dname, Join(emp, dept))
-        
+
         let emp = emp_table();
         let dept = dept_table();
 
@@ -69,7 +69,12 @@ mod tests {
             .build()
             .unwrap();
 
-        let emp_cols: Vec<_> = emp.schema().columns().into_iter().map(|c| col(format!("emp.{}", c.name))).collect();
+        let emp_cols: Vec<_> = emp
+            .schema()
+            .columns()
+            .into_iter()
+            .map(|c| col(format!("emp.{}", c.name)))
+            .collect();
         let mut proj_exprs = emp_cols;
         proj_exprs.push(col("dept.deptno"));
         proj_exprs.push(col("dept.dname"));
@@ -119,12 +124,7 @@ mod tests {
             .unwrap();
 
         let input = LogicalPlanBuilder::from(proj_emp)
-            .join(
-                dept,
-                JoinType::Inner,
-                (vec!["empno"], vec!["deptno"]),
-                None,
-            )
+            .join(dept, JoinType::Inner, (vec!["empno"], vec!["deptno"]), None)
             .unwrap()
             .build()
             .unwrap();

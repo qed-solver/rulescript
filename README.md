@@ -69,7 +69,7 @@ src/
   ast/
     opaque.rs      - Abstract types, fields, schemas
     relational.rs  - Logical plan patterns (Source, Filter, Project, Join)
-    scalar.rs      - Abstract functions and predicates
+    pattern.rs     - Pattern functions (ScalarPattern, AggregatePattern)
   matcher/
     mod.rs         - PatternMatcher trait and error types
     default.rs     - DefaultMatcher with full pattern matching logic
