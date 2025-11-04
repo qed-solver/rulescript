@@ -81,7 +81,7 @@ mod tests {
 
     #[test]
     fn test_join_left_condition_push_multiple() {
-        // SQL: SELECT * FROM sales JOIN product 
+        // SQL: SELECT * FROM sales JOIN product
         //      ON sales.product_id = product.product_id
         //      AND sales.sale_id > 100 AND sales.quantity > 5
 

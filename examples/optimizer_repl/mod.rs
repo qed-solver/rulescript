@@ -11,9 +11,10 @@ use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 use rulescript::rule::{
     RuleWrapper,
     impls::{
-        FilterIntoJoinRule, FilterMergeRule, FilterProjectTransposeRule, JoinAssociateRule,
-        JoinLeftConditionPushRule, JoinLeftProjectTransposeRule, JoinRightConditionPushRule,
-        JoinRightProjectTransposeRule, ProjectMergeRule, ProjectRemoveRule,
+        FilterAggregateTransposeRule, FilterIntoJoinRule, FilterMergeRule,
+        FilterProjectTransposeRule, JoinAssociateRule, JoinLeftConditionPushRule,
+        JoinLeftProjectTransposeRule, JoinRightConditionPushRule, JoinRightProjectTransposeRule,
+        ProjectMergeRule, ProjectRemoveRule,
     },
 };
 use std::sync::Arc;
@@ -77,6 +78,18 @@ impl OptimizerRepl {
                              Pattern: Filter(P, Filter(Q, source)) → Filter(P AND Q, source)\n\n\
                              💡 TIP: Combine with project-remove (set 3,4) to see both rules in action.",
                 example_query: "SELECT empno, salary FROM (SELECT empno, salary FROM emp WHERE deptno = 10) WHERE salary > 50000",
+            },
+            RuleInfo {
+                name: "filter-aggregate-transpose",
+                description: "Push filter below aggregate",
+                explanation: "Pushes filter predicates below an aggregate when they only reference \
+                             GROUP BY columns. Predicates on aggregate results stay above. This enables \
+                             earlier filtering before aggregation.\n\
+                             Pattern: Filter(GroupCond(g) ∧ AggCond(g, a), Aggregate(G, A, source)) → \
+                             Filter(AggCond(g, a), Aggregate(G, A, Filter(GroupCond(g), source)))\n\n\
+                             💡 TIP: Most effective with HAVING clauses that mix GROUP BY and aggregate predicates.\n\
+                             💡 NOTE: Cannot push if aggregate has no GROUP BY (would change semantics).",
+                example_query: "SELECT deptno, SUM(salary) FROM emp GROUP BY deptno HAVING deptno = 10 AND SUM(salary) > 50000",
             },
             RuleInfo {
                 name: "project-remove",
@@ -315,6 +328,9 @@ impl OptimizerRepl {
                 }
                 "filter-merge" => {
                     rules.push(Arc::new(RuleWrapper::new(FilterMergeRule)));
+                }
+                "filter-aggregate-transpose" => {
+                    rules.push(Arc::new(RuleWrapper::new(FilterAggregateTransposeRule)));
                 }
                 "project-remove" => {
                     rules.push(Arc::new(RuleWrapper::new(ProjectRemoveRule)));

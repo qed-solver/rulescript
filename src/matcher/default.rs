@@ -5,7 +5,7 @@ use datafusion::{
     logical_expr::{
         Aggregate, BinaryExpr, Expr, Extension, Filter, Join, LogicalPlan, Operator, Projection,
         build_join_schema,
-        expr::{AggregateFunction, ScalarFunction},
+        expr::{AggregateFunction, AggregateFunctionParams, ScalarFunction},
         lit,
     },
 };
@@ -939,6 +939,12 @@ impl DefaultMatcher {
             // Literal: pass through as-is
             Expr::Literal(_, _) => Ok(vec![template.clone()]),
 
+            // Alias: instantiate inner expression without re-wrapping
+            // By symmetry with resolve_expr which unwraps aliases during matching,
+            // we should unwrap aliases during instantiation and let DataFusion
+            // generate natural column names
+            Expr::Alias(alias) => self.instantiate_expr(&alias.expr, context),
+
             // TODO: Handle other expression types as needed
             // Error on unexpected patterns instead of passing through
             other => Err(RuleError::InvalidPattern {
@@ -1022,6 +1028,49 @@ impl DefaultMatcher {
                 Ok(Expr::ScalarFunction(ScalarFunction {
                     func: func.func.clone(),
                     args: new_args,
+                }))
+            }
+            Expr::AggregateFunction(agg_func) => {
+                // Recursively replace columns in all arguments
+                let mut new_args = Vec::new();
+                for arg in &agg_func.params.args {
+                    new_args.push(self.replace_columns_with_context(arg, context)?);
+                }
+
+                // Recursively replace columns in filter if present
+                let new_filter = agg_func
+                    .params
+                    .filter
+                    .as_ref()
+                    .map(|f| self.replace_columns_with_context(f, context))
+                    .transpose()?
+                    .map(Box::new);
+
+                // Recursively replace columns in order_by expressions if present
+                let new_order_by: Result<Vec<_>, _> = agg_func
+                    .params
+                    .order_by
+                    .iter()
+                    .map(|sort_expr| {
+                        self.replace_columns_with_context(&sort_expr.expr, context)
+                            .map(|new_expr| datafusion::logical_expr::SortExpr {
+                                expr: new_expr,
+                                asc: sort_expr.asc,
+                                nulls_first: sort_expr.nulls_first,
+                            })
+                    })
+                    .collect();
+                let new_order_by = new_order_by?;
+
+                Ok(Expr::AggregateFunction(AggregateFunction {
+                    func: agg_func.func.clone(),
+                    params: AggregateFunctionParams {
+                        args: new_args,
+                        distinct: agg_func.params.distinct,
+                        filter: new_filter,
+                        order_by: new_order_by,
+                        null_treatment: agg_func.params.null_treatment,
+                    },
                 }))
             }
             Expr::Literal(value, data_type) => {

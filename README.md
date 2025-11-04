@@ -30,11 +30,12 @@ The `P` and `Q` are uninterpreted predicates - they can represent ANY boolean ex
 
 ## Current State
 
-### Implemented Rules (11 total)
+### Implemented Rules (12 total)
 
 **Filter Rules:**
 - FilterMergeRule - Merge consecutive filters
 - FilterProjectTransposeRule - Push filter below projection
+- FilterAggregateTransposeRule - Push filter predicates on GROUP BY columns below aggregate
 
 **Project Rules:**
 - ProjectMergeRule - Merge consecutive projections
@@ -50,7 +51,7 @@ The `P` and `Q` are uninterpreted predicates - they can represent ANY boolean ex
 - JoinRightProjectTransposeRule - Pull projection from right join input up
 - JoinAssociateRule - Restructure nested joins using associativity
 
-All rules have comprehensive tests (44 tests total, all passing).
+All rules have comprehensive tests (52 tests total, all passing).
 
 See `src/rule/impls/README.md` for detailed rule documentation.
 
@@ -127,7 +128,7 @@ optimizer.add_rule(Arc::new(optimizer_rule));
 cargo run --example optimizer_repl
 ```
 
-Interactive demonstration with all 11 implemented rules:
+Interactive demonstration with all 12 implemented rules:
 - Choose which rules to apply
 - See before/after query plans
 - Real SQL parsing with DataFusion
