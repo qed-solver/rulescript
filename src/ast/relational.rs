@@ -347,3 +347,47 @@ macro_rules! join {
         ).unwrap()
     };
 }
+
+/// Creates an Aggregate logical plan node
+///
+/// # Syntax
+/// ```
+/// # use rulescript::{aggregate, schema, functions};
+/// # use rulescript::ast::relational::Rel;
+/// # let source = Rel::source("table".to_string(), schema!(x: T, y: U));
+/// # functions! { agg{U} -> U }
+/// aggregate!(source, group: [x], aggs: [agg{y}]);
+/// ```
+///
+/// # Examples
+/// ```
+/// use rulescript::{aggregate, schema, functions};
+/// use rulescript::ast::relational::Rel;
+///
+/// let source = Rel::source("table".to_string(), schema!(x: T, y: U, z: V));
+/// functions! {
+///     agg1{U} -> U,
+///     agg2{U} -> U,
+///     agg3{U} -> W,
+/// }
+///
+/// // Group by with single aggregate
+/// let _plan = aggregate!(source.clone(), group: [x], aggs: [agg1{y}]);
+///
+/// // Multiple aggregates
+/// let _plan = aggregate!(source.clone(), group: [x], aggs: [agg1{y}, agg2{z}]);
+///
+/// // No grouping (global aggregate)
+/// let _plan = aggregate!(source.clone(), group: [], aggs: [agg3{y}]);
+///
+/// // With alias
+/// let _plan = aggregate!(source.clone(), group: [x], aggs: [agg1{y} as result]);
+/// ```
+#[macro_export]
+macro_rules! aggregate {
+    ($input:expr, group: [$($group:tt)*], aggs: [$($aggs:tt)*]) => {{
+        let group_expressions = $crate::__parse_exprs!($($group)*);
+        let agg_expressions = $crate::__parse_exprs!($($aggs)*);
+        $input.aggregate(group_expressions, agg_expressions).unwrap()
+    }};
+}

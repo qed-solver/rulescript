@@ -5,8 +5,10 @@ use datafusion::{
     common::Column,
     error::{DataFusionError, Result},
     logical_expr::{
+        AggregateUDF, AggregateUDFImpl, Accumulator,
         BinaryExpr, ColumnarValue, Expr, Operator, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl,
         Signature, Volatility, expr::ScalarFunction,
+        function::AccumulatorArgs,
     },
     scalar::ScalarValue,
 };
@@ -112,6 +114,71 @@ impl ScalarUDFImpl for Function {
     }
 }
 
+/// Abstract aggregate function for pattern matching
+/// Like Function, this is for patterns only - not concrete execution
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct AggregateFunction {
+    pub name: String,
+    pub input_types: Vec<Type>,
+    pub return_type: Type,
+    signature: Signature,
+}
+
+impl AggregateFunction {
+    pub fn new(name: String, input_types: Vec<Type>, return_type: Type) -> Self {
+        // All abstract types map to Binary for uniformity
+        let datafusion_types = vec![DataType::Binary; input_types.len()];
+        let signature = Signature::exact(datafusion_types, Volatility::Immutable);
+
+        Self {
+            name,
+            input_types,
+            return_type,
+            signature,
+        }
+    }
+
+    /// Create a DataFusion Expr that calls this abstract aggregate function
+    pub fn call(&self, args: Vec<Expr>) -> Expr {
+        if args.len() != self.input_types.len() {
+            panic!(
+                "Aggregate function '{}' expects {} arguments, got {}",
+                self.name,
+                self.input_types.len(),
+                args.len()
+            );
+        }
+
+        let udf = AggregateUDF::new_from_impl(self.clone());
+        udf.call(args)
+    }
+}
+
+impl AggregateUDFImpl for AggregateFunction {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok((&self.return_type).into())
+    }
+
+    fn accumulator(&self, _acc_args: AccumulatorArgs) -> Result<Box<dyn Accumulator>> {
+        Err(DataFusionError::NotImplemented(format!(
+            "Aggregate function '{}' is for pattern matching, not execution",
+            self.name
+        )))
+    }
+}
+
 /// Scalar pattern that wraps DataFusion's Expr
 #[derive(Debug, Clone)]
 pub struct Scalar {
@@ -155,7 +222,7 @@ impl Scalar {
 
 /// Declaratively define abstract functions for pattern matching
 ///
-/// Creates local variable bindings for each function.
+/// Supports both regular functions (parentheses) and aggregate functions (braces).
 ///
 /// # Examples
 /// ```
@@ -164,31 +231,181 @@ impl Scalar {
 /// functions! {
 ///     P(T) -> Bool,           // Predicate on type T
 ///     f(T) -> U,              // Transform from T to U
-///     g(U, V) -> W,           // Binary function
+///     SUM{T} -> U,            // Aggregate function
+///     COUNT{} -> Int,         // Aggregate with no args
 /// }
-/// // After expansion, P, f, and g are available as variables
-/// assert_eq!(P.name, "P");
-/// assert_eq!(f.name, "f");
-/// assert_eq!(g.name, "g");
 /// ```
 #[macro_export]
 macro_rules! functions {
-    // Empty case - no functions to define
+    // Base case: empty
+    (@accum [$($done:tt)*] []) => {
+        $($done)*
+    };
+
+    // Empty functions block
     {} => {};
 
-    // One or more functions with comma separation
+    // Regular function with args and comma: Name(Args) -> RetType,
+    (@accum [$($done:tt)*] [
+        $name:ident($($arg_ty:ident),+ $(,)?) -> $ret_ty:tt
+        , $($rest:tt)*
+    ]) => {
+        $crate::functions!(
+            @accum
+            [
+                $($done)*
+                let $name = $crate::ast::scalar::Function::new(
+                    stringify!($name).to_string(),
+                    vec![$($crate::ast::opaque::Type::Generic {
+                        id: stringify!($arg_ty).to_string(),
+                    }),+],
+                    $crate::__function_ret_type!($ret_ty),
+                );
+            ]
+            [$($rest)*]
+        );
+    };
+
+    // Regular function with args, last item: Name(Args) -> RetType
+    (@accum [$($done:tt)*] [
+        $name:ident($($arg_ty:ident),+ $(,)?) -> $ret_ty:tt
+    ]) => {
+        $crate::functions!(
+            @accum
+            [
+                $($done)*
+                let $name = $crate::ast::scalar::Function::new(
+                    stringify!($name).to_string(),
+                    vec![$($crate::ast::opaque::Type::Generic {
+                        id: stringify!($arg_ty).to_string(),
+                    }),+],
+                    $crate::__function_ret_type!($ret_ty),
+                );
+            ]
+            []
+        );
+    };
+
+    // Regular function no args with comma: Name() -> RetType,
+    (@accum [$($done:tt)*] [
+        $name:ident() -> $ret_ty:tt
+        , $($rest:tt)*
+    ]) => {
+        $crate::functions!(
+            @accum
+            [
+                $($done)*
+                let $name = $crate::ast::scalar::Function::new(
+                    stringify!($name).to_string(),
+                    vec![],
+                    $crate::__function_ret_type!($ret_ty),
+                );
+            ]
+            [$($rest)*]
+        );
+    };
+
+    // Regular function no args, last item: Name() -> RetType
+    (@accum [$($done:tt)*] [
+        $name:ident() -> $ret_ty:tt
+    ]) => {
+        $crate::functions!(
+            @accum
+            [
+                $($done)*
+                let $name = $crate::ast::scalar::Function::new(
+                    stringify!($name).to_string(),
+                    vec![],
+                    $crate::__function_ret_type!($ret_ty),
+                );
+            ]
+            []
+        );
+    };
+
+    // Aggregate function with args and comma: Name{Args} -> RetType,
+    (@accum [$($done:tt)*] [
+        $name:ident{$($arg_ty:ident),+ $(,)?} -> $ret_ty:tt
+        , $($rest:tt)*
+    ]) => {
+        $crate::functions!(
+            @accum
+            [
+                $($done)*
+                let $name = $crate::ast::scalar::AggregateFunction::new(
+                    stringify!($name).to_string(),
+                    vec![$($crate::ast::opaque::Type::Generic {
+                        id: stringify!($arg_ty).to_string(),
+                    }),+],
+                    $crate::__function_ret_type!($ret_ty),
+                );
+            ]
+            [$($rest)*]
+        );
+    };
+
+    // Aggregate function with args, last item: Name{Args} -> RetType
+    (@accum [$($done:tt)*] [
+        $name:ident{$($arg_ty:ident),+ $(,)?} -> $ret_ty:tt
+    ]) => {
+        $crate::functions!(
+            @accum
+            [
+                $($done)*
+                let $name = $crate::ast::scalar::AggregateFunction::new(
+                    stringify!($name).to_string(),
+                    vec![$($crate::ast::opaque::Type::Generic {
+                        id: stringify!($arg_ty).to_string(),
+                    }),+],
+                    $crate::__function_ret_type!($ret_ty),
+                );
+            ]
+            []
+        );
+    };
+
+    // Aggregate function no args with comma: Name{} -> RetType,
+    (@accum [$($done:tt)*] [
+        $name:ident{} -> $ret_ty:tt
+        , $($rest:tt)*
+    ]) => {
+        $crate::functions!(
+            @accum
+            [
+                $($done)*
+                let $name = $crate::ast::scalar::AggregateFunction::new(
+                    stringify!($name).to_string(),
+                    vec![],
+                    $crate::__function_ret_type!($ret_ty),
+                );
+            ]
+            [$($rest)*]
+        );
+    };
+
+    // Aggregate function no args, last item: Name{} -> RetType
+    (@accum [$($done:tt)*] [
+        $name:ident{} -> $ret_ty:tt
+    ]) => {
+        $crate::functions!(
+            @accum
+            [
+                $($done)*
+                let $name = $crate::ast::scalar::AggregateFunction::new(
+                    stringify!($name).to_string(),
+                    vec![],
+                    $crate::__function_ret_type!($ret_ty),
+                );
+            ]
+            []
+        );
+    };
+
+    // Entry point: start with empty accumulator
     {
-        $($name:ident($($arg_ty:ident),+ $(,)?) -> $ret_ty:tt),+ $(,)?
+        $($func:tt)*
     } => {
-        $(
-            let $name = $crate::ast::scalar::Function::new(
-                stringify!($name).to_string(),
-                vec![$($crate::ast::opaque::Type::Generic {
-                    id: stringify!($arg_ty).to_string(),
-                }),+],
-                $crate::__function_ret_type!($ret_ty),
-            );
-        )+
+        $crate::functions!(@accum [] [$($func)*]);
     };
 }
 
@@ -222,6 +439,11 @@ macro_rules! __parse_exprs {
     // Done processing: return accumulated results
     (@accum [$($result:expr),*] []) => { vec![$($result),*] };
 
+    // Munch: aggregate function call with alias (with optional comma + rest)
+    (@accum [$($result:expr),*] [$func:ident{$($args:tt)*} as $alias:ident $(, $($rest:tt)*)?]) => {
+        $crate::__parse_exprs!(@accum [$($result,)* $crate::__parse_expr!($func{$($args)*}).alias(stringify!($alias))] [$($($rest)*)?])
+    };
+
     // Munch: function call with alias (with optional comma + rest)
     (@accum [$($result:expr),*] [$func:ident($($args:tt)*) as $alias:ident $(, $($rest:tt)*)?]) => {
         $crate::__parse_exprs!(@accum [$($result,)* $crate::__parse_expr!($func($($args)*)).alias(stringify!($alias))] [$($($rest)*)?])
@@ -230,6 +452,11 @@ macro_rules! __parse_exprs {
     // Munch: identifier with alias (with optional comma + rest)
     (@accum [$($result:expr),*] [$id:ident as $alias:ident $(, $($rest:tt)*)?]) => {
         $crate::__parse_exprs!(@accum [$($result,)* datafusion::prelude::col(stringify!($id)).alias(stringify!($alias))] [$($($rest)*)?])
+    };
+
+    // Munch: aggregate function call (with optional comma + rest)
+    (@accum [$($result:expr),*] [$func:ident{$($args:tt)*} $(, $($rest:tt)*)?]) => {
+        $crate::__parse_exprs!(@accum [$($result,)* $crate::__parse_expr!($func{$($args)*})] [$($($rest)*)?])
     };
 
     // Munch: function call (with optional comma + rest)
@@ -253,6 +480,11 @@ macro_rules! __parse_exprs {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __parse_expr {
+    // Aggregate function call: SUM{x}, AVG{salary}, etc.
+    ($func:ident{$($inside:tt)*}) => {
+        $func.call($crate::__parse_exprs!($($inside)*))
+    };
+
     // Function call: f(x), g(f(x)), etc.
     ($func:ident($($inside:tt)*)) => {
         $func.call($crate::__parse_exprs!($($inside)*))
