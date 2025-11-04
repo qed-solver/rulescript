@@ -14,7 +14,7 @@ use rulescript::rule::{
         FilterAggregateTransposeRule, FilterIntoJoinRule, FilterMergeRule,
         FilterProjectTransposeRule, JoinAssociateRule, JoinLeftConditionPushRule,
         JoinLeftProjectTransposeRule, JoinRightConditionPushRule, JoinRightProjectTransposeRule,
-        ProjectMergeRule, ProjectRemoveRule,
+        LeftSemiJoinFilterTransposeRule, ProjectMergeRule, ProjectRemoveRule,
     },
 };
 use std::sync::Arc;
@@ -76,7 +76,7 @@ impl OptimizerRepl {
                 explanation: "Combines two consecutive filter operations into a single filter with \
                              an AND condition. This reduces the number of operators in the plan.\n\
                              Pattern: Filter(P, Filter(Q, source)) → Filter(P AND Q, source)\n\n\
-                             💡 TIP: Combine with project-remove (set 3,4) to see both rules in action.",
+                             💡 TIP: Combine with project-remove to see both rules in action.",
                 example_query: "SELECT empno, salary FROM (SELECT empno, salary FROM emp WHERE deptno = 10) WHERE salary > 50000",
             },
             RuleInfo {
@@ -106,7 +106,7 @@ impl OptimizerRepl {
                              projection to preserve the original column order. This enables other \
                              optimizations and can improve join performance.\n\
                              Pattern: Join(Inner, P(l, r), left, right) → Project([l, r], Join(Inner, P(r, l), right, left))\n\n\
-                             💡 TIP: Must combine with project-remove (set 4,5) as SQL queries have a projection on top.\n\
+                             💡 TIP: Must combine with project-remove as SQL queries have a projection on top.\n\
                              💡 NOTE: Uses lexicographic bias to prevent infinite loops - only swaps when left > right.",
                 example_query: "SELECT * FROM emp INNER JOIN dept ON emp.deptno = dept.deptno",
             },
@@ -146,7 +146,7 @@ impl OptimizerRepl {
                 explanation: "Extracts the join condition as a filter above a cartesian join. This is \
                              the inverse of filter-into-join.\n\
                               Pattern: Join(Inner, cond, L, R) → Filter(cond, Join(Inner, TRUE, L, R))\n\n\
-                             💡 TIP: Must combine with project-remove (set 4,9) as SQL queries have a projection on top.\n\
+                             💡 TIP: Must combine with project-remove as SQL queries have a projection on top.\n\
                              💡 NOTE: Does not apply if condition is already TRUE (prevents infinite loops).",
                 example_query: "SELECT * FROM emp INNER JOIN dept ON emp.deptno = dept.deptno",
             },
@@ -157,7 +157,7 @@ impl OptimizerRepl {
                              Rewrites join condition to reference original left columns.\n\
                               Pattern: Join(Inner, P(l', r), Project(f(l), left), right) → \
                              Project(f(l), r, Join(Inner, P(f(l), r), left, right))\n\n\
-                             💡 TIP: Must combine with project-remove (set 4,10) as SQL queries have a projection on top.\n\
+                             💡 TIP: Must combine with project-remove as SQL queries have a projection on top.\n\
                              💡 NOTE: Only applies to INNER joins on left input.",
                 example_query: "SELECT * FROM (SELECT ename, deptno FROM emp) a JOIN dept b ON a.deptno = b.deptno",
             },
@@ -168,7 +168,7 @@ impl OptimizerRepl {
                              Rewrites join condition to reference original right columns.\n\
                               Pattern: Join(Inner, P(l, r'), left, Project(f(r), right)) → \
                              Project(l, f(r), Join(Inner, P(l, f(r)), left, right))\n\n\
-                             💡 TIP: Must combine with project-remove (set 4,11) as SQL queries have a projection on top.\n\
+                             💡 TIP: Must combine with project-remove as SQL queries have a projection on top.\n\
                              💡 NOTE: Only applies to INNER joins on right input.",
                 example_query: "SELECT * FROM emp a JOIN (SELECT deptno, dname FROM dept) b ON a.deptno = b.deptno",
             },
@@ -181,6 +181,17 @@ impl OptimizerRepl {
                               💡 NOTE: Only applies to INNER joins. Q1 is the 'pivot' table in both joins.\n\
                              💡 NOTE: This demo only has 'emp' and 'dept' tables, so cannot demonstrate this rule.",
                 example_query: "SELECT * FROM (emp JOIN dept ON emp.deptno = dept.deptno) JOIN dept AS dept2 ON dept.deptno = dept2.deptno",
+            },
+            RuleInfo {
+                name: "left-semi-join-filter-transpose",
+                description: "Pull filter above left semi-join",
+                explanation: "Pulls a filter from the left input of a LeftSemi join up above the join. \
+                             This exposes the semi-join to other optimization rules.\n\
+                             Pattern: LeftSemi(Filter(X), Y) → Filter(LeftSemi(X, Y))\n\n\
+                             💡 TIP: Must combine with project-remove as SQL queries have a projection on top.\n\
+                             💡 NOTE: LeftSemi joins are used for IN/EXISTS subqueries.\n\
+                             💡 NOTE: The filter only references columns from the left side, which is preserved in the result.",
+                example_query: "SELECT * FROM emp WHERE deptno IN (SELECT deptno FROM dept) AND salary > 50000",
             },
         ]
     }
@@ -359,6 +370,9 @@ impl OptimizerRepl {
                 }
                 "join-associate" => {
                     rules.push(Arc::new(RuleWrapper::new(JoinAssociateRule)));
+                }
+                "left-semi-join-filter-transpose" => {
+                    rules.push(Arc::new(RuleWrapper::new(LeftSemiJoinFilterTransposeRule)));
                 }
                 _ => {}
             }

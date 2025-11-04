@@ -13,6 +13,7 @@ pub mod join_left_condition_push;
 pub mod join_left_project_transpose;
 pub mod join_right_condition_push;
 pub mod join_right_project_transpose;
+pub mod left_semi_join_filter_transpose;
 pub mod project_merge;
 pub mod project_remove;
 
@@ -27,5 +28,6 @@ pub use join_left_condition_push::JoinLeftConditionPushRule;
 pub use join_left_project_transpose::JoinLeftProjectTransposeRule;
 pub use join_right_condition_push::JoinRightConditionPushRule;
 pub use join_right_project_transpose::JoinRightProjectTransposeRule;
+pub use left_semi_join_filter_transpose::LeftSemiJoinFilterTransposeRule;
 pub use project_merge::ProjectMergeRule;
 pub use project_remove::ProjectRemoveRule;
