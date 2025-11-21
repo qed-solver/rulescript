@@ -1,5 +1,6 @@
 // Permutes the inputs to a join, swapping left and right sides
-// Pattern: Join(Inner, P(l, r), left, right) → Project([l, r], Join(Inner, P(r, l), right, left))
+// Pattern: Join(Inner, P(l, r), left, right) → Project([l, r], Join(Inner, P(l, r), right, left))
+// Note: Predicate arguments maintain their semantic order (l, r) even though physical inputs swap
 crate::rule! {
     JoinCommuteRule {
         schemas: {
@@ -11,7 +12,7 @@ crate::rule! {
         },
         from: crate::join!(left, right, Inner, P(l, r)),
         to: {
-            let swapped_join = crate::join!(right, left, Inner, P(r, l));
+            let swapped_join = crate::join!(right, left, Inner, P(l, r));
             crate::project!(swapped_join, [l, r])
         },
     }
