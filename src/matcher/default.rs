@@ -11,8 +11,10 @@ use datafusion::{
 };
 
 use crate::ast::{
+    extension::UserDefinedLogicalPattern,
     pattern::{AggregatePattern, ScalarPattern},
-    relational::{Rel, Source},
+    relational::Rel,
+    source::Source,
 };
 
 use super::{BindingConflict, PatternMatcher, RuleError};
@@ -37,11 +39,44 @@ impl DefaultMatcher {
         Self::default()
     }
 
+    // ===== PUBLIC METHODS FOR USER-DEFINED OPERATORS =====
+
+    /// Store context for a user-defined pattern
+    ///
+    /// This is used by user-defined operator implementations to store their
+    /// output column mappings after resolution.
+    pub fn store_user_defined_context(
+        &mut self,
+        pattern: &UserDefinedLogicalPattern,
+        plan: LogicalPlan,
+        context: HashMap<Column, Vec<Column>>,
+    ) {
+        self.sources.insert(pattern.id(), (plan, context));
+    }
+
+    /// Retrieve stored context for a user-defined pattern
+    ///
+    /// This is used by user-defined operator implementations to retrieve
+    /// their previously stored context during instantiation.
+    pub fn retrieve_user_defined_context(
+        &self,
+        pattern: &UserDefinedLogicalPattern,
+    ) -> Option<&(LogicalPlan, HashMap<Column, Vec<Column>>)> {
+        self.sources.get(&pattern.id())
+    }
+
     // ===== HELPER METHODS =====
 
     /// Extract a Source from an Extension node
     fn as_source_opt(ext: &Extension) -> Option<&Source> {
         ext.node.as_any().downcast_ref::<Source>()
+    }
+
+    /// Extract a UserDefinedLogicalPattern from an Extension node
+    fn as_user_defined_pattern(ext: &Extension) -> Option<&UserDefinedLogicalPattern> {
+        ext.node
+            .as_any()
+            .downcast_ref::<UserDefinedLogicalPattern>()
     }
 
     /// Extract a ScalarPattern from a DataFusion ScalarFunction
@@ -136,20 +171,30 @@ impl DefaultMatcher {
     // ===== RESOLUTION METHODS =====
 
     /// Main dispatcher for resolving pattern plans against concrete plans
-    fn resolve_plan(
+    ///
+    /// This is public so user-defined operators can resolve sub-patterns and get output contexts.
+    pub fn resolve_plan(
         &mut self,
         pattern: &LogicalPlan,
         concrete: &LogicalPlan,
     ) -> Result<HashMap<Column, Vec<Column>>, RuleError> {
         match (pattern, concrete) {
-            // Source pattern can match any plan with compatible schema
+            // Extension nodes can be Source or UserDefinedLogicalPattern
             (LogicalPlan::Extension(ext), con_plan) => {
-                let pat_source =
-                    Self::as_source_opt(ext).ok_or_else(|| RuleError::StructureMismatch {
+                // Try Source first (existing behavior)
+                if let Some(source) = Self::as_source_opt(ext) {
+                    self.resolve_source(source, con_plan)
+                }
+                // Try UserDefinedLogicalPattern
+                else if let Some(user_pattern) = Self::as_user_defined_pattern(ext) {
+                    // TODO: Implement resolve_user_defined
+                    self.resolve_user_defined(user_pattern, con_plan)
+                } else {
+                    Err(RuleError::StructureMismatch {
                         pattern: Box::new(pattern.clone()),
                         target: Box::new(concrete.clone()),
-                    })?;
-                self.resolve_source(pat_source, con_plan)
+                    })
+                }
             }
 
             // Filter patterns match Filter nodes
@@ -256,6 +301,28 @@ impl DefaultMatcher {
         );
 
         Ok(context)
+    }
+
+    /// Resolve a UserDefinedLogicalPattern against concrete plan
+    fn resolve_user_defined(
+        &mut self,
+        pattern: &UserDefinedLogicalPattern,
+        concrete: &LogicalPlan,
+    ) -> Result<HashMap<Column, Vec<Column>>, RuleError> {
+        // Delegate to user implementation (must store context via store_user_defined_context)
+        pattern.implementation().resolve(pattern, concrete, self)?;
+
+        // Retrieve the stored context
+        let (_plan, context) = self.retrieve_user_defined_context(pattern).ok_or_else(|| {
+            RuleError::UnboundSymbol {
+                symbol: format!(
+                    "user-defined pattern '{}' did not store context during resolve",
+                    pattern.implementation().operator_name()
+                ),
+            }
+        })?;
+
+        Ok(context.clone())
     }
 
     /// Resolve a Filter pattern against a concrete Filter
@@ -456,7 +523,9 @@ impl DefaultMatcher {
     }
 
     /// Main dispatcher for resolving expressions
-    fn resolve_expr(
+    ///
+    /// This is public so user-defined operators can resolve expressions within a given context.
+    pub fn resolve_expr(
         &mut self,
         pattern: &Expr,
         concrete: &Expr,
@@ -638,20 +707,28 @@ impl DefaultMatcher {
     // ===== INSTANTIATION METHODS =====
 
     /// Main dispatcher for instantiating plans
-    fn instantiate_plan(
-        &self,
+    ///
+    /// This is public so user-defined operators can instantiate sub-patterns and get output contexts.
+    pub fn instantiate_plan(
+        &mut self,
         template: &LogicalPlan,
     ) -> Result<(LogicalPlan, HashMap<Column, Vec<Column>>), RuleError> {
         match template {
-            // Source pattern: look up the bound concrete plan
+            // Extension nodes can be Source or UserDefinedLogicalPattern
             LogicalPlan::Extension(ext) => {
-                let source = Self::as_source_opt(ext).ok_or_else(|| RuleError::InvalidPattern {
-                    reason: format!(
-                        "Unexpected extension node in template: {:?}",
-                        ext.node.name()
-                    ),
-                })?;
-                self.instantiate_source(source)
+                // Try Source first
+                if let Some(source) = Self::as_source_opt(ext) {
+                    self.instantiate_source(source)
+                }
+                // Try UserDefinedLogicalPattern
+                else if let Some(user_pattern) = Self::as_user_defined_pattern(ext) {
+                    // TODO: Implement instantiate_user_defined
+                    self.instantiate_user_defined(user_pattern)
+                } else {
+                    Err(RuleError::InvalidPattern {
+                        reason: format!("Unknown extension node: {}", ext.node.name()),
+                    })
+                }
             }
 
             // Filter: instantiate input and predicate
@@ -677,7 +754,7 @@ impl DefaultMatcher {
 
     /// Instantiate a Source pattern by looking up the bound plan
     fn instantiate_source(
-        &self,
+        &mut self,
         source: &Source,
     ) -> Result<(LogicalPlan, HashMap<Column, Vec<Column>>), RuleError> {
         // Look up the source by table name in our bindings
@@ -689,9 +766,31 @@ impl DefaultMatcher {
             })
     }
 
+    /// Instantiate a UserDefinedLogicalPattern
+    fn instantiate_user_defined(
+        &mut self,
+        pattern: &UserDefinedLogicalPattern,
+    ) -> Result<(LogicalPlan, HashMap<Column, Vec<Column>>), RuleError> {
+        // Delegate to user implementation
+        let plan = pattern.implementation().instantiate(self)?;
+
+        // Retrieve the stored context from resolution
+        let (_stored_plan, context) =
+            self.retrieve_user_defined_context(pattern).ok_or_else(|| {
+                RuleError::UnboundSymbol {
+                    symbol: format!(
+                        "user-defined pattern '{}' context not found during instantiate",
+                        pattern.implementation().operator_name()
+                    ),
+                }
+            })?;
+
+        Ok((plan, context.clone()))
+    }
+
     /// Instantiate a Filter node by transforming input and predicate
     fn instantiate_filter(
-        &self,
+        &mut self,
         filter: &Filter,
     ) -> Result<(LogicalPlan, HashMap<Column, Vec<Column>>), RuleError> {
         // First, recursively instantiate the input
@@ -715,7 +814,7 @@ impl DefaultMatcher {
 
     /// Instantiate a Projection node by transforming input and expressions
     fn instantiate_projection(
-        &self,
+        &mut self,
         projection: &Projection,
     ) -> Result<(LogicalPlan, HashMap<Column, Vec<Column>>), RuleError> {
         // First, recursively instantiate the input
@@ -776,7 +875,7 @@ impl DefaultMatcher {
 
     /// Instantiate an Aggregate node by transforming input and expressions
     fn instantiate_aggregate(
-        &self,
+        &mut self,
         aggregate: &Aggregate,
     ) -> Result<(LogicalPlan, HashMap<Column, Vec<Column>>), RuleError> {
         // First, recursively instantiate the input
@@ -857,7 +956,7 @@ impl DefaultMatcher {
 
     /// Instantiate a Join node by transforming inputs and conditions
     fn instantiate_join(
-        &self,
+        &mut self,
         join: &Join,
     ) -> Result<(LogicalPlan, HashMap<Column, Vec<Column>>), RuleError> {
         // Recursively instantiate left and right inputs
@@ -906,7 +1005,9 @@ impl DefaultMatcher {
 
     /// Main dispatcher for instantiating expressions
     /// Returns a Vec because patterns can expand to multiple expressions
-    fn instantiate_expr(
+    ///
+    /// This is public so user-defined operators can instantiate expressions.
+    pub fn instantiate_expr(
         &self,
         template: &Expr,
         context: &HashMap<Column, Vec<Column>>,
@@ -1253,8 +1354,16 @@ impl PatternMatcher for DefaultMatcher {
         Ok(())
     }
 
-    fn instantiate(&self, template: &Rel) -> Result<LogicalPlan, RuleError> {
+    fn instantiate(&mut self, template: &Rel) -> Result<LogicalPlan, RuleError> {
         let (plan, _) = self.instantiate_plan(&template.plan)?;
         Ok(plan)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }

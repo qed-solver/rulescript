@@ -1,5 +1,7 @@
 mod default;
 
+use std::any::Any;
+
 pub use default::DefaultMatcher;
 
 use datafusion::{
@@ -16,7 +18,13 @@ pub trait PatternMatcher {
     fn resolve(&mut self, pattern: &Rel, concrete: &LogicalPlan) -> Result<(), RuleError>;
 
     /// Instantiate a template using internal bindings
-    fn instantiate(&self, template: &Rel) -> Result<LogicalPlan, RuleError>;
+    fn instantiate(&mut self, template: &Rel) -> Result<LogicalPlan, RuleError>;
+
+    /// Downcast to `&dyn Any` for accessing implementation-specific methods
+    fn as_any(&self) -> &dyn Any;
+
+    /// Downcast to `&mut dyn Any` for accessing implementation-specific methods
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 /// Errors that can occur during pattern matching and rule application

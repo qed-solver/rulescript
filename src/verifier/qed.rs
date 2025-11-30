@@ -4,11 +4,15 @@ use serde_json::Value;
 use datafusion::{
     arrow::datatypes::DataType,
     common::DFSchemaRef,
-    logical_expr::{Aggregate, Expr, Filter, Join, JoinType, LogicalPlan, Operator, Projection, Union},
+    logical_expr::{
+        Aggregate, Expr, Filter, Join, JoinType, LogicalPlan, Operator, Projection, Union,
+    },
 };
 
 use crate::{
-    ast::{opaque::Type, pattern::ScalarPattern, relational::Source},
+    ast::{
+        extension::UserDefinedLogicalPattern, opaque::Type, pattern::ScalarPattern, source::Source,
+    },
     rule::RewriteRule,
 };
 
@@ -64,9 +68,7 @@ impl Default for QedSerializer {
 
 impl QedSerializer {
     pub fn new() -> Self {
-        Self {
-            tables: Vec::new(),
-        }
+        Self { tables: Vec::new() }
     }
 
     fn resolve_table(&mut self, source: &Source) -> usize {
@@ -91,11 +93,8 @@ impl QedSerializer {
             .iter()
             .map(|table| {
                 let schema = table.schema.as_ref();
-                let fields: Vec<String> = schema
-                    .fields()
-                    .iter()
-                    .map(|f| f.name().clone())
-                    .collect();
+                let fields: Vec<String> =
+                    schema.fields().iter().map(|f| f.name().clone()).collect();
 
                 let types: Vec<String> = schema
                     .fields()
@@ -103,11 +102,7 @@ impl QedSerializer {
                     .map(|f| self.datatype_to_string(f.data_type()))
                     .collect();
 
-                let nullable: Vec<bool> = schema
-                    .fields()
-                    .iter()
-                    .map(|f| f.is_nullable())
-                    .collect();
+                let nullable: Vec<bool> = schema.fields().iter().map(|f| f.is_nullable()).collect();
 
                 QedSchema {
                     name: table.name.clone(),
@@ -137,11 +132,21 @@ impl QedSerializer {
     }
 
     fn serialize_rel(&mut self, plan: &LogicalPlan) -> Result<SerializedRel, QedError> {
+        self.serialize_rel_with_outer_columns(plan, &[])
+    }
+
+    fn serialize_rel_with_outer_columns(
+        &mut self,
+        plan: &LogicalPlan,
+        outer_columns: &[ColumnInfo],
+    ) -> Result<SerializedRel, QedError> {
         match plan {
             LogicalPlan::Extension(ext) => {
                 if let Some(source) = ext.node.as_any().downcast_ref::<Source>() {
                     let idx = self.resolve_table(source);
-                    let columns = source.schema.to_datafusion_schema()
+                    let columns = source
+                        .schema
+                        .to_datafusion_schema()
                         .fields()
                         .iter()
                         .map(|f| ColumnInfo {
@@ -153,27 +158,48 @@ impl QedSerializer {
                         json: serde_json::json!({"scan": idx}),
                         columns,
                     })
+                } else if let Some(ud_pattern) = ext
+                    .node
+                    .as_any()
+                    .downcast_ref::<UserDefinedLogicalPattern>()
+                {
+                    // For user-defined operators, serialize their semantics
+                    // The semantics represent the operator in terms of standard relational algebra
+                    self.serialize_rel_with_outer_columns(
+                        ud_pattern.implementation().semantics(),
+                        outer_columns,
+                    )
                 } else {
                     Err(QedError::UnsupportedPlan(
                         "Unknown extension type".to_string(),
                     ))
                 }
             }
-            LogicalPlan::Filter(filter) => self.serialize_filter(filter),
-            LogicalPlan::Projection(proj) => self.serialize_projection(proj),
-            LogicalPlan::Join(join) => self.serialize_join(join),
-            LogicalPlan::Aggregate(agg) => self.serialize_aggregate(agg),
-            LogicalPlan::Union(union) => self.serialize_union(union),
-            _ => Err(QedError::UnsupportedPlan(format!(
-                "{}",
-                plan.display()
-            ))),
+            LogicalPlan::Filter(filter) => self.serialize_filter(filter, outer_columns),
+            LogicalPlan::Projection(proj) => self.serialize_projection(proj, outer_columns),
+            LogicalPlan::Join(join) => self.serialize_join(join, outer_columns),
+            LogicalPlan::Aggregate(agg) => self.serialize_aggregate(agg, outer_columns),
+            LogicalPlan::Union(union) => self.serialize_union(union, outer_columns),
+            LogicalPlan::Subquery(subquery) => {
+                // Subquery node wraps the inner plan - just serialize it with the same outer context
+                self.serialize_rel_with_outer_columns(&subquery.subquery, outer_columns)
+            }
+            _ => Err(QedError::UnsupportedPlan(format!("{}", plan.display()))),
         }
     }
 
-    fn serialize_filter(&mut self, filter: &Filter) -> Result<SerializedRel, QedError> {
-        let source = self.serialize_rel(filter.input.as_ref())?;
-        let condition = self.serialize_expr_with_columns(&filter.predicate, &source.columns)?;
+    fn serialize_filter(
+        &mut self,
+        filter: &Filter,
+        outer_columns: &[ColumnInfo],
+    ) -> Result<SerializedRel, QedError> {
+        let source = self.serialize_rel_with_outer_columns(filter.input.as_ref(), outer_columns)?;
+
+        // Build merged column context for expressions: [outer_columns..., source.columns...]
+        let mut merged_columns = outer_columns.to_vec();
+        merged_columns.extend(source.columns.clone());
+
+        let condition = self.serialize_expr_with_columns(&filter.predicate, &merged_columns)?;
         Ok(SerializedRel {
             json: serde_json::json!({
                 "filter": {
@@ -181,20 +207,30 @@ impl QedSerializer {
                     "source": source.json
                 }
             }),
-            columns: source.columns, // Filter passes through columns
+            columns: source.columns, // Filter passes through columns (not merged)
         })
     }
 
-    fn serialize_projection(&mut self, proj: &Projection) -> Result<SerializedRel, QedError> {
-        let source = self.serialize_rel(proj.input.as_ref())?;
+    fn serialize_projection(
+        &mut self,
+        proj: &Projection,
+        outer_columns: &[ColumnInfo],
+    ) -> Result<SerializedRel, QedError> {
+        let source = self.serialize_rel_with_outer_columns(proj.input.as_ref(), outer_columns)?;
+
+        // Build merged column context: [outer_columns..., source.columns...]
+        let mut merged_columns = outer_columns.to_vec();
+        merged_columns.extend(source.columns.clone());
+
         let target: Vec<Value> = proj
             .expr
             .iter()
-            .map(|e| self.serialize_expr_with_columns(e, &source.columns))
+            .map(|e| self.serialize_expr_with_columns(e, &merged_columns))
             .collect::<Result<_, _>>()?;
-        
+
         // Extract output columns from projection
-        let output_columns = proj.schema
+        let output_columns = proj
+            .schema
             .fields()
             .iter()
             .map(|f| ColumnInfo {
@@ -202,7 +238,7 @@ impl QedSerializer {
                 data_type: f.data_type().clone(),
             })
             .collect();
-        
+
         Ok(SerializedRel {
             json: serde_json::json!({
                 "project": {
@@ -214,20 +250,28 @@ impl QedSerializer {
         })
     }
 
-    fn serialize_join(&mut self, join: &Join) -> Result<SerializedRel, QedError> {
+    fn serialize_join(
+        &mut self,
+        join: &Join,
+        outer_columns: &[ColumnInfo],
+    ) -> Result<SerializedRel, QedError> {
         let kind = self.join_type_to_string(&join.join_type);
-        let left = self.serialize_rel(join.left.as_ref())?;
-        let right = self.serialize_rel(join.right.as_ref())?;
+        let left = self.serialize_rel_with_outer_columns(join.left.as_ref(), outer_columns)?;
+        let right = self.serialize_rel_with_outer_columns(join.right.as_ref(), outer_columns)?;
 
         // Join output columns are [left_columns..., right_columns...]
         let mut output_columns = left.columns.clone();
         output_columns.extend(right.columns.clone());
 
+        // Build merged column context: [outer_columns..., output_columns...]
+        let mut merged_columns = outer_columns.to_vec();
+        merged_columns.extend(output_columns.clone());
+
         let condition = if let Some(filter_expr) = &join.filter {
-            self.serialize_expr_with_columns(filter_expr, &output_columns)?
+            self.serialize_expr_with_columns(filter_expr, &merged_columns)?
         } else if !join.on.is_empty() {
             // Build AND chain from on conditions
-            self.serialize_join_on_conditions(&join.on, &output_columns)?
+            self.serialize_join_on_conditions(&join.on, &merged_columns)?
         } else {
             serde_json::json!({"operator": "true", "operand": [], "type": "BOOLEAN"})
         };
@@ -246,7 +290,7 @@ impl QedSerializer {
     }
 
     fn serialize_join_on_conditions(
-        &self,
+        &mut self,
         on: &[(Expr, Expr)],
         columns: &[ColumnInfo],
     ) -> Result<Value, QedError> {
@@ -281,14 +325,20 @@ impl QedSerializer {
         }
     }
 
-    fn serialize_expr_with_columns(&self, expr: &Expr, columns: &[ColumnInfo]) -> Result<Value, QedError> {
+    fn serialize_expr_with_columns(
+        &mut self,
+        expr: &Expr,
+        columns: &[ColumnInfo],
+    ) -> Result<Value, QedError> {
         match expr {
             Expr::Column(col) => {
-                // Find column by name in the column list
+                // Find column by name in the merged column list
                 let idx = columns
                     .iter()
                     .position(|c| c.name == col.name)
-                    .ok_or_else(|| QedError::ColumnNotFound(format!("Column {:?} not found", col)))?;
+                    .ok_or_else(|| {
+                        QedError::ColumnNotFound(format!("Column {:?} not found", col))
+                    })?;
                 let type_str = self.datatype_to_string(&columns[idx].data_type);
                 Ok(serde_json::json!({"column": idx, "type": type_str}))
             }
@@ -330,17 +380,53 @@ impl QedSerializer {
                     | Operator::Or => "BOOLEAN".to_string(),
                     _ => "INTEGER".to_string(),
                 };
-                Ok(serde_json::json!({"operator": operator, "operand": [left, right], "type": type_str}))
+                Ok(
+                    serde_json::json!({"operator": operator, "operand": [left, right], "type": type_str}),
+                )
             }
-            Expr::Alias(alias) => {
-                self.serialize_expr_with_columns(&alias.expr, columns)
+            Expr::Alias(alias) => self.serialize_expr_with_columns(&alias.expr, columns),
+            Expr::OuterReferenceColumn(_data_type, column) => {
+                // OuterReferenceColumn is just like Column - find it in the merged list
+                let idx = columns
+                    .iter()
+                    .position(|c| c.name == column.name)
+                    .ok_or_else(|| {
+                        QedError::ColumnNotFound(format!(
+                            "Outer reference column {:?} not found",
+                            column
+                        ))
+                    })?;
+                let type_str = self.datatype_to_string(&columns[idx].data_type);
+                Ok(serde_json::json!({"column": idx, "type": type_str}))
+            }
+            Expr::Exists(exists) => {
+                // Serialize EXISTS subquery
+                // Format matches QED's RexSubQuery serialization (see RelJSONShuttle.java line 269)
+                // Pass current columns as outer_columns - they will be merged with inner columns
+                // at the Filter level inside the subquery
+                let subquery_serialized =
+                    self.serialize_rel_with_outer_columns(&exists.subquery.subquery, columns)?;
+                Ok(serde_json::json!({
+                    "operator": if exists.negated { "NOT EXISTS" } else { "EXISTS" },
+                    "operand": [],
+                    "query": subquery_serialized.json,
+                    "type": "BOOLEAN"
+                }))
             }
             _ => Err(QedError::UnsupportedExpr(format!("{:?}", expr))),
         }
     }
 
-    fn serialize_aggregate(&mut self, agg: &Aggregate) -> Result<SerializedRel, QedError> {
-        let source = self.serialize_rel(agg.input.as_ref())?;
+    fn serialize_aggregate(
+        &mut self,
+        agg: &Aggregate,
+        outer_columns: &[ColumnInfo],
+    ) -> Result<SerializedRel, QedError> {
+        let source = self.serialize_rel_with_outer_columns(agg.input.as_ref(), outer_columns)?;
+
+        // Build merged column context: [outer_columns..., source.columns...]
+        let mut merged_columns = outer_columns.to_vec();
+        merged_columns.extend(source.columns.clone());
 
         // Serialize group-by keys
         let keys: Vec<Value> = agg
@@ -352,15 +438,15 @@ impl QedSerializer {
                     Expr::Alias(alias) => alias.expr.as_ref(),
                     _ => expr,
                 };
-                
+
                 match inner_expr {
                     Expr::Column(_) | Expr::ScalarFunction(_) => {
-                        self.serialize_expr_with_columns(inner_expr, &source.columns)
+                        self.serialize_expr_with_columns(inner_expr, &merged_columns)
                     }
                     _ => Err(QedError::UnsupportedExpr(format!(
                         "Unsupported group key: {:?}",
                         inner_expr
-                    )))
+                    ))),
                 }
             })
             .collect::<Result<_, _>>()?;
@@ -375,45 +461,50 @@ impl QedSerializer {
                     Expr::Alias(alias) => alias.expr.as_ref(),
                     _ => expr,
                 };
-                
+
                 match inner_expr {
-                Expr::AggregateFunction(agg_func) => {
-                    let operator = agg_func.func.name();
+                    Expr::AggregateFunction(agg_func) => {
+                        let operator = agg_func.func.name();
 
-                    let operand: Vec<Value> = agg_func
-                        .params
-                        .args
-                        .iter()
-                        .map(|arg| self.serialize_expr_with_columns(arg, &source.columns))
-                        .collect::<Result<_, _>>()?;
+                        let operand: Vec<Value> = agg_func
+                            .params
+                            .args
+                            .iter()
+                            .map(|arg| self.serialize_expr_with_columns(arg, &merged_columns))
+                            .collect::<Result<_, _>>()?;
 
-                    // Get return type from AggregatePattern if available
-                    let return_type = if let Some(pattern) =
-                        agg_func.func.inner().as_any().downcast_ref::<crate::ast::pattern::AggregatePattern>()
-                    {
-                        self.type_to_string(&pattern.return_type)
-                    } else {
-                        "INTEGER".to_string() // Default for unknown aggregate types
-                    };
+                        // Get return type from AggregatePattern if available
+                        let return_type = if let Some(pattern) =
+                            agg_func
+                                .func
+                                .inner()
+                                .as_any()
+                                .downcast_ref::<crate::ast::pattern::AggregatePattern>()
+                        {
+                            self.type_to_string(&pattern.return_type)
+                        } else {
+                            "INTEGER".to_string() // Default for unknown aggregate types
+                        };
 
-                    Ok(serde_json::json!({
-                        "operator": operator,
-                        "operand": operand,
-                        "distinct": agg_func.params.distinct,
-                        "ignoreNulls": false,
-                        "type": return_type
-                    }))
-                }
-                _ => Err(QedError::UnsupportedExpr(format!(
-                    "Non-aggregate in aggr_expr: {:?}",
-                    inner_expr
-                ))),
+                        Ok(serde_json::json!({
+                            "operator": operator,
+                            "operand": operand,
+                            "distinct": agg_func.params.distinct,
+                            "ignoreNulls": false,
+                            "type": return_type
+                        }))
+                    }
+                    _ => Err(QedError::UnsupportedExpr(format!(
+                        "Non-aggregate in aggr_expr: {:?}",
+                        inner_expr
+                    ))),
                 }
             })
             .collect::<Result<_, _>>()?;
 
         // Output columns from aggregate
-        let output_columns = agg.schema
+        let output_columns = agg
+            .schema
             .fields()
             .iter()
             .map(|f| ColumnInfo {
@@ -434,28 +525,30 @@ impl QedSerializer {
         })
     }
 
-    fn serialize_union(&mut self, union: &Union) -> Result<SerializedRel, QedError> {
+    fn serialize_union(
+        &mut self,
+        union: &Union,
+        outer_columns: &[ColumnInfo],
+    ) -> Result<SerializedRel, QedError> {
         let serialized_inputs: Vec<SerializedRel> = union
             .inputs
             .iter()
-            .map(|input| self.serialize_rel(input.as_ref()))
+            .map(|input| self.serialize_rel_with_outer_columns(input.as_ref(), outer_columns))
             .collect::<Result<_, _>>()?;
-        
+
         let json_inputs: Vec<Value> = serialized_inputs.iter().map(|s| s.json.clone()).collect();
-        
+
         // Union output columns are from the first input (all inputs must have compatible schemas)
         let output_columns = serialized_inputs
             .first()
             .map(|s| s.columns.clone())
             .unwrap_or_default();
-        
+
         Ok(SerializedRel {
             json: serde_json::json!({"union": json_inputs}),
             columns: output_columns,
         })
     }
-
-
 
     fn binary_op_to_string(&self, op: &Operator) -> String {
         match op {

@@ -1,5 +1,4 @@
 pub mod impls;
-#[cfg(test)]
 pub mod test;
 
 use std::{
@@ -210,6 +209,7 @@ macro_rules! rule {
         pub struct $name;
 
         impl $crate::rule::RewriteRule for $name {
+            #[allow(non_snake_case, unused_variables)]
             fn from(&self) -> $crate::ast::relational::Rel {
                 // Generate schemas as sources
                 $(let $schema_name = $crate::ast::relational::Rel::source(
@@ -224,6 +224,7 @@ macro_rules! rule {
                 $from_expr
             }
 
+            #[allow(non_snake_case, unused_variables)]
             fn to(&self) -> $crate::ast::relational::Rel {
                 // Generate schemas as sources (same as from)
                 $(let $schema_name = $crate::ast::relational::Rel::source(

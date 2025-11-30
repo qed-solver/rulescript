@@ -423,15 +423,36 @@ macro_rules! __function_ret_type {
 }
 
 // ============================================================================
-// Expression parsing helper macros
+// Expression parsing utilities
 // ============================================================================
 
-/// Internal helper to parse expression lists using incremental munching
-/// Handles: f(x), f(x, y), g(f(x)), g(a, f(x), b), etc.
-/// Also handles aliases: x as y, f(x) as result (for projections)
-#[doc(hidden)]
+/// Parse a list of expressions with optional aliases
+///
+/// Converts identifiers and function calls into DataFusion expressions.
+/// Supports column references, function calls, aggregate calls, and aliases.
+///
+/// # Examples
+///
+/// ```
+/// # use rulescript::{exprs, functions};
+/// # functions! { f(T) -> U, SUM{T} -> U }
+/// // Column references
+/// let _cols = exprs!(x, y, z);
+///
+/// // Function calls
+/// let _funcs = exprs!(f(x));
+///
+/// // Aggregate functions
+/// let _aggs = exprs!(SUM{salary});
+///
+/// // With aliases
+/// let _aliased = exprs!(x as col_x, f(y) as result);
+///
+/// // Mixed
+/// let _mixed = exprs!(x, f(y) as computed, SUM{z});
+/// ```
 #[macro_export]
-macro_rules! __parse_exprs {
+macro_rules! exprs {
     // Base case: empty
     (@accum [] []) => { Vec::<datafusion::prelude::Expr>::new() };
 
@@ -440,53 +461,72 @@ macro_rules! __parse_exprs {
 
     // Munch: aggregate function call with alias (with optional comma + rest)
     (@accum [$($result:expr),*] [$func:ident{$($args:tt)*} as $alias:ident $(, $($rest:tt)*)?]) => {
-        $crate::__parse_exprs!(@accum [$($result,)* $crate::__parse_expr!($func{$($args)*}).alias(stringify!($alias))] [$($($rest)*)?])
+        $crate::exprs!(@accum [$($result,)* $crate::expr!($func{$($args)*}).alias(stringify!($alias))] [$($($rest)*)?])
     };
 
     // Munch: function call with alias (with optional comma + rest)
     (@accum [$($result:expr),*] [$func:ident($($args:tt)*) as $alias:ident $(, $($rest:tt)*)?]) => {
-        $crate::__parse_exprs!(@accum [$($result,)* $crate::__parse_expr!($func($($args)*)).alias(stringify!($alias))] [$($($rest)*)?])
+        $crate::exprs!(@accum [$($result,)* $crate::expr!($func($($args)*)).alias(stringify!($alias))] [$($($rest)*)?])
     };
 
     // Munch: identifier with alias (with optional comma + rest)
     (@accum [$($result:expr),*] [$id:ident as $alias:ident $(, $($rest:tt)*)?]) => {
-        $crate::__parse_exprs!(@accum [$($result,)* datafusion::prelude::col(stringify!($id)).alias(stringify!($alias))] [$($($rest)*)?])
+        $crate::exprs!(@accum [$($result,)* datafusion::prelude::col(stringify!($id)).alias(stringify!($alias))] [$($($rest)*)?])
     };
 
     // Munch: aggregate function call (with optional comma + rest)
     (@accum [$($result:expr),*] [$func:ident{$($args:tt)*} $(, $($rest:tt)*)?]) => {
-        $crate::__parse_exprs!(@accum [$($result,)* $crate::__parse_expr!($func{$($args)*})] [$($($rest)*)?])
+        $crate::exprs!(@accum [$($result,)* $crate::expr!($func{$($args)*})] [$($($rest)*)?])
     };
 
     // Munch: function call (with optional comma + rest)
     (@accum [$($result:expr),*] [$func:ident($($args:tt)*) $(, $($rest:tt)*)?]) => {
-        $crate::__parse_exprs!(@accum [$($result,)* $crate::__parse_expr!($func($($args)*))] [$($($rest)*)?])
+        $crate::exprs!(@accum [$($result,)* $crate::expr!($func($($args)*))] [$($($rest)*)?])
     };
 
     // Munch: identifier (with optional comma + rest)
     (@accum [$($result:expr),*] [$id:ident $(, $($rest:tt)*)?]) => {
-        $crate::__parse_exprs!(@accum [$($result,)* datafusion::prelude::col(stringify!($id))] [$($($rest)*)?])
+        $crate::exprs!(@accum [$($result,)* datafusion::prelude::col(stringify!($id))] [$($($rest)*)?])
     };
 
     // Entry point: start with empty accumulator
     ($($tt:tt)*) => {
-        $crate::__parse_exprs!(@accum [] [$($tt)*])
+        $crate::exprs!(@accum [] [$($tt)*])
     };
 }
 
-/// Internal: Parse expression (identifier or function call)
-/// Truly recursive - handles any nesting depth
-#[doc(hidden)]
+/// Parse a single expression
+///
+/// Converts an identifier or function call into a DataFusion expression.
+/// Supports nested function calls of any depth.
+///
+/// # Examples
+///
+/// ```
+/// # use rulescript::{expr, functions};
+/// # functions! { f(T) -> U, g(T) -> U, SUM{T} -> U }
+/// // Column reference
+/// let _col = expr!(x);
+///
+/// // Function call
+/// let _func = expr!(f(x));
+///
+/// // Aggregate function
+/// let _agg = expr!(SUM{salary});
+///
+/// // Nested calls
+/// let _nested = expr!(f(g(x)));
+/// ```
 #[macro_export]
-macro_rules! __parse_expr {
+macro_rules! expr {
     // Aggregate function call: SUM{x}, AVG{salary}, etc.
     ($func:ident{$($inside:tt)*}) => {
-        $func.call($crate::__parse_exprs!($($inside)*))
+        $func.call($crate::exprs!($($inside)*))
     };
 
     // Function call: f(x), g(f(x)), etc.
     ($func:ident($($inside:tt)*)) => {
-        $func.call($crate::__parse_exprs!($($inside)*))
+        $func.call($crate::exprs!($($inside)*))
     };
 
     // Plain identifier: x
@@ -495,10 +535,34 @@ macro_rules! __parse_expr {
     };
 }
 
-/// Internal: Parse predicate (handles boolean literals, &&, ||, nested calls)
-#[doc(hidden)]
+/// Parse a predicate expression with boolean operators
+///
+/// Converts function calls with AND/OR operators into DataFusion predicates.
+/// Supports chaining multiple predicates and boolean literals.
+///
+/// # Examples
+///
+/// ```
+/// # use rulescript::{pred, functions};
+/// # functions! { P(T) -> Bool, Q(T) -> Bool }
+/// // Simple predicate
+/// let _simple = pred!(P(x));
+///
+/// // AND chain
+/// let _and = pred!(P(x) && Q(y));
+///
+/// // OR chain
+/// let _or = pred!(P(x) || Q(y));
+///
+/// // Complex chains
+/// let _complex = pred!(P(x) && Q(y) || P(z));
+///
+/// // Boolean literals
+/// let _t = pred!(true);
+/// let _f = pred!(false);
+/// ```
 #[macro_export]
-macro_rules! __parse_predicate {
+macro_rules! pred {
     // Boolean literal: true or false
     (true) => {
         datafusion::prelude::lit(true)
@@ -511,8 +575,8 @@ macro_rules! __parse_predicate {
     // Recursively parse the right-hand side to support chains like P(...) && Q(...) && R(...)
     ($p:ident($($arg1:tt)*) && $($rest:tt)+) => {
         $p.and(
-            $crate::__parse_exprs!($($arg1)*),
-            $crate::__parse_predicate!($($rest)+)
+            $crate::exprs!($($arg1)*),
+            $crate::pred!($($rest)+)
         )
     };
 
@@ -520,13 +584,13 @@ macro_rules! __parse_predicate {
     // Recursively parse the right-hand side to support chains like P(...) || Q(...) || R(...)
     ($p:ident($($arg1:tt)*) || $($rest:tt)+) => {
         $p.or(
-            $crate::__parse_exprs!($($arg1)*),
-            $crate::__parse_predicate!($($rest)+)
+            $crate::exprs!($($arg1)*),
+            $crate::pred!($($rest)+)
         )
     };
 
     // Simple function call: P(...)
     ($func:ident($($args:tt)*)) => {
-        $func.call($crate::__parse_exprs!($($args)*))
+        $func.call($crate::exprs!($($args)*))
     };
 }

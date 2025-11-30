@@ -1,103 +1,16 @@
-use std::{cmp::Ordering, fmt, sync::Arc};
+use std::sync::Arc;
 
 use datafusion::{
-    common::{DFSchemaRef, JoinConstraint, NullEquality},
-    error::{DataFusionError, Result},
+    common::{JoinConstraint, NullEquality},
+    error::Result,
     logical_expr::{
         Aggregate, Distinct, Extension, Filter, Join, JoinType, Limit, LogicalPlan, Projection,
-        Sort, SortExpr, Union, UserDefinedLogicalNodeCore, build_join_schema,
+        Sort, SortExpr, Union, build_join_schema,
     },
     prelude::{Expr, lit},
 };
 
-use crate::ast::opaque::Schema;
-
-// Source pattern that can be used as a variant in DataFusion's LogicalPlan
-#[derive(Debug, Clone)]
-pub struct Source {
-    pub table_name: String,
-    pub schema: Schema,
-    // Cache the converted DataFusion schema
-    df_schema: DFSchemaRef,
-}
-
-impl Source {
-    pub fn new(table_name: String, schema: Schema) -> Self {
-        let df_schema = schema.to_datafusion_schema();
-        Self {
-            table_name,
-            schema,
-            df_schema,
-        }
-    }
-}
-
-// Manually implement required traits for UserDefinedLogicalNodeCore
-impl PartialEq for Source {
-    fn eq(&self, other: &Self) -> bool {
-        self.table_name == other.table_name && self.schema == other.schema
-    }
-}
-
-impl Eq for Source {}
-
-impl PartialOrd for Source {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Source {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match self.table_name.cmp(&other.table_name) {
-            Ordering::Equal => self.schema.cmp(&other.schema),
-            ord => ord,
-        }
-    }
-}
-
-impl std::hash::Hash for Source {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.table_name.hash(state);
-        self.schema.hash(state);
-        // Don't hash df_schema as it's derived from schema
-    }
-}
-
-impl UserDefinedLogicalNodeCore for Source {
-    fn name(&self) -> &str {
-        "Source"
-    }
-
-    fn inputs(&self) -> Vec<&LogicalPlan> {
-        // Source has no inputs
-        Vec::new()
-    }
-
-    fn schema(&self) -> &DFSchemaRef {
-        &self.df_schema
-    }
-
-    fn expressions(&self) -> Vec<Expr> {
-        Vec::new()
-    }
-
-    fn fmt_for_explain(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Source: {} [fields: {}]",
-            self.table_name,
-            self.schema.field_count()
-        )
-    }
-
-    fn with_exprs_and_inputs(&self, _exprs: Vec<Expr>, _inputs: Vec<LogicalPlan>) -> Result<Self> {
-        // Source pattern should not be modified by optimizer
-        Err(DataFusionError::Plan(
-            "Source should not be modified by optimizer".to_string(),
-        ))
-    }
-}
+use crate::ast::{opaque::Schema, source::Source};
 
 // A relational pattern is just a wrapper around a DataFusion LogicalPlan
 #[derive(Debug, Clone)]
@@ -257,7 +170,7 @@ macro_rules! filter {
     // Single pattern - input first, then predicate
     // No ambiguity because $input:expr is matched first, then comma, then everything else
     ($input:expr, $($pred:tt)+) => {
-        $input.filter($crate::__parse_predicate!($($pred)+)).unwrap()
+        $input.filter($crate::pred!($($pred)+)).unwrap()
     };
 }
 
@@ -297,9 +210,9 @@ macro_rules! filter {
 /// ```
 #[macro_export]
 macro_rules! project {
-    // Input first, then projection list - uses unified __parse_exprs!
+    // Input first, then projection list - uses unified exprs!
     ($input:expr, [$($exprs:tt)*]) => {{
-        let expressions = $crate::__parse_exprs!($($exprs)*);
+        let expressions = $crate::exprs!($($exprs)*);
         $input.project(expressions).unwrap()
     }};
 }
@@ -343,7 +256,7 @@ macro_rules! join {
             $right,
             datafusion::logical_expr::JoinType::$jtype,
             vec![],
-            Some($crate::__parse_predicate!($($condition)+))
+            Some($crate::pred!($($condition)+))
         ).unwrap()
     };
 }
@@ -386,8 +299,61 @@ macro_rules! join {
 #[macro_export]
 macro_rules! aggregate {
     ($input:expr, group: [$($group:tt)*], aggs: [$($aggs:tt)*]) => {{
-        let group_expressions = $crate::__parse_exprs!($($group)*);
-        let agg_expressions = $crate::__parse_exprs!($($aggs)*);
+        let group_expressions = $crate::exprs!($($group)*);
+        let agg_expressions = $crate::exprs!($($aggs)*);
         $input.aggregate(group_expressions, agg_expressions).unwrap()
     }};
+}
+
+/// Creates an Extension logical plan node with a user-defined operator
+///
+/// # Syntax
+/// ```
+/// # use rulescript::{extend, schema};
+/// # use rulescript::ast::extension::UserDefinedLogicalOperator;
+/// # use rulescript::ast::opaque::Schema;
+/// # use datafusion::logical_expr::LogicalPlan;
+/// # // Minimal operator for testing
+/// # #[derive(Debug, Clone)]
+/// # struct MyOp { schema: Schema, plan: LogicalPlan }
+/// # impl MyOp {
+/// #     fn new() -> Self {
+/// #         let s = schema!(x: T);
+/// #         let p = rulescript::ast::relational::Rel::source("t".to_string(), s.clone()).plan;
+/// #         Self { schema: s, plan: p.clone() }
+/// #     }
+/// # }
+/// # impl UserDefinedLogicalOperator for MyOp {
+/// #     fn operator_name(&self) -> &str { "MyOp" }
+/// #     fn inputs(&self) -> Vec<&LogicalPlan> { vec![] }
+/// #     fn schema(&self) -> &Schema { &self.schema }
+/// #     fn semantics(&self) -> &LogicalPlan { &self.plan }
+/// #     fn resolve(&self, _: &rulescript::ast::extension::UserDefinedLogicalPattern,
+/// #               _: &LogicalPlan, _: &mut dyn rulescript::matcher::PatternMatcher)
+/// #               -> Result<(), rulescript::matcher::RuleError> { Ok(()) }
+/// #     fn instantiate(&self, _: &mut dyn rulescript::matcher::PatternMatcher)
+/// #                    -> Result<LogicalPlan, rulescript::matcher::RuleError> { Ok(self.plan.clone()) }
+/// # }
+/// let op = MyOp::new();
+/// let _pattern = extend!(op);
+/// ```
+///
+/// # Examples
+/// See the `user_defined_left_semi_join` example for a complete demonstration
+/// of defining and using custom operators with this macro.
+#[macro_export]
+macro_rules! extend {
+    ($operator:expr) => {
+        $crate::ast::relational::Rel {
+            plan: datafusion::logical_expr::LogicalPlan::Extension(
+                datafusion::logical_expr::Extension {
+                    node: std::sync::Arc::new(
+                        $crate::ast::extension::UserDefinedLogicalPattern::new(
+                            std::sync::Arc::new($operator),
+                        ),
+                    ),
+                },
+            ),
+        }
+    };
 }

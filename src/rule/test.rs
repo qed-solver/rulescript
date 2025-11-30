@@ -1,4 +1,3 @@
-#[cfg(test)]
 pub mod utils {
     use crate::ast::{opaque::Type, pattern::ScalarPattern};
     use datafusion::{
