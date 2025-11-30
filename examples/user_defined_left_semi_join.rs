@@ -311,12 +311,6 @@ fn main() {
     println!(
         "Pattern matching: Matches only LeftSemiJoin extension nodes (not DataFusion's built-in Join)"
     );
-    println!("Verification: QED verifies using the EXISTS semantics\n");
-    println!("Implementation includes:");
-    println!("  - UserDefinedLogicalOperator trait (for pattern matching)");
-    println!("  - UserDefinedLogicalNodeCore trait (for DataFusion execution)");
-    println!("  - Context storage via DefaultMatcher");
-    println!("  - EXISTS serialization in QED verifier\n");
 
     // Demonstrate QED export with EXISTS semantics
     println!("=== QED Export Example ===\n");
@@ -328,21 +322,20 @@ fn main() {
 
     println!("QED JSON output:");
     println!("{}", json);
-    println!("\n✓ Contains EXISTS operator: {}", json.contains("EXISTS"));
-    println!("✓ Contains filter: {}", json.contains("filter"));
-
-    println!("\nRun tests with: cargo test --example user_defined_left_semi_join");
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use rulescript::rule::ApplicableRule;
+
     #[test]
     fn test_left_semi_join_filter_transpose_basic() {
         // Based on Calcite's testPushSemiJoinPastFilter
         // SQL: select e.ename from emp e, dept d
         //      where e.deptno = d.deptno and e.ename = 'foo'
-        // Pattern: LeftSemi(Filter(emp, ename='foo'), dept)
-        // Expected: Filter(LeftSemi(emp, dept), ename='foo')
+        // Pattern: LeftSemiJoin(Filter(emp, ename='foo'), dept)
+        // Expected: Filter(LeftSemiJoin(emp, dept), ename='foo')
 
         let emp = rulescript::rule::test::utils::emp_table();
         let dept = rulescript::rule::test::utils::dept_table();
@@ -354,43 +347,45 @@ mod tests {
             .build()
             .unwrap();
 
-        // Build: LeftSemi Join(Filter(emp), dept) on emp.deptno = dept.deptno
+        // Build: LeftSemiJoin(Filter(emp), dept) on emp.deptno = dept.deptno
         let join_filter = datafusion::logical_expr::col("emp.deptno")
             .eq(datafusion::logical_expr::col("dept.deptno"));
-        let input = datafusion::logical_expr::LogicalPlanBuilder::from(filtered_emp)
-            .join(
-                dept.clone(),
-                datafusion::logical_expr::JoinType::LeftSemi,
-                (Vec::<String>::new(), Vec::<String>::new()),
-                Some(join_filter.clone()),
-            )
-            .unwrap()
-            .build()
-            .unwrap();
+        let lsj_with_filter =
+            LeftSemiJoin::new(filtered_emp, dept.clone(), join_filter.clone()).unwrap();
+        let input =
+            datafusion::logical_expr::LogicalPlan::Extension(datafusion::logical_expr::Extension {
+                node: std::sync::Arc::new(lsj_with_filter),
+            });
 
-        // Expected: LeftSemi Join(emp, dept) then Filter(ename = 'foo')
-        let semi_join = datafusion::logical_expr::LogicalPlanBuilder::from(emp)
-            .join(
-                dept,
-                datafusion::logical_expr::JoinType::LeftSemi,
-                (Vec::<String>::new(), Vec::<String>::new()),
-                Some(join_filter),
-            )
-            .unwrap()
-            .build()
-            .unwrap();
+        // Expected: LeftSemiJoin(emp, dept) then Filter(ename = 'foo')
+        let lsj = LeftSemiJoin::new(emp, dept, join_filter).unwrap();
+        let wrapped_lsj =
+            rulescript::ast::extension::UserDefinedLogicalPattern::new(std::sync::Arc::new(lsj));
+        let semi_join =
+            datafusion::logical_expr::LogicalPlan::Extension(datafusion::logical_expr::Extension {
+                node: std::sync::Arc::new(wrapped_lsj),
+            });
 
         let expected = datafusion::logical_expr::LogicalPlanBuilder::from(semi_join)
-            .filter(datafusion::logical_expr::col("ename").eq(datafusion::logical_expr::lit("foo")))
+            .filter(
+                datafusion::logical_expr::col("emp.ename").eq(datafusion::logical_expr::lit("foo")),
+            )
             .unwrap()
             .build()
             .unwrap();
 
-        // TODO: Implement rule matching logic here
-        // This test currently demonstrates the structure but doesn't test rule application
-        assert!(
-            input != expected,
-            "Input and expected should be different plans"
+        let rule = LeftSemiJoinExistsRule;
+        let result = rule.try_apply(&input).unwrap();
+
+        // Compare display strings instead of direct equality
+        // (UserDefinedLogicalPattern wrapping causes structural differences but same logical plan)
+        let result_str = format!("{}", result.display_indent());
+        let expected_str = format!("{}", expected.display_indent());
+
+        assert_eq!(
+            result_str, expected_str,
+            "\nResult and expected plans differ:\nResult:\n{}\nExpected:\n{}",
+            result_str, expected_str
         );
     }
 }
