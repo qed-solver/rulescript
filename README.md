@@ -30,7 +30,7 @@ The `P` and `Q` are uninterpreted predicates - they can represent ANY boolean ex
 
 ## Current State
 
-### Implemented Rules (12 total)
+### Implemented Rules (13 total)
 
 **Filter Rules:**
 - FilterMergeRule - Merge consecutive filters
@@ -50,18 +50,21 @@ The `P` and `Q` are uninterpreted predicates - they can represent ANY boolean ex
 - JoinLeftProjectTransposeRule - Pull projection from left join input up
 - JoinRightProjectTransposeRule - Pull projection from right join input up
 - JoinAssociateRule - Restructure nested joins using associativity
+- LeftSemiJoinFilterTransposeRule - Push filter through left semi-join
 
-All rules have comprehensive tests (52 tests total, all passing).
+All rules have comprehensive tests (57 tests total, all passing).
 
 See `src/rule/impls/README.md` for detailed rule documentation.
 
 ### Core Features
 
-- **Pattern Matching**: Full support for Filter, Project, and Join plans
+- **Pattern Matching**: Full support for Filter, Project, Join, and user-defined operators
 - **Predicate Decomposition**: Automatic splitting of conjunctive predicates based on column dependencies
 - **Function Composition**: Support for nested function applications (e.g., `f(g(x))`)
 - **Alias Handling**: Transparent matching through alias wrappers
 - **Column Abstraction**: Smart column pattern matching that works with field partitions
+- **User-Defined Operators**: Extensibility for custom logical operators with pattern matching and QED verification support
+- **QED Export**: Serialization to QED format for rule verification, including EXISTS subqueries with outer column references
 - **DataFusion Integration**: RuleWrapper adapter for seamless optimizer integration
 
 ### Architecture
@@ -72,6 +75,8 @@ src/
     opaque.rs      - Abstract types, fields, schemas
     relational.rs  - Logical plan patterns (Source, Filter, Project, Join)
     pattern.rs     - Pattern functions (ScalarPattern, AggregatePattern)
+    extension.rs   - User-defined operator support (UserDefinedLogicalOperator trait)
+    source.rs      - Source node implementation
   matcher/
     mod.rs         - PatternMatcher trait and error types
     default.rs     - DefaultMatcher with full pattern matching logic
@@ -79,9 +84,13 @@ src/
     mod.rs         - Rule traits (RewriteRule, ApplicableRule)
     test.rs        - Test utilities (table helpers)
     impls/         - Concrete rule implementations
+  verifier/
+    mod.rs         - Verifier trait for rule verification
+    qed.rs         - QED format serialization with subquery support
   lib.rs           - Public API exports
 examples/
   optimizer_repl/  - Interactive demo with all rules
+  user_defined_left_semi_join.rs - Example of user-defined operator with EXISTS semantics
 ```
 
 ## Quick Start
@@ -241,12 +250,13 @@ See `PARSER_AND_CALCITE_NOTES.txt` for details on these directories.
 - Support for Aggregate and Union in patterns
 - More complex join rules (with 4-predicate decomposition)
 - Rule families with meta-variables
+- Additional user-defined operator examples
 
 **Long-term:**
-- QED export for verification
-- SMT solver integration
+- SMT solver integration for automated verification
 - Code generation adapters for different engines
-- Performance optimizations for matching
+- Performance optimizations for pattern matching
+- Extended QED features (IN, NOT IN subqueries)
 
 ## Known Limitations
 
@@ -267,8 +277,8 @@ See `PARSER_AND_CALCITE_NOTES.txt` for details on these directories.
 
 ## Status
 
-Active development. Core pattern matching complete. API stabilizing.
+Active development. Core pattern matching complete. User-defined operator support implemented. QED export working with subquery support. API stabilizing.
 
-**Test Status**: 44 tests passing (11 doc tests + 33 unit tests)
+**Test Status**: 57 tests passing (all unit tests)
 
-The project emphasizes rapid prototyping over completeness. Pattern matching and instantiation are fully implemented with 11 working rules demonstrating the approach works with real DataFusion plans.
+The project emphasizes correctness and extensibility. Pattern matching, instantiation, and user-defined operators are fully implemented with 13 working rules demonstrating the approach works with real DataFusion plans. QED serialization enables rule verification including complex cases like EXISTS subqueries with outer column references.

@@ -82,8 +82,14 @@ This directory contains concrete implementations of query optimization rules, in
 - **Status**: Fully working with 3 passing tests
 - **Notes**: Changes join tree shape using associativity. Only applies to INNER joins.
 
+### LeftSemiJoinFilterTransposeRule
+- **File**: `left_semi_join_filter_transpose.rs`
+- **Pattern**: `LeftSemiJoin(Filter(P, left), right, C)` → `Filter(P, LeftSemiJoin(left, right, C))`
+- **Status**: Fully working with 5 passing tests
+- **Notes**: Pushes filter through left semi-join. Filter only references left input columns.
+
 ## Test Summary
-- **Total Tests**: 52
+- **Total Tests**: 57
 - **Status**: All passing
 - **FilterMergeRule**: 3 tests
 - **FilterProjectTransposeRule**: 6 tests
@@ -98,6 +104,7 @@ This directory contains concrete implementations of query optimization rules, in
 - **JoinLeftProjectTransposeRule**: 3 tests
 - **JoinRightProjectTransposeRule**: 3 tests
 - **JoinAssociateRule**: 3 tests
+- **LeftSemiJoinFilterTransposeRule**: 5 tests
 
 ## Adding New Rules
 

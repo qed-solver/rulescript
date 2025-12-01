@@ -35,6 +35,7 @@ The optimizer uses DataFusion's `Optimizer` with `RuleWrapper` to apply rules re
 9. **join-left-project-transpose** - Pull projection from left join input
 10. **join-right-project-transpose** - Pull projection from right join input
 11. **join-associate** - Restructure nested joins
+12. **left-semi-join-filter-transpose** - Push filter through left semi-join
 
 ## Available Tables
 
@@ -217,12 +218,32 @@ SELECT empno, salary FROM (
 ) WHERE salary > 50000
 ```
 
+## Additional Examples
+
+### User-Defined Operator Example
+
+See `user_defined_left_semi_join.rs` for a complete example of implementing a custom logical operator:
+
+```bash
+cargo run --example user_defined_left_semi_join
+cargo test --example user_defined_left_semi_join
+```
+
+This example demonstrates:
+- Defining a custom `LeftSemiJoin` operator with EXISTS semantics
+- Implementing both pattern matching (`UserDefinedLogicalOperator`) and execution (`UserDefinedLogicalNodeCore`)
+- QED export with subquery serialization
+- Writing rules that use user-defined operators
+- Testing rule transformations
+
 ## Architecture
 
 ```
 examples/
-├── optimizer.rs          # Main entry point
+├── optimizer.rs                      # Main entry point
+├── user_defined_left_semi_join.rs   # User-defined operator example
 └── optimizer_repl/
-    ├── mod.rs           # REPL logic with rule selection
-    └── tables.rs        # Table definitions
+    ├── mod.rs                       # REPL logic with rule selection
+    ├── tables.rs                    # Table definitions
+    └── wrappers.rs                  # Rule wrappers for DataFusion integration
 ```
