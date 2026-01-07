@@ -15,6 +15,7 @@ use rulescript::rule::{
         FilterProjectTransposeRule, JoinAssociateRule, JoinLeftConditionPushRule,
         JoinLeftProjectTransposeRule, JoinRightConditionPushRule, JoinRightProjectTransposeRule,
         LeftSemiJoinFilterTransposeRule, ProjectMergeRule, ProjectRemoveRule,
+        RightSemiJoinFilterTransposeRule,
     },
 };
 use std::sync::Arc;
@@ -192,6 +193,17 @@ impl OptimizerRepl {
                              💡 NOTE: LeftSemi joins are used for IN/EXISTS subqueries.\n\
                              💡 NOTE: The filter only references columns from the left side, which is preserved in the result.",
                 example_query: "SELECT * FROM emp WHERE deptno IN (SELECT deptno FROM dept) AND salary > 50000",
+            },
+            RuleInfo {
+                name: "right-semi-join-filter-transpose",
+                description: "Pull filter above right semi-join",
+                explanation: "Pulls a filter from the right input of a RightSemi join up above the join. \
+                             This exposes the semi-join to other optimization rules.\n\
+                             Pattern: RightSemi(X, Filter(Y)) → Filter(RightSemi(X, Y))\n\n\
+                             💡 TIP: Must combine with project-remove as SQL queries have a projection on top.\n\
+                             💡 NOTE: RightSemi joins return rows from the right side that have matches in the left.\n\
+                             💡 NOTE: The filter only references columns from the right side, which is preserved in the result.",
+                example_query: "SELECT * FROM dept WHERE deptno IN (SELECT deptno FROM emp) AND dname = 'SALES'",
             },
         ]
     }
@@ -373,6 +385,9 @@ impl OptimizerRepl {
                 }
                 "left-semi-join-filter-transpose" => {
                     rules.push(Arc::new(RuleWrapper::new(LeftSemiJoinFilterTransposeRule)));
+                }
+                "right-semi-join-filter-transpose" => {
+                    rules.push(Arc::new(RuleWrapper::new(RightSemiJoinFilterTransposeRule)));
                 }
                 _ => {}
             }

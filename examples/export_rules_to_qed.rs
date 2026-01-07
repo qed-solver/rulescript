@@ -14,7 +14,7 @@ use std::{fs, path::Path};
 
 use rulescript::{
     rule::impls::*,
-    verifier::{Verifier, qed::QedError, qed::QedSerializer},
+    verifier::{qed::QedError, qed::QedSerializer, Verifier},
 };
 
 type SerializeFn = Box<dyn Fn(&mut QedSerializer) -> Result<String, QedError>>;
@@ -83,6 +83,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         (
             "JoinAssociateRule",
             Box::new(|s| s.serialize_rule(&JoinAssociateRule)),
+        ),
+        (
+            "LeftSemiJoinFilterTransposeRule",
+            Box::new(|s| s.serialize_rule(&LeftSemiJoinFilterTransposeRule)),
+        ),
+        (
+            "RightSemiJoinFilterTransposeRule",
+            Box::new(|s| s.serialize_rule(&RightSemiJoinFilterTransposeRule)),
+        ),
+        (
+            "FilterReduceTrueRule",
+            Box::new(|s| s.serialize_rule(&FilterReduceTrueRule)),
+        ),
+        (
+            "FilterReduceFalseRule",
+            Box::new(|s| s.serialize_rule(&FilterReduceFalseRule)),
+        ),
+        (
+            "PruneEmptyFilterRule",
+            Box::new(|s| s.serialize_rule(&PruneEmptyFilterRule)),
+        ),
+        (
+            "PruneEmptyProjectRule",
+            Box::new(|s| s.serialize_rule(&PruneEmptyProjectRule)),
+        ),
+        (
+            "PruneEmptyUnionLeftRule",
+            Box::new(|s| s.serialize_rule(&PruneEmptyUnionLeftRule)),
+        ),
+        (
+            "PruneEmptyUnionRightRule",
+            Box::new(|s| s.serialize_rule(&PruneEmptyUnionRightRule)),
+        ),
+        (
+            "PruneEmptyUnionBothRule",
+            Box::new(|s| s.serialize_rule(&PruneEmptyUnionBothRule)),
         ),
     ];
 

@@ -5,14 +5,14 @@ use datafusion::{
     arrow::datatypes::DataType,
     common::DFSchemaRef,
     logical_expr::{
-        Aggregate, EmptyRelation, Expr, Filter, Join, JoinType, LogicalPlan, Operator, Projection,
-        Union,
+        Aggregate, Expr, Filter, Join, JoinType, LogicalPlan, Operator, Projection, Union,
     },
 };
 
 use crate::{
     ast::{
-        extension::UserDefinedLogicalPattern, opaque::Type, pattern::ScalarPattern, source::Source,
+        empty::Empty, extension::UserDefinedLogicalPattern, opaque::Type, pattern::ScalarPattern,
+        source::Source,
     },
     rule::RewriteRule,
 };
@@ -159,6 +159,8 @@ impl QedSerializer {
                         json: serde_json::json!({"scan": idx}),
                         columns,
                     })
+                } else if let Some(empty) = ext.node.as_any().downcast_ref::<Empty>() {
+                    self.serialize_empty(empty)
                 } else if let Some(ud_pattern) = ext
                     .node
                     .as_any()
@@ -181,7 +183,6 @@ impl QedSerializer {
             LogicalPlan::Join(join) => self.serialize_join(join, outer_columns),
             LogicalPlan::Aggregate(agg) => self.serialize_aggregate(agg, outer_columns),
             LogicalPlan::Union(union) => self.serialize_union(union, outer_columns),
-            LogicalPlan::EmptyRelation(empty) => self.serialize_empty(empty),
             LogicalPlan::Subquery(subquery) => {
                 // Subquery node wraps the inner plan - just serialize it with the same outer context
                 self.serialize_rel_with_outer_columns(&subquery.subquery, outer_columns)
@@ -552,18 +553,20 @@ impl QedSerializer {
         })
     }
 
-    fn serialize_empty(&mut self, empty: &EmptyRelation) -> Result<SerializedRel, QedError> {
-        // Serialize schema types
+    fn serialize_empty(&mut self, empty: &Empty) -> Result<SerializedRel, QedError> {
+        // Empty pattern derives its schema from the inner plan
         let schema: Vec<Value> = empty
-            .schema
+            .inner
+            .schema()
             .fields()
             .iter()
             .map(|f| serde_json::json!(self.datatype_to_string(f.data_type())))
             .collect();
 
-        // Output columns from the empty relation's schema
+        // Output columns from the inner plan's schema
         let output_columns = empty
-            .schema
+            .inner
+            .schema()
             .fields()
             .iter()
             .map(|f| ColumnInfo {
@@ -572,7 +575,7 @@ impl QedSerializer {
             })
             .collect();
 
-        // Empty relation is serialized as values with empty content
+        // Empty is serialized as values with empty content
         Ok(SerializedRel {
             json: serde_json::json!({
                 "values": {
