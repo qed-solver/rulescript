@@ -153,4 +153,13 @@ pub mod utils {
             .build()
             .unwrap()
     }
+
+    /// Create an empty relation with the same schema as the given plan
+    pub fn empty_from(plan: &LogicalPlan) -> LogicalPlan {
+        use datafusion::logical_expr::EmptyRelation;
+        LogicalPlan::EmptyRelation(EmptyRelation {
+            produce_one_row: false,
+            schema: plan.schema().clone(),
+        })
+    }
 }

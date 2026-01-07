@@ -2,6 +2,8 @@ pub mod filter_aggregate_transpose;
 pub mod filter_into_join;
 pub mod filter_merge;
 pub mod filter_project_transpose;
+pub mod filter_reduce_false;
+pub mod filter_reduce_true;
 pub mod join_associate;
 pub mod join_commute;
 pub mod join_extract_filter;
@@ -12,11 +14,16 @@ pub mod join_right_project_transpose;
 pub mod left_semi_join_filter_transpose;
 pub mod project_merge;
 pub mod project_remove;
+pub mod prune_empty_filter;
+pub mod prune_empty_project;
+pub mod prune_empty_union;
 
 pub use filter_aggregate_transpose::FilterAggregateTransposeRule;
 pub use filter_into_join::FilterIntoJoinRule;
 pub use filter_merge::FilterMergeRule;
 pub use filter_project_transpose::FilterProjectTransposeRule;
+pub use filter_reduce_false::FilterReduceFalseRule;
+pub use filter_reduce_true::FilterReduceTrueRule;
 pub use join_associate::JoinAssociateRule;
 pub use join_commute::JoinCommuteRule;
 pub use join_extract_filter::JoinExtractFilterRule;
@@ -27,3 +34,8 @@ pub use join_right_project_transpose::JoinRightProjectTransposeRule;
 pub use left_semi_join_filter_transpose::LeftSemiJoinFilterTransposeRule;
 pub use project_merge::ProjectMergeRule;
 pub use project_remove::ProjectRemoveRule;
+pub use prune_empty_filter::PruneEmptyFilterRule;
+pub use prune_empty_project::PruneEmptyProjectRule;
+pub use prune_empty_union::{
+    PruneEmptyUnionBothRule, PruneEmptyUnionLeftRule, PruneEmptyUnionRightRule,
+};

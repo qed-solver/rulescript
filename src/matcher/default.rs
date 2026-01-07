@@ -3,14 +3,15 @@ use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use datafusion::{
     common::{Column, JoinConstraint},
     logical_expr::{
-        Aggregate, BinaryExpr, Expr, Extension, Filter, Join, LogicalPlan, Operator, Projection,
-        build_join_schema,
+        Aggregate, BinaryExpr, EmptyRelation, Expr, Extension, Filter, Join, LogicalPlan, Operator,
+        Projection, Union, build_join_schema,
         expr::{AggregateFunction, AggregateFunctionParams, ScalarFunction},
         lit,
     },
 };
 
 use crate::ast::{
+    empty::Empty,
     extension::UserDefinedLogicalPattern,
     pattern::{AggregatePattern, ScalarPattern},
     relational::Rel,
@@ -91,6 +92,11 @@ impl DefaultMatcher {
             .inner()
             .as_any()
             .downcast_ref::<AggregatePattern>()
+    }
+
+    /// Extract an Empty from an Extension node
+    fn as_empty_opt(ext: &Extension) -> Option<&Empty> {
+        ext.node.as_any().downcast_ref::<Empty>()
     }
 
     /// Extract complete filter from a join
@@ -179,15 +185,18 @@ impl DefaultMatcher {
         concrete: &LogicalPlan,
     ) -> Result<HashMap<Column, Vec<Column>>, RuleError> {
         match (pattern, concrete) {
-            // Extension nodes can be Source or UserDefinedLogicalPattern
+            // Extension nodes can be Source, Empty, or UserDefinedLogicalPattern
             (LogicalPlan::Extension(ext), con_plan) => {
                 // Try Source first (existing behavior)
                 if let Some(source) = Self::as_source_opt(ext) {
                     self.resolve_source(source, con_plan)
                 }
+                // Try Empty - must match against EmptyRelation
+                else if let Some(empty) = Self::as_empty_opt(ext) {
+                    self.resolve_empty(empty, con_plan)
+                }
                 // Try UserDefinedLogicalPattern
                 else if let Some(user_pattern) = Self::as_user_defined_pattern(ext) {
-                    // TODO: Implement resolve_user_defined
                     self.resolve_user_defined(user_pattern, con_plan)
                 } else {
                     Err(RuleError::StructureMismatch {
@@ -217,7 +226,10 @@ impl DefaultMatcher {
                 self.resolve_join(pat_join, con_join)
             }
 
-            // TODO: Add other plan types (Union, etc.) as needed
+            // Union patterns match Union nodes (binary only)
+            (LogicalPlan::Union(pat_union), LogicalPlan::Union(con_union)) => {
+                self.resolve_union(pat_union, con_union)
+            }
 
             // Structure mismatch
             _ => Err(RuleError::StructureMismatch {
@@ -301,6 +313,27 @@ impl DefaultMatcher {
         );
 
         Ok(context)
+    }
+
+    /// Resolve an Empty pattern against a concrete EmptyRelation
+    fn resolve_empty(
+        &mut self,
+        empty: &Empty,
+        concrete: &LogicalPlan,
+    ) -> Result<HashMap<Column, Vec<Column>>, RuleError> {
+        // Empty must match against EmptyRelation
+        let LogicalPlan::EmptyRelation(_) = concrete else {
+            return Err(RuleError::StructureMismatch {
+                pattern: Box::new(LogicalPlan::Extension(Extension {
+                    node: Arc::new(empty.clone()),
+                })),
+                target: Box::new(concrete.clone()),
+            });
+        };
+
+        // Resolve the inner pattern against the concrete EmptyRelation
+        // This captures schema bindings (e.g., source -> concrete schema)
+        self.resolve_plan(&empty.inner, concrete)
     }
 
     /// Resolve a UserDefinedLogicalPattern against concrete plan
@@ -522,6 +555,31 @@ impl DefaultMatcher {
         Ok(merged_context)
     }
 
+    /// Resolve a Union pattern against a concrete Union (binary only)
+    fn resolve_union(
+        &mut self,
+        pattern: &Union,
+        concrete: &Union,
+    ) -> Result<HashMap<Column, Vec<Column>>, RuleError> {
+        // Only support binary unions for now
+        if pattern.inputs.len() != 2 || concrete.inputs.len() != 2 {
+            return Err(RuleError::StructureMismatch {
+                pattern: Box::new(LogicalPlan::Union(pattern.clone())),
+                target: Box::new(LogicalPlan::Union(concrete.clone())),
+            });
+        }
+
+        // Recursively match left and right inputs
+        let left_context = self.resolve_plan(&pattern.inputs[0], &concrete.inputs[0])?;
+        let right_context = self.resolve_plan(&pattern.inputs[1], &concrete.inputs[1])?;
+
+        // Merge contexts (union columns come from either branch with same schema)
+        let mut merged_context = left_context;
+        merged_context.extend(right_context);
+
+        Ok(merged_context)
+    }
+
     /// Main dispatcher for resolving expressions
     ///
     /// This is public so user-defined operators can resolve expressions within a given context.
@@ -565,6 +623,18 @@ impl DefaultMatcher {
             // Columns must match exactly
             (Expr::Column(pat_col), Expr::Column(con_col)) => {
                 self.resolve_column(pat_col, con_col, context)
+            }
+
+            // Literals must match exactly
+            (Expr::Literal(pat_val, _), Expr::Literal(con_val, _)) => {
+                if pat_val == con_val {
+                    Ok(())
+                } else {
+                    Err(RuleError::ExpressionMismatch {
+                        pattern: Box::new(pattern.clone()),
+                        target: Box::new(concrete.clone()),
+                    })
+                }
             }
 
             // Alias in pattern - resolve inner pattern against concrete (which may or may not be aliased)
@@ -714,15 +784,18 @@ impl DefaultMatcher {
         template: &LogicalPlan,
     ) -> Result<(LogicalPlan, HashMap<Column, Vec<Column>>), RuleError> {
         match template {
-            // Extension nodes can be Source or UserDefinedLogicalPattern
+            // Extension nodes can be Source, Empty, or UserDefinedLogicalPattern
             LogicalPlan::Extension(ext) => {
                 // Try Source first
                 if let Some(source) = Self::as_source_opt(ext) {
                     self.instantiate_source(source)
                 }
+                // Try Empty
+                else if let Some(empty) = Self::as_empty_opt(ext) {
+                    self.instantiate_empty(empty)
+                }
                 // Try UserDefinedLogicalPattern
                 else if let Some(user_pattern) = Self::as_user_defined_pattern(ext) {
-                    // TODO: Implement instantiate_user_defined
                     self.instantiate_user_defined(user_pattern)
                 } else {
                     Err(RuleError::InvalidPattern {
@@ -743,7 +816,8 @@ impl DefaultMatcher {
             // Join: instantiate inputs and conditions
             LogicalPlan::Join(join) => self.instantiate_join(join),
 
-            // TODO: Add other plan types as needed
+            // Union: instantiate inputs
+            LogicalPlan::Union(union) => self.instantiate_union(union),
 
             // Other plan types should not appear in templates
             other => Err(RuleError::InvalidPattern {
@@ -1000,6 +1074,58 @@ impl DefaultMatcher {
                 null_equality: join.null_equality, // Use pattern's null_equality
             }),
             merged_context,
+        ))
+    }
+
+    /// Instantiate a Union node by transforming inputs
+    fn instantiate_union(
+        &mut self,
+        union: &Union,
+    ) -> Result<(LogicalPlan, HashMap<Column, Vec<Column>>), RuleError> {
+        // Only support binary unions
+        if union.inputs.len() != 2 {
+            return Err(RuleError::InvalidPattern {
+                reason: format!(
+                    "Union pattern must have exactly 2 inputs, found {}",
+                    union.inputs.len()
+                ),
+            });
+        }
+
+        // Recursively instantiate left and right inputs
+        let (left_input, left_context) = self.instantiate_plan(&union.inputs[0])?;
+        let (right_input, right_context) = self.instantiate_plan(&union.inputs[1])?;
+
+        // Merge contexts
+        let mut merged_context = left_context;
+        merged_context.extend(right_context);
+
+        // Build new Union node
+        let union_schema = left_input.schema().clone();
+        Ok((
+            LogicalPlan::Union(Union {
+                inputs: vec![Arc::new(left_input), Arc::new(right_input)],
+                schema: union_schema,
+            }),
+            merged_context,
+        ))
+    }
+
+    /// Instantiate an Empty pattern by instantiating its inner plan and using that schema
+    fn instantiate_empty(
+        &mut self,
+        empty: &Empty,
+    ) -> Result<(LogicalPlan, HashMap<Column, Vec<Column>>), RuleError> {
+        // Instantiate the inner plan to get the concrete schema
+        let (inner_plan, _context) = self.instantiate_plan(&empty.inner)?;
+
+        // Create an EmptyRelation with the concrete schema from the instantiated inner plan
+        Ok((
+            LogicalPlan::EmptyRelation(EmptyRelation {
+                produce_one_row: false,
+                schema: inner_plan.schema().clone(),
+            }),
+            HashMap::new(),
         ))
     }
 

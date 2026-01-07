@@ -10,7 +10,7 @@ use datafusion::{
     prelude::{Expr, lit},
 };
 
-use crate::ast::{opaque::Schema, source::Source};
+use crate::ast::{empty::Empty, opaque::Schema, source::Source};
 
 // A relational pattern is just a wrapper around a DataFusion LogicalPlan
 #[derive(Debug, Clone)]
@@ -28,6 +28,16 @@ impl Rel {
         });
 
         Self { plan }
+    }
+
+    // Create an empty pattern with schema derived from inner plan
+    pub fn empty(inner: Rel) -> Self {
+        let empty = Empty::new(inner.plan);
+        Self {
+            plan: LogicalPlan::Extension(Extension {
+                node: Arc::new(empty),
+            }),
+        }
     }
 
     // Filter the relation with a predicate
@@ -355,5 +365,70 @@ macro_rules! extend {
                 },
             ),
         }
+    };
+}
+
+/// Creates an EmptyPattern logical plan node (0 rows)
+///
+/// The schema is derived from the inner expression passed to the macro.
+/// During pattern matching, the inner expression is resolved against the
+/// concrete EmptyRelation to capture schema bindings.
+///
+/// # Syntax
+/// ```
+/// # use rulescript::{empty, schema};
+/// # use rulescript::ast::relational::Rel;
+/// # let source = Rel::source("table".to_string(), schema!(x: T));
+/// let _empty = empty!(source);
+/// ```
+///
+/// # Examples
+/// ```
+/// use rulescript::{empty, schema, project, functions};
+/// use rulescript::ast::relational::Rel;
+///
+/// let source = Rel::source("table".to_string(), schema!(x: T, y: U));
+/// functions! { f(T) -> V }
+///
+/// // Empty relation with source schema
+/// let _empty = empty!(source.clone());
+///
+/// // Empty relation with projected schema
+/// let projected = project!(source.clone(), [f(x) as result]);
+/// let _empty_projected = empty!(projected);
+/// ```
+#[macro_export]
+macro_rules! empty {
+    ($source:expr) => {
+        $crate::ast::relational::Rel::empty($source)
+    };
+}
+
+/// Creates a Union logical plan node (binary union)
+///
+/// # Syntax
+/// ```
+/// # use rulescript::{union, schema};
+/// # use rulescript::ast::relational::Rel;
+/// # let left = Rel::source("left".to_string(), schema!(x: T));
+/// # let right = Rel::source("right".to_string(), schema!(x: T));
+/// let _union = union!(left, right);
+/// ```
+///
+/// # Examples
+/// ```
+/// use rulescript::{union, schema};
+/// use rulescript::ast::relational::Rel;
+///
+/// let a = Rel::source("a".to_string(), schema!(x: T));
+/// let b = Rel::source("b".to_string(), schema!(x: T));
+///
+/// // Simple binary union
+/// let _union = union!(a, b);
+/// ```
+#[macro_export]
+macro_rules! union {
+    ($left:expr, $right:expr) => {
+        $left.union($right).unwrap()
     };
 }

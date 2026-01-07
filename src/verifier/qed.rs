@@ -5,7 +5,8 @@ use datafusion::{
     arrow::datatypes::DataType,
     common::DFSchemaRef,
     logical_expr::{
-        Aggregate, Expr, Filter, Join, JoinType, LogicalPlan, Operator, Projection, Union,
+        Aggregate, EmptyRelation, Expr, Filter, Join, JoinType, LogicalPlan, Operator, Projection,
+        Union,
     },
 };
 
@@ -180,6 +181,7 @@ impl QedSerializer {
             LogicalPlan::Join(join) => self.serialize_join(join, outer_columns),
             LogicalPlan::Aggregate(agg) => self.serialize_aggregate(agg, outer_columns),
             LogicalPlan::Union(union) => self.serialize_union(union, outer_columns),
+            LogicalPlan::EmptyRelation(empty) => self.serialize_empty(empty),
             LogicalPlan::Subquery(subquery) => {
                 // Subquery node wraps the inner plan - just serialize it with the same outer context
                 self.serialize_rel_with_outer_columns(&subquery.subquery, outer_columns)
@@ -546,6 +548,38 @@ impl QedSerializer {
 
         Ok(SerializedRel {
             json: serde_json::json!({"union": json_inputs}),
+            columns: output_columns,
+        })
+    }
+
+    fn serialize_empty(&mut self, empty: &EmptyRelation) -> Result<SerializedRel, QedError> {
+        // Serialize schema types
+        let schema: Vec<Value> = empty
+            .schema
+            .fields()
+            .iter()
+            .map(|f| serde_json::json!(self.datatype_to_string(f.data_type())))
+            .collect();
+
+        // Output columns from the empty relation's schema
+        let output_columns = empty
+            .schema
+            .fields()
+            .iter()
+            .map(|f| ColumnInfo {
+                name: f.name().clone(),
+                data_type: f.data_type().clone(),
+            })
+            .collect();
+
+        // Empty relation is serialized as values with empty content
+        Ok(SerializedRel {
+            json: serde_json::json!({
+                "values": {
+                    "schema": schema,
+                    "content": []
+                }
+            }),
             columns: output_columns,
         })
     }
