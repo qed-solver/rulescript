@@ -1416,6 +1416,28 @@ impl DefaultMatcher {
                         .to_string(),
                 })
             }
+            // Subquery expressions - these are self-contained with their own scope
+            // The outer_ref_columns reference concrete columns that don't need remapping
+            // in transformations like FilterIntoJoin that just move predicates around
+            Expr::ScalarSubquery(sq) => {
+                // Clone as-is - subquery is self-contained
+                Ok(Expr::ScalarSubquery(sq.clone()))
+            }
+            Expr::InSubquery(isq) => {
+                // The expr (left side of IN) needs replacement, subquery is self-contained
+                let new_expr = self.replace_columns_with_context(&isq.expr, context)?;
+                Ok(Expr::InSubquery(
+                    datafusion::logical_expr::expr::InSubquery::new(
+                        Box::new(new_expr),
+                        isq.subquery.clone(),
+                        isq.negated,
+                    ),
+                ))
+            }
+            Expr::Exists(ex) => {
+                // No outer expression to replace, just clone
+                Ok(Expr::Exists(ex.clone()))
+            }
             // For other expression types we don't handle yet, return an error
             other => Err(RuleError::InvalidPattern {
                 reason: format!(

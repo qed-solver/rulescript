@@ -14,7 +14,7 @@ use std::{fs, path::Path};
 
 use rulescript::{
     rule::impls::*,
-    verifier::{qed::QedError, qed::QedSerializer, Verifier},
+    verifier::{Verifier, qed::QedError, qed::QedSerializer},
 };
 
 type SerializeFn = Box<dyn Fn(&mut QedSerializer) -> Result<String, QedError>>;
