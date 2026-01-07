@@ -88,10 +88,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "LeftSemiJoinFilterTransposeRule",
             Box::new(|s| s.serialize_rule(&LeftSemiJoinFilterTransposeRule)),
         ),
-        (
-            "RightSemiJoinFilterTransposeRule",
-            Box::new(|s| s.serialize_rule(&RightSemiJoinFilterTransposeRule)),
-        ),
+        // RightSemiJoinFilterTransposeRule - RIGHT_SEMI join not supported by QED
         (
             "FilterReduceTrueRule",
             Box::new(|s| s.serialize_rule(&FilterReduceTrueRule)),

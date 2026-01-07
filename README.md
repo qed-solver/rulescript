@@ -30,29 +30,41 @@ The `P` and `Q` are uninterpreted predicates - they can represent ANY boolean ex
 
 ## Current State
 
-### Implemented Rules (13 total)
+### Implemented Rules (22 total)
 
 **Filter Rules:**
 - FilterMergeRule - Merge consecutive filters
 - FilterProjectTransposeRule - Push filter below projection
 - FilterAggregateTransposeRule - Push filter predicates on GROUP BY columns below aggregate
+- FilterIntoJoinRule - Merge filter into join condition
+- FilterReduceTrueRule - Remove filter with true predicate
+- FilterReduceFalseRule - Replace filter with false predicate with empty relation
 
 **Project Rules:**
 - ProjectMergeRule - Merge consecutive projections
-- ProjectRemoveRule - Remove identity projections (works on any input including joins)
+- ProjectRemoveRule - Remove identity projections
 
 **Join Rules:**
 - JoinCommuteRule - Swap join inputs
 - JoinLeftConditionPushRule - Push left-table predicates down as filter on left input
 - JoinRightConditionPushRule - Push right-table predicates down as filter on right input
 - JoinExtractFilterRule - Extract join condition as filter above join
-- FilterIntoJoinRule - Merge filter into join condition
 - JoinLeftProjectTransposeRule - Pull projection from left join input up
 - JoinRightProjectTransposeRule - Pull projection from right join input up
 - JoinAssociateRule - Restructure nested joins using associativity
-- LeftSemiJoinFilterTransposeRule - Push filter through left semi-join
 
-All rules have comprehensive tests (57 tests total, all passing).
+**Semi-Join Rules:**
+- LeftSemiJoinFilterTransposeRule - Pull filter above left semi-join
+- RightSemiJoinFilterTransposeRule - Pull filter above right semi-join
+
+**Prune Empty Rules:**
+- PruneEmptyFilterRule - Remove filter over empty relation
+- PruneEmptyProjectRule - Remove projection over empty relation
+- PruneEmptyUnionLeftRule - Simplify union with empty left input
+- PruneEmptyUnionRightRule - Simplify union with empty right input
+- PruneEmptyUnionBothRule - Simplify union with both inputs empty
+
+All rules have comprehensive tests (79 unit tests + 21 doc tests, all passing).
 
 See `src/rule/impls/README.md` for detailed rule documentation.
 
@@ -137,7 +149,7 @@ optimizer.add_rule(Arc::new(optimizer_rule));
 cargo run --example optimizer_repl
 ```
 
-Interactive demonstration with all 12 implemented rules:
+Interactive demonstration with optimization rules:
 - Choose which rules to apply
 - See before/after query plans
 - Real SQL parsing with DataFusion
@@ -247,7 +259,6 @@ See `PARSER_AND_CALCITE_NOTES.txt` for details on these directories.
 ## Future Work
 
 **Near-term:**
-- Support for Aggregate and Union in patterns
 - More complex join rules (with 4-predicate decomposition)
 - Rule families with meta-variables
 - Additional user-defined operator examples
@@ -256,7 +267,6 @@ See `PARSER_AND_CALCITE_NOTES.txt` for details on these directories.
 - SMT solver integration for automated verification
 - Code generation adapters for different engines
 - Performance optimizations for pattern matching
-- Extended QED features (IN, NOT IN subqueries)
 
 ## Known Limitations
 
@@ -279,6 +289,6 @@ See `PARSER_AND_CALCITE_NOTES.txt` for details on these directories.
 
 Active development. Core pattern matching complete. User-defined operator support implemented. QED export working with subquery support. API stabilizing.
 
-**Test Status**: 57 tests passing (all unit tests)
+**Test Status**: 79 unit tests + 21 doc tests passing
 
-The project emphasizes correctness and extensibility. Pattern matching, instantiation, and user-defined operators are fully implemented with 13 working rules demonstrating the approach works with real DataFusion plans. QED serialization enables rule verification including complex cases like EXISTS subqueries with outer column references.
+The project emphasizes correctness and extensibility. Pattern matching, instantiation, and user-defined operators are fully implemented with 22 working rules demonstrating the approach works with real DataFusion plans. QED serialization enables rule verification including complex cases like EXISTS subqueries with outer column references.
