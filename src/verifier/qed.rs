@@ -5,7 +5,8 @@ use datafusion::{
     arrow::datatypes::DataType,
     common::DFSchemaRef,
     logical_expr::{
-        Aggregate, Expr, Filter, Join, JoinType, LogicalPlan, Operator, Projection, Union,
+        Aggregate, Expr, Filter, Join, JoinType, Limit, LogicalPlan, Operator, Projection, Sort,
+        TableScan, Union,
     },
 };
 
@@ -85,6 +86,24 @@ impl QedSerializer {
         self.tables.push(TableInfo {
             name: source.table_name.clone(),
             schema: source.schema.to_datafusion_schema(),
+        });
+        idx
+    }
+
+    fn resolve_table_scan(&mut self, scan: &TableScan) -> usize {
+        let table_name = scan.table_name.to_string();
+        // Check if table already exists
+        for (idx, table) in self.tables.iter().enumerate() {
+            if table.name == table_name {
+                return idx;
+            }
+        }
+
+        // Add new table
+        let idx = self.tables.len();
+        self.tables.push(TableInfo {
+            name: table_name,
+            schema: scan.projected_schema.clone(),
         });
         idx
     }
@@ -178,6 +197,22 @@ impl QedSerializer {
                     ))
                 }
             }
+            LogicalPlan::TableScan(scan) => {
+                let idx = self.resolve_table_scan(scan);
+                let columns = scan
+                    .projected_schema
+                    .fields()
+                    .iter()
+                    .map(|f| ColumnInfo {
+                        name: f.name().clone(),
+                        data_type: f.data_type().clone(),
+                    })
+                    .collect();
+                Ok(SerializedRel {
+                    json: serde_json::json!({"scan": idx}),
+                    columns,
+                })
+            }
             LogicalPlan::Filter(filter) => self.serialize_filter(filter, outer_columns),
             LogicalPlan::Projection(proj) => self.serialize_projection(proj, outer_columns),
             LogicalPlan::Join(join) => self.serialize_join(join, outer_columns),
@@ -187,6 +222,12 @@ impl QedSerializer {
                 // Subquery node wraps the inner plan - just serialize it with the same outer context
                 self.serialize_rel_with_outer_columns(&subquery.subquery, outer_columns)
             }
+            LogicalPlan::SubqueryAlias(alias) => {
+                // SubqueryAlias is just a naming wrapper - serialize the inner plan
+                self.serialize_rel_with_outer_columns(&alias.input, outer_columns)
+            }
+            LogicalPlan::Sort(sort) => self.serialize_sort(sort, outer_columns),
+            LogicalPlan::Limit(limit) => self.serialize_limit(limit, outer_columns),
             _ => Err(QedError::UnsupportedPlan(format!("{}", plan.display()))),
         }
     }
@@ -404,16 +445,193 @@ impl QedSerializer {
             }
             Expr::Exists(exists) => {
                 // Serialize EXISTS subquery
-                // Format matches QED's RexSubQuery serialization (see RelJSONShuttle.java line 269)
-                // Pass current columns as outer_columns - they will be merged with inner columns
-                // at the Filter level inside the subquery
+                // QED format: {"operator": "EXISTS", "operand": [], "query": {...}}
+                // For NOT EXISTS, wrap with NOT operator
                 let subquery_serialized =
                     self.serialize_rel_with_outer_columns(&exists.subquery.subquery, columns)?;
-                Ok(serde_json::json!({
-                    "operator": if exists.negated { "NOT EXISTS" } else { "EXISTS" },
+                let exists_expr = serde_json::json!({
+                    "operator": "EXISTS",
                     "operand": [],
                     "query": subquery_serialized.json,
                     "type": "BOOLEAN"
+                });
+                if exists.negated {
+                    Ok(serde_json::json!({
+                        "operator": "NOT",
+                        "operand": [exists_expr],
+                        "type": "BOOLEAN"
+                    }))
+                } else {
+                    Ok(exists_expr)
+                }
+            }
+            Expr::Cast(cast) => {
+                // Cast is semantically transparent for equivalence checking
+                // Just serialize the inner expression
+                self.serialize_expr_with_columns(&cast.expr, columns)
+            }
+            Expr::TryCast(try_cast) => {
+                // TryCast is semantically transparent for equivalence checking
+                self.serialize_expr_with_columns(&try_cast.expr, columns)
+            }
+            Expr::InList(in_list) => {
+                // IN (a, b, c) is equivalent to (= a) OR (= b) OR (= c)
+                let expr_val = self.serialize_expr_with_columns(&in_list.expr, columns)?;
+                let list_vals: Vec<Value> = in_list
+                    .list
+                    .iter()
+                    .map(|e| self.serialize_expr_with_columns(e, columns))
+                    .collect::<Result<_, _>>()?;
+
+                // Build OR chain of equality comparisons
+                let mut result: Option<Value> = None;
+                for val in list_vals {
+                    let eq = serde_json::json!({
+                        "operator": "=",
+                        "operand": [expr_val.clone(), val],
+                        "type": "BOOLEAN"
+                    });
+                    result = Some(match result {
+                        None => eq,
+                        Some(prev) => serde_json::json!({
+                            "operator": "OR",
+                            "operand": [prev, eq],
+                            "type": "BOOLEAN"
+                        }),
+                    });
+                }
+
+                let in_expr = result.unwrap_or_else(
+                    || serde_json::json!({"operator": "false", "operand": [], "type": "BOOLEAN"}),
+                );
+
+                if in_list.negated {
+                    Ok(serde_json::json!({
+                        "operator": "NOT",
+                        "operand": [in_expr],
+                        "type": "BOOLEAN"
+                    }))
+                } else {
+                    Ok(in_expr)
+                }
+            }
+            Expr::Like(like) => {
+                let expr_val = self.serialize_expr_with_columns(&like.expr, columns)?;
+                let pattern_val = self.serialize_expr_with_columns(&like.pattern, columns)?;
+                let operator = if like.negated { "NOT LIKE" } else { "LIKE" };
+                Ok(serde_json::json!({
+                    "operator": operator,
+                    "operand": [expr_val, pattern_val],
+                    "type": "BOOLEAN"
+                }))
+            }
+            Expr::Not(inner) => {
+                let inner_val = self.serialize_expr_with_columns(inner, columns)?;
+                Ok(serde_json::json!({
+                    "operator": "NOT",
+                    "operand": [inner_val],
+                    "type": "BOOLEAN"
+                }))
+            }
+            Expr::IsNull(inner) => {
+                let inner_val = self.serialize_expr_with_columns(inner, columns)?;
+                Ok(serde_json::json!({
+                    "operator": "IS NULL",
+                    "operand": [inner_val],
+                    "type": "BOOLEAN"
+                }))
+            }
+            Expr::IsNotNull(inner) => {
+                let inner_val = self.serialize_expr_with_columns(inner, columns)?;
+                Ok(serde_json::json!({
+                    "operator": "IS NOT NULL",
+                    "operand": [inner_val],
+                    "type": "BOOLEAN"
+                }))
+            }
+            Expr::Between(between) => {
+                // BETWEEN low AND high is equivalent to (>= low) AND (<= high)
+                let expr_val = self.serialize_expr_with_columns(&between.expr, columns)?;
+                let low_val = self.serialize_expr_with_columns(&between.low, columns)?;
+                let high_val = self.serialize_expr_with_columns(&between.high, columns)?;
+                let between_expr = serde_json::json!({
+                    "operator": "AND",
+                    "operand": [
+                        {"operator": ">=", "operand": [expr_val.clone(), low_val], "type": "BOOLEAN"},
+                        {"operator": "<=", "operand": [expr_val, high_val], "type": "BOOLEAN"}
+                    ],
+                    "type": "BOOLEAN"
+                });
+                if between.negated {
+                    Ok(serde_json::json!({
+                        "operator": "NOT",
+                        "operand": [between_expr],
+                        "type": "BOOLEAN"
+                    }))
+                } else {
+                    Ok(between_expr)
+                }
+            }
+            Expr::Case(case) => {
+                // CASE WHEN ... THEN ... ELSE ... END
+                // Serialize as nested IIF (if-then-else)
+                let else_val = match &case.else_expr {
+                    Some(e) => self.serialize_expr_with_columns(e, columns)?,
+                    None => serde_json::json!({"operator": "null", "operand": [], "type": "NULL"}),
+                };
+
+                let mut result = else_val;
+                for (when_expr, then_expr) in case.when_then_expr.iter().rev() {
+                    let when_val = self.serialize_expr_with_columns(when_expr, columns)?;
+                    let then_val = self.serialize_expr_with_columns(then_expr, columns)?;
+                    result = serde_json::json!({
+                        "operator": "CASE",
+                        "operand": [when_val, then_val, result],
+                        "type": "INTEGER" // TODO: infer type from then_expr
+                    });
+                }
+                Ok(result)
+            }
+            Expr::ScalarSubquery(sq) => {
+                // Serialize scalar subquery
+                let subquery_serialized =
+                    self.serialize_rel_with_outer_columns(&sq.subquery, columns)?;
+                Ok(serde_json::json!({
+                    "operator": "SCALAR_QUERY",
+                    "operand": [],
+                    "query": subquery_serialized.json,
+                    "type": "INTEGER" // TODO: infer type from subquery
+                }))
+            }
+            Expr::InSubquery(in_sq) => {
+                // IN (subquery) / NOT IN (subquery)
+                // QED format: {"operator": "IN", "operand": [<expr>], "query": {...}}
+                // For NOT IN, wrap with NOT operator
+                let expr_val = self.serialize_expr_with_columns(&in_sq.expr, columns)?;
+                let subquery_serialized =
+                    self.serialize_rel_with_outer_columns(&in_sq.subquery.subquery, columns)?;
+                let in_expr = serde_json::json!({
+                    "operator": "IN",
+                    "operand": [expr_val],
+                    "query": subquery_serialized.json,
+                    "type": "BOOLEAN"
+                });
+                if in_sq.negated {
+                    Ok(serde_json::json!({
+                        "operator": "NOT",
+                        "operand": [in_expr],
+                        "type": "BOOLEAN"
+                    }))
+                } else {
+                    Ok(in_expr)
+                }
+            }
+            Expr::Negative(inner) => {
+                let inner_val = self.serialize_expr_with_columns(inner, columns)?;
+                Ok(serde_json::json!({
+                    "operator": "-",
+                    "operand": [inner_val],
+                    "type": "INTEGER"
                 }))
             }
             _ => Err(QedError::UnsupportedExpr(format!("{:?}", expr))),
@@ -553,6 +771,153 @@ impl QedSerializer {
         })
     }
 
+    fn serialize_sort(
+        &mut self,
+        sort: &Sort,
+        outer_columns: &[ColumnInfo],
+    ) -> Result<SerializedRel, QedError> {
+        let source = self.serialize_rel_with_outer_columns(&sort.input, outer_columns)?;
+
+        // Build merged column context
+        let mut merged_columns = outer_columns.to_vec();
+        merged_columns.extend(source.columns.clone());
+
+        // Serialize collation (sort expressions)
+        let collation: Vec<Value> = sort
+            .expr
+            .iter()
+            .map(|sort_expr| {
+                // Find column index for the sort expression
+                let expr_val =
+                    self.serialize_expr_with_columns(&sort_expr.expr, &merged_columns)?;
+
+                // Get type from the expression
+                let type_str =
+                    if let Some(col_idx) = expr_val.get("column").and_then(|v| v.as_i64()) {
+                        let idx = col_idx as usize;
+                        if idx < merged_columns.len() {
+                            self.datatype_to_string(&merged_columns[idx].data_type)
+                        } else {
+                            "INTEGER".to_string()
+                        }
+                    } else {
+                        "INTEGER".to_string()
+                    };
+
+                let direction = if sort_expr.asc {
+                    "ASCENDING"
+                } else {
+                    "DESCENDING"
+                };
+
+                Ok(serde_json::json!([expr_val, type_str, direction]))
+            })
+            .collect::<Result<_, QedError>>()?;
+
+        Ok(SerializedRel {
+            json: serde_json::json!({
+                "sort": {
+                    "collation": collation,
+                    "source": source.json,
+                    "offset": Value::Null,
+                    "limit": Value::Null
+                }
+            }),
+            columns: source.columns,
+        })
+    }
+
+    fn serialize_limit(
+        &mut self,
+        limit: &Limit,
+        outer_columns: &[ColumnInfo],
+    ) -> Result<SerializedRel, QedError> {
+        // Check if input is a Sort - if so, combine them into a single sort node
+        if let LogicalPlan::Sort(sort) = limit.input.as_ref() {
+            let source = self.serialize_rel_with_outer_columns(&sort.input, outer_columns)?;
+
+            // Build merged column context
+            let mut merged_columns = outer_columns.to_vec();
+            merged_columns.extend(source.columns.clone());
+
+            // Serialize collation
+            let collation: Vec<Value> = sort
+                .expr
+                .iter()
+                .map(|sort_expr| {
+                    let expr_val =
+                        self.serialize_expr_with_columns(&sort_expr.expr, &merged_columns)?;
+                    let type_str =
+                        if let Some(col_idx) = expr_val.get("column").and_then(|v| v.as_i64()) {
+                            let idx = col_idx as usize;
+                            if idx < merged_columns.len() {
+                                self.datatype_to_string(&merged_columns[idx].data_type)
+                            } else {
+                                "INTEGER".to_string()
+                            }
+                        } else {
+                            "INTEGER".to_string()
+                        };
+                    let direction = if sort_expr.asc {
+                        "ASCENDING"
+                    } else {
+                        "DESCENDING"
+                    };
+                    Ok(serde_json::json!([expr_val, type_str, direction]))
+                })
+                .collect::<Result<_, QedError>>()?;
+
+            // Serialize offset and limit
+            let offset_val = match &limit.skip {
+                Some(skip) => self.serialize_expr_with_columns(skip, &merged_columns)?,
+                None => Value::Null,
+            };
+            let limit_val = match &limit.fetch {
+                Some(fetch) => self.serialize_expr_with_columns(fetch, &merged_columns)?,
+                None => Value::Null,
+            };
+
+            Ok(SerializedRel {
+                json: serde_json::json!({
+                    "sort": {
+                        "collation": collation,
+                        "source": source.json,
+                        "offset": offset_val,
+                        "limit": limit_val
+                    }
+                }),
+                columns: source.columns,
+            })
+        } else {
+            // Limit without Sort - serialize as sort with empty collation
+            let source = self.serialize_rel_with_outer_columns(&limit.input, outer_columns)?;
+
+            let mut merged_columns = outer_columns.to_vec();
+            merged_columns.extend(source.columns.clone());
+
+            let offset_val = match &limit.skip {
+                Some(skip) => self.serialize_expr_with_columns(skip, &merged_columns)?,
+                None => Value::Null,
+            };
+            let limit_val = match &limit.fetch {
+                Some(fetch) => self.serialize_expr_with_columns(fetch, &merged_columns)?,
+                None => Value::Null,
+            };
+
+            Ok(SerializedRel {
+                json: serde_json::json!({
+                    "sort": {
+                        "collation": [],
+                        "source": source.json,
+                        "offset": offset_val,
+                        "limit": limit_val
+                    }
+                }),
+                columns: source.columns,
+            })
+        }
+    }
+
     fn serialize_empty(&mut self, empty: &Empty) -> Result<SerializedRel, QedError> {
         // Empty pattern derives its schema from the inner plan
         let schema: Vec<Value> = empty
@@ -621,6 +986,37 @@ impl QedSerializer {
             JoinType::RightMark => "RIGHT_MARK",
         }
         .to_string()
+    }
+}
+
+impl QedSerializer {
+    /// Serialize a pair of concrete plans (before/after transformation) to QED JSON format
+    pub fn serialize_plan_pair(
+        &mut self,
+        before: &LogicalPlan,
+        after: &LogicalPlan,
+    ) -> Result<String, QedError> {
+        // Clear tables for fresh serialization
+        self.tables.clear();
+
+        // Serialize both plans
+        let before_serialized = self.serialize_rel(before)?;
+        let after_serialized = self.serialize_rel(after)?;
+
+        // Generate help text
+        let before_help = format!("{}", before.display_indent());
+        let after_help = format!("{}", after.display_indent());
+
+        // Extract schemas
+        let schemas = self.extract_schemas();
+
+        let output = QedOutput {
+            schemas,
+            queries: vec![before_serialized.json, after_serialized.json],
+            help: vec![before_help, after_help],
+        };
+
+        Ok(serde_json::to_string_pretty(&output)?)
     }
 }
 

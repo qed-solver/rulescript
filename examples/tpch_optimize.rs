@@ -51,20 +51,25 @@
 //!
 //! ## Usage
 //!
-//! Run with: cargo run --example tpch_optimize
-//! Run with verbose: cargo run --example tpch_optimize -- -v
+//! Run: cargo run --example tpch_optimize
+//! Verbose: cargo run --example tpch_optimize -- -v
+//! Export to QED: cargo run --example tpch_optimize -- --export
 
 mod tpch;
+
+use std::{fs, path::Path, sync::Arc};
 
 use datafusion::{
     optimizer::{Optimizer, OptimizerContext},
     prelude::*,
 };
-use rulescript::rule::{
-    RuleWrapper,
-    impls::{FilterIntoJoinRule, JoinLeftConditionPushRule, JoinRightConditionPushRule},
+use rulescript::{
+    rule::{
+        RuleWrapper,
+        impls::{FilterIntoJoinRule, JoinLeftConditionPushRule, JoinRightConditionPushRule},
+    },
+    verifier::qed::QedSerializer,
 };
-use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -88,10 +93,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     let verbose = std::env::args().any(|arg| arg == "-v" || arg == "--verbose");
+    let export = std::env::args().any(|arg| arg == "--export");
+
+    // Create output directory for QED export
+    let output_dir = Path::new("qed-json");
+    if export {
+        fs::create_dir_all(output_dir)?;
+    }
 
     let mut optimized_count = 0;
     let mut unchanged_count = 0;
     let mut error_count = 0;
+    let mut export_count = 0;
 
     for (i, sql) in tpch::ALL_QUERIES.iter().enumerate() {
         let name = format!("Q{}", i + 1);
@@ -129,6 +142,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                         println!();
                     }
+
+                    // Export to QED format
+                    if export {
+                        let mut serializer = QedSerializer::new();
+                        match serializer.serialize_plan_pair(&original_plan, &optimized_plan) {
+                            Ok(json) => {
+                                let filename = output_dir.join(format!("tpch-q{}.json", i + 1));
+                                fs::write(&filename, &json)?;
+                                export_count += 1;
+                            }
+                            Err(e) => {
+                                eprintln!("  Export error: {}", e);
+                            }
+                        }
+                    }
                 }
             }
             Err(e) => {
@@ -143,6 +171,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Results: {} optimized, {} unchanged, {} errors",
         optimized_count, unchanged_count, error_count
     );
+    if export {
+        println!(
+            "Exported {} queries to {}/",
+            export_count,
+            output_dir.display()
+        );
+    }
     println!("========================================");
 
     Ok(())
