@@ -1,11 +1,14 @@
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
 use datafusion::{
-    common::{Column, JoinConstraint},
+    common::{
+        Column, JoinConstraint,
+        tree_node::{TreeNode, TreeNodeRecursion},
+    },
     logical_expr::{
         Aggregate, BinaryExpr, EmptyRelation, Expr, Extension, Filter, Join, LogicalPlan, Operator,
         Projection, Union, build_join_schema,
-        expr::{AggregateFunction, AggregateFunctionParams, ScalarFunction},
+        expr::{AggregateFunction, AggregateFunctionParams, Exists, InSubquery, ScalarFunction},
         lit,
     },
 };
@@ -661,14 +664,41 @@ impl DefaultMatcher {
         // Get pattern's column references
         let pattern_columns = pattern.column_refs();
 
-        // Get concrete expression's column references
-        let concrete_columns = concrete.column_refs();
+        // Get concrete expression's column references (direct columns only)
+        let direct_columns = concrete.column_refs();
+
+        // Also collect outer reference columns from subqueries anywhere in the expression.
+        // These represent dependencies on outer scope that must be considered
+        // when partitioning predicates for push-down rules.
+        // Note: outer_ref_columns already contains all outer refs recursively (including nested subqueries).
+        let mut outer_ref_columns: Vec<Column> = Vec::new();
+        let _ = concrete.apply(|e| {
+            let outer_refs = match e {
+                Expr::ScalarSubquery(sq) => &sq.outer_ref_columns,
+                Expr::InSubquery(InSubquery { subquery, .. }) => &subquery.outer_ref_columns,
+                Expr::Exists(Exists { subquery, .. }) => &subquery.outer_ref_columns,
+                _ => return Ok(TreeNodeRecursion::Continue),
+            };
+            for outer_ref in outer_refs {
+                if let Expr::OuterReferenceColumn(_, col) = outer_ref {
+                    outer_ref_columns.push(col.clone());
+                }
+            }
+            Ok(TreeNodeRecursion::Continue)
+        });
+
+        // Combine direct columns and outer ref columns for partitioning
+        let all_columns: Vec<&Column> = direct_columns
+            .iter()
+            .copied()
+            .chain(outer_ref_columns.iter())
+            .collect();
 
         // Use partition to ensure each concrete column matches some pattern column
         // This enforces that concrete expression only uses columns from allowed partitions
         self.partition(
             &pattern_columns,
-            concrete_columns.iter(),
+            all_columns.iter(),
             |matcher, pat_col, con_col| matcher.resolve_column(pat_col, con_col, context),
         )?;
 
@@ -1052,6 +1082,30 @@ impl DefaultMatcher {
             .ok_or_else(|| RuleError::InvalidPattern {
                 reason: "Filter predicate must resolve to a single expression".to_string(),
             })?;
+
+        // Correlated subqueries cannot be placed in join conditions - they are only
+        // allowed in Filter, Projection, and Aggregate nodes. Check if the predicate
+        // contains any subqueries with outer references.
+        let mut has_correlated_subquery = false;
+        let _ = predicate.apply(|e| {
+            let is_correlated = match e {
+                Expr::ScalarSubquery(sq) => !sq.outer_ref_columns.is_empty(),
+                Expr::InSubquery(InSubquery { subquery, .. }) => {
+                    !subquery.outer_ref_columns.is_empty()
+                }
+                Expr::Exists(Exists { subquery, .. }) => !subquery.outer_ref_columns.is_empty(),
+                _ => false,
+            };
+            if is_correlated {
+                has_correlated_subquery = true;
+            }
+            Ok(TreeNodeRecursion::Continue)
+        });
+        if has_correlated_subquery {
+            return Err(RuleError::InvalidPattern {
+                reason: "Join condition cannot contain correlated subqueries".to_string(),
+            });
+        }
 
         // Build join schema
         let join_schema =
