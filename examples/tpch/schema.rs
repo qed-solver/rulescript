@@ -17,6 +17,7 @@ use std::sync::Arc;
 ///
 /// Tables are registered as empty tables (schema only) since we only
 /// need the schema for query planning and optimization testing.
+#[allow(dead_code)]
 pub async fn register_tables(ctx: &SessionContext) {
     let tables = [
         ("nation", nation_schema()),
@@ -236,4 +237,20 @@ fn lineitem_schema() -> Schema {
         Field::new("l_shipmode", DataType::Utf8, false),
         Field::new("l_comment", DataType::Utf8, false),
     ])
+}
+
+/// Get schema for a TPC-H table by name
+#[allow(dead_code)]
+pub fn get_schema(table: &str) -> Schema {
+    match table {
+        "nation" => nation_schema(),
+        "region" => region_schema(),
+        "part" => part_schema(),
+        "supplier" => supplier_schema(),
+        "partsupp" => partsupp_schema(),
+        "customer" => customer_schema(),
+        "orders" => orders_schema(),
+        "lineitem" => lineitem_schema(),
+        _ => panic!("Unknown table: {}", table),
+    }
 }

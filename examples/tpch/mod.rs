@@ -38,4 +38,7 @@ pub mod queries;
 pub mod schema;
 
 pub use queries::*;
+#[allow(unused_imports)]
+pub use schema::get_schema;
+#[allow(unused_imports)]
 pub use schema::register_tables;
