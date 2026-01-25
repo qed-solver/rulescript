@@ -7,7 +7,6 @@ This directory contains examples demonstrating RuleScript's query optimization c
 | Example | Description | Command |
 |---------|-------------|---------|
 | `optimizer` | Interactive SQL REPL with rule selection | `cargo run --example optimizer` |
-| `tpch_benchmark` | TPC-H benchmark comparing RuleScript vs baseline | `cargo run --release --example tpch_benchmark` |
 | `tpch_optimize` | Apply rules to TPC-H queries, show transformations | `cargo run --example tpch_optimize` |
 | `export_rules_to_qed` | Export rules to QED JSON format for verification | `cargo run --example export_rules_to_qed` |
 | `user_defined_left_semi_join` | User-defined operator example with EXISTS semantics | `cargo run --example user_defined_left_semi_join` |
@@ -41,32 +40,15 @@ sql> set 1,2
 
 sql> SELECT * FROM (SELECT salary * 1.1 AS raised FROM emp) WHERE raised > 55000
 
-🔍 Logical Plan (BEFORE optimization):
+Logical Plan (BEFORE optimization):
 Filter: raised > Float64(55000)
   Projection: emp.salary * Float64(1.1) AS raised
     TableScan: emp
 
-✨ Logical Plan (AFTER optimization):
+Logical Plan (AFTER optimization):
 Projection: emp.salary * Float64(1.1) AS raised
   Filter: emp.salary * Float64(1.1) > Float64(55000)
     TableScan: emp
-```
-
-## TPC-H Benchmark
-
-```bash
-# Generate TPC-H data first (SF=1, ~1GB)
-cd TPC-H\ V3.0.1/dbgen && make && ./dbgen -s 1
-mkdir -p ../../data/tpch-sf1 && mv *.tbl ../../data/tpch-sf1/
-
-# Run benchmark
-cargo run --release --example tpch_benchmark -- -p data/tpch-sf1 -n 3
-
-# Compare optimized plans
-cargo run --release --example tpch_benchmark -- -p data/tpch-sf1 --compare-plans
-
-# Run single query
-cargo run --release --example tpch_benchmark -- -p data/tpch-sf1 -q 18
 ```
 
 ## TPC-H Optimization Demo
@@ -139,7 +121,6 @@ examples/
 │   ├── mod.rs                     # Module exports
 │   ├── queries.rs                 # All 22 TPC-H queries
 │   └── schema.rs                  # TPC-H table schemas
-├── tpch_benchmark.rs               # TPC-H performance benchmark
 ├── tpch_optimize.rs                # TPC-H optimization demo
 ├── export_rules_to_qed.rs          # QED export tool
 ├── user_defined_left_semi_join.rs  # User-defined operator example
