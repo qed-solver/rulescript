@@ -25,8 +25,17 @@ pub trait UserDefinedLogicalOperator: Send + Sync {
     /// Input plans that this operator operates on
     fn inputs(&self) -> Vec<&LogicalPlan>;
 
-    /// Output schema of this operator
+    /// Output schema of this operator (opaque schema for pattern matching)
     fn schema(&self) -> &Schema;
+
+    /// DataFusion schema with full qualifiers (optional override)
+    ///
+    /// If provided, this schema will be used for DataFusion integration,
+    /// preserving table qualifiers and exact column types.
+    /// If not provided, the opaque schema will be converted.
+    fn df_schema(&self) -> Option<DFSchemaRef> {
+        None
+    }
 
     /// Equivalent core relational algebra plan (mandatory)
     ///
@@ -76,7 +85,9 @@ pub struct UserDefinedLogicalPattern {
 
 impl UserDefinedLogicalPattern {
     pub fn new(implementation: Arc<dyn UserDefinedLogicalOperator>) -> Self {
-        let df_schema = implementation.schema().to_datafusion_schema();
+        let df_schema = implementation
+            .df_schema()
+            .unwrap_or_else(|| implementation.schema().to_datafusion_schema());
         Self {
             implementation,
             df_schema,

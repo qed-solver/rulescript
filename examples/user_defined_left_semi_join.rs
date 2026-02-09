@@ -48,8 +48,10 @@ impl LeftSemiJoin {
         right: LogicalPlan,
         condition: Expr,
     ) -> Result<Self, datafusion::error::DataFusionError> {
-        // Output schema is same as left input
+        // Output schema is same as left input - preserve the original DFSchema
         let left_schema = left.schema();
+
+        // Build opaque schema for pattern matching (used by UserDefinedLogicalOperator)
         let schema = Schema {
             fields: left_schema
                 .fields()
@@ -77,14 +79,14 @@ impl LeftSemiJoin {
             spans: Spans::new(),
         });
 
-        // let exists_expr = exists(Arc::new(subquery_plan));
         let exists_expr = exists(Arc::new(subquery_plan));
 
         let semantics = LogicalPlanBuilder::from(left.clone())
             .filter(exists_expr)?
             .build()?;
 
-        let df_schema = schema.to_datafusion_schema();
+        // Preserve the original left schema with table qualifiers for DataFusion compatibility
+        let df_schema = left_schema.clone();
 
         Ok(Self {
             left,
@@ -108,6 +110,10 @@ impl UserDefinedLogicalOperator for LeftSemiJoin {
 
     fn schema(&self) -> &Schema {
         &self.schema
+    }
+
+    fn df_schema(&self) -> Option<DFSchemaRef> {
+        Some(self.df_schema.clone())
     }
 
     fn semantics(&self) -> &LogicalPlan {
@@ -302,6 +308,36 @@ rulescript::rule! {
     }
 }
 
+// Pushes LeftSemiJoin below aggregate when join condition only references GROUP BY columns
+// Pattern: LeftSemiJoin(Aggregate(G, A, source), right, Cond(g, r))
+//       → Aggregate(G, A, LeftSemiJoin(source, right, Cond(G(x), r)))
+rulescript::rule! {
+    LeftSemiJoinAggregateTransposeRule {
+        schemas: {
+            source: (x: T),
+            right: (r: TR),
+        },
+        functions: {
+            G(T) -> TG,              // GROUP BY expression
+            Cond(TG, TR) -> Bool,    // Join condition on group columns only (pushable)
+            Agg{T} -> U,             // Aggregate function
+        },
+        from: {
+            let agg = rulescript::aggregate!(source, group: [G(x) as g], aggs: [Agg{x} as a]);
+            let lsj = LeftSemiJoin::new(agg.plan, right.plan, rulescript::pred!(Cond(g, r)))
+                .expect("Failed to create LeftSemiJoin");
+            rulescript::extend!(lsj)
+        },
+        to: {
+            // Push semi-join below aggregate, rewriting condition to use pre-agg columns
+            let lsj = LeftSemiJoin::new(source.plan, right.plan, rulescript::pred!(Cond(G(x), r)))
+                .expect("Failed to create LeftSemiJoin");
+            let semi_joined = rulescript::extend!(lsj);
+            rulescript::aggregate!(semi_joined, group: [G(x) as g], aggs: [Agg{x} as a])
+        },
+    }
+}
+
 fn main() {
     println!("=== User-Defined Operator: LeftSemiJoin ===\n");
     println!("This example shows how to define LeftSemiJoin that works as BOTH:");
@@ -320,13 +356,24 @@ fn main() {
     let json = rulescript::verifier::Verifier::serialize_rule(&mut serializer, &rule)
         .expect("Failed to serialize rule");
 
-    println!("QED JSON output:");
+    println!("LeftSemiJoinExistsRule QED JSON output:");
     println!("{}", json);
+
+    // Also demonstrate the new aggregate transpose rule
+    println!("\n=== LeftSemiJoinAggregateTransposeRule ===\n");
+    let agg_rule = LeftSemiJoinAggregateTransposeRule;
+    let mut serializer = rulescript::verifier::qed::QedSerializer::new();
+    let agg_json = rulescript::verifier::Verifier::serialize_rule(&mut serializer, &agg_rule)
+        .expect("Failed to serialize aggregate rule");
+    println!("QED JSON output:");
+    println!("{}", agg_json);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use datafusion::functions_aggregate::count::count_all;
+    use datafusion::logical_expr::{LogicalPlan, LogicalPlanBuilder, col};
     use rulescript::rule::ApplicableRule;
 
     #[test]
@@ -382,6 +429,62 @@ mod tests {
         let result_str = format!("{}", result.display_indent());
         let expected_str = format!("{}", expected.display_indent());
 
+        assert_eq!(
+            result_str, expected_str,
+            "\nResult and expected plans differ:\nResult:\n{}\nExpected:\n{}",
+            result_str, expected_str
+        );
+    }
+
+    #[test]
+    fn test_left_semi_join_aggregate_transpose_basic() {
+        // SQL equivalent: SELECT deptno, COUNT(*) FROM emp GROUP BY deptno
+        //                 WHERE EXISTS (SELECT 1 FROM dept WHERE emp.deptno = dept.deptno)
+        // Pattern: LeftSemiJoin(Aggregate(emp, GROUP BY deptno), dept)
+        // Expected: Aggregate(LeftSemiJoin(emp, dept), GROUP BY deptno)
+
+        let emp = rulescript::rule::test::utils::emp_table();
+        let dept = rulescript::rule::test::utils::dept_table();
+
+        // Build: Aggregate(emp, GROUP BY deptno, COUNT(*))
+        let agg = LogicalPlanBuilder::from(emp.clone())
+            .aggregate(vec![col("deptno")], vec![count_all()])
+            .unwrap()
+            .build()
+            .unwrap();
+
+        // Build: LeftSemiJoin(Aggregate, dept) on emp.deptno = dept.deptno
+        // Note: aggregate output preserves the table qualifier from the input
+        let join_cond = col("emp.deptno").eq(col("dept.deptno"));
+        let lsj = LeftSemiJoin::new(agg, dept.clone(), join_cond.clone()).unwrap();
+        let input = LogicalPlan::Extension(datafusion::logical_expr::Extension {
+            node: Arc::new(lsj),
+        });
+
+        // Expected: Aggregate(LeftSemiJoin(emp, dept), GROUP BY deptno)
+        let inner_lsj = LeftSemiJoin::new(
+            emp.clone(),
+            dept.clone(),
+            col("emp.deptno").eq(col("dept.deptno")),
+        )
+        .unwrap();
+        let wrapped_lsj =
+            rulescript::ast::extension::UserDefinedLogicalPattern::new(Arc::new(inner_lsj));
+        let semi_joined = LogicalPlan::Extension(datafusion::logical_expr::Extension {
+            node: Arc::new(wrapped_lsj),
+        });
+
+        let expected = LogicalPlanBuilder::from(semi_joined)
+            .aggregate(vec![col("deptno")], vec![count_all()])
+            .unwrap()
+            .build()
+            .unwrap();
+
+        let rule = LeftSemiJoinAggregateTransposeRule;
+        let result = rule.try_apply(&input).unwrap();
+
+        let result_str = format!("{}", result.display_indent());
+        let expected_str = format!("{}", expected.display_indent());
         assert_eq!(
             result_str, expected_str,
             "\nResult and expected plans differ:\nResult:\n{}\nExpected:\n{}",
