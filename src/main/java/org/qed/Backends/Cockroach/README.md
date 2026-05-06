@@ -32,6 +32,7 @@ The workflow below is the Cockroach-specific setup that used to live in the root
 
    - Rule files from `Generated/*.opt` -> `pkg/sql/opt/norm/rules/`
    - `CockroachTests` -> `pkg/sql/opt/norm/testdata/rules/CockroachTests`
+   - Replace `pkg/sql/opt/norm/reject_null_funcs.go` in the CockroachDB repository with the current copy from this repo (`src/main/java/org/qed/Backends/Cockroach/reject_null_funcs.go`), because the original code near line 257 performs an unchecked type assertion `agg.Child(0).(*memo.VariableExpr)`; when `AggregateProjectMerge` fires and merges directly, that child can be a `PlusExpr`, which causes a panic, and the patched version adds a safe type check.
 
 3. In the Cockroach repository:
 
