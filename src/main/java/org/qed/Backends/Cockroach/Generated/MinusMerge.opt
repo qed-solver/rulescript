@@ -1,0 +1,18 @@
+[MinusMerge, Normalize]
+(Except
+    $left_0:(Except
+        $leftLeft_1:*
+        $leftRight_2:*
+        $innerPrivate_3:*
+    )
+    $right_4:*
+    $outerPrivate_5:*
+)
+=>
+(ConstructMinusMergeResult
+    $leftLeft_1
+    $leftRight_2
+    $right_4
+    $innerPrivate_3
+    $outerPrivate_5
+)

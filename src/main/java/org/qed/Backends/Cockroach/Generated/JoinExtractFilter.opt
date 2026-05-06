@@ -1,0 +1,15 @@
+[JoinExtractFilter, Normalize]
+(InnerJoin
+    $left_7:*
+    $right_8:*
+    $on_9:* &
+        (CanExtractJoinFilter $left_7 $right_8 $on_9)
+    $private_3:*
+)
+=>
+(ConstructJoinExtractFilterResult
+    $left_7
+    $right_8
+    $on_9
+    $private_3
+)

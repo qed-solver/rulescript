@@ -1,0 +1,7 @@
+[PruneEmptyMinus, Normalize]
+(Except
+    $left_0:* & (HasZeroRows $left_0)
+    $right:*
+)
+=>
+(ConstructEmptyValues (OutputCols $left_0))

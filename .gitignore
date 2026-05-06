@@ -1,14 +1,21 @@
 *
+!.github
+!.github/**
 !.envrc
 !.gitignore
+!LICENSE
 !flake.nix
 !flake.lock
 !*.md
-
-# Rust
-!Cargo.toml
-!Cargo.lock
-!examples
-!examples/**
+!pom.xml
+!mvnw
+!mvnw.cmd
+!.mvn
+!.mvn/**
+.mvn/wrapper/maven-wrapper.jar
+!scripts
+!scripts/**
 !src
 !src/**
+
+**/.DS_Store

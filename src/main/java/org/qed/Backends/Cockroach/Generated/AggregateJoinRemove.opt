@@ -1,0 +1,24 @@
+[AggregateJoinRemove, Normalize]
+(DistinctOn
+    (LeftJoin
+        $left_0:*
+        *
+        *
+    )
+    $aggregations_1:[]
+    $groupingPrivate_2:(GroupingPrivate $groupingCols_3:* $ordering_4:*) &
+        (ColsAreSubset
+            $groupingCols_3
+            $leftCols_5:(OutputCols $left_0)
+        ) &
+        (OrderingCanProjectCols
+            $ordering_4
+            $leftCols_5
+        )
+)
+=>
+(DistinctOn
+    $left_0
+    $aggregations_1
+    $groupingPrivate_2
+)
