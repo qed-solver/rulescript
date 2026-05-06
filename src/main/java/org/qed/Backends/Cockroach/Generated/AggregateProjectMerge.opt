@@ -1,0 +1,16 @@
+[AggregateProjectMerge, Normalize]
+(GroupBy
+    $input_0:(Project
+        $input_1:*
+        *
+        *
+    )
+    $aggregations_2:*
+    $groupingPrivate_3:* & (CanMergeProjectIntoAggregate $input_0 $groupingPrivate_3)
+)
+=>
+(GroupBy
+    $input_1
+    (MergeProjectIntoAggregate $input_0 $aggregations_2)
+    $groupingPrivate_3
+)

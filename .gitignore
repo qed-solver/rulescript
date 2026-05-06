@@ -8,7 +8,32 @@
 # Rust
 !Cargo.toml
 !Cargo.lock
+!pom.xml
+!mvnw
+!mvnw.cmd
+!.mvn
+!.mvn/**
+.mvn/wrapper/maven-wrapper.jar
+!scripts
+!scripts/**
 !examples
 !examples/**
 !src
 !src/**
+
+# Java parser (RuleScript / Qed)
+!parser
+!parser/**
+
+# Parser: build & IDE (after !parser/**)
+parser/target/
+parser/.idea/
+parser/*.iml
+parser/.mvn/wrapper/maven-wrapper.jar
+parser/.vscode
+parser/.devcontainer
+parser/.direnv/
+parser/.envrc
+
+# OS noise under tracked trees
+**/.DS_Store

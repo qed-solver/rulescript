@@ -1,0 +1,33 @@
+[UnionPullUpConstants, Normalize]
+(UnionAll
+    $left_4:(Project
+        $leftInput_1:*
+        $leftProjections_2:*
+        $leftPassthrough_3:*
+    )
+    $right_9:(Project
+        $rightInput_6:*
+        $rightProjections_7:*
+        $rightPassthrough_8:*
+    )
+    $private_10:(SetPrivate $leftCols_11:* $rightCols_12:* $outCols_13:*) &
+        (HasMatchingConstantsFromUnion
+            $leftProjections_2
+            $rightProjections_7
+            $leftCols_11
+            $rightCols_12
+            $outCols_13
+        )
+)
+=>
+(UnionPullUpConstantsReplace
+    $left_4
+    $right_9
+    $leftProjections_2
+    $rightProjections_7
+    $private_10
+    $leftInput_1
+    $rightInput_6
+    $leftPassthrough_3
+    $rightPassthrough_8
+)

@@ -1,0 +1,19 @@
+[FilterProjectTranspose, Normalize]
+(Select
+    (Project
+    $input_0:*
+    $proj_1:*
+    $passthrough_2:*
+)
+    $cond_3:* &
+    (FiltersBoundBy $cond_3 $inputCols_4:(OutputCols $input_0))
+)
+=>
+(Project
+    (Select
+    $input_0
+    $cond_3
+)
+    $proj_1
+    $passthrough_2
+)
