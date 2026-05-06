@@ -13,16 +13,24 @@ The project targets Java 25. Build with Maven:
 
 ## Generate Rules
 
-Rules are generated per backend by running the corresponding tester:
+We implement two different styles of RuleScript:
+
+- One style uses code-generation backends that translate Java `RRule` definitions directly into engine-specific artifacts to be injected into the backend repository.
+
+To see the rules generated per backend in this style, you can run the corresponding tester:
 
 ```sh
 ./mvnw -q compile exec:java@cockroach-codegen    # CockroachDB
 ./mvnw -q compile exec:java@calcite-codegen-test # Apache Calcite
 ./mvnw -q compile exec:java@mysql-tester         # MySQL
-# See the Datafusion folder for details about RuleScript generation for DataFusion
 ```
 
 Generated rule files are written to each backend's `Generated/` directory.
+
+- One style uses a native runtime backend in which rules are defined and directly applied through backend integration.
+
+Please check out `src/main/java/org/qed/Backends/Datafusion` for more details.
+
 
 ## Adding Rules
 
