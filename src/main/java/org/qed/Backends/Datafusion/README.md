@@ -1,4 +1,4 @@
-# RuleScript
+# RuleScript for Datafusion
 
 A Rust DSL for building database query rewrite rules with uninterpreted symbols. RuleScript provides a minimal, pragmatic API that wraps DataFusion's native query planning while enabling rule verification and code generation.
 
@@ -66,7 +66,7 @@ The `P` and `Q` are uninterpreted predicates - they can represent ANY boolean ex
 
 All rules have comprehensive tests (79 unit tests + 21 doc tests, all passing).
 
-See `src/rule/impls/README.md` for detailed rule documentation.
+See `src/main/java/org/qed/Backends/Datafusion/src/rule/impls/README.md` for detailed rule documentation.
 
 ### Core Features
 
@@ -84,6 +84,7 @@ See `src/rule/impls/README.md` for detailed rule documentation.
 ```
 src/
   ast/
+    empty.rs       - Empty relation representation
     opaque.rs      - Abstract types, fields, schemas
     relational.rs  - Logical plan patterns (Source, Filter, Project, Join)
     pattern.rs     - Pattern functions (ScalarPattern, AggregatePattern)
@@ -101,7 +102,11 @@ src/
     qed.rs         - QED format serialization with subquery support
   lib.rs           - Public API exports
 examples/
-  optimizer_repl/  - Interactive demo with all rules
+  optimizer.rs      - Main interactive optimizer demo
+  optimizer_repl/   - REPL support modules used by optimizer example
+  export_rules_to_qed.rs - Export rules to QED format
+  tpch_optimize.rs  - Run rule optimization on TPC-H queries
+  tpch/             - TPC-H schema and query definitions
   user_defined_left_semi_join.rs - Example of user-defined operator with EXISTS semantics
 ```
 
@@ -146,7 +151,7 @@ optimizer.add_rule(Arc::new(optimizer_rule));
 ## Run Interactive Demo
 
 ```bash
-cargo run --example optimizer_repl
+cargo run --example optimizer
 ```
 
 Interactive demonstration with optimization rules:
@@ -154,7 +159,7 @@ Interactive demonstration with optimization rules:
 - See before/after query plans
 - Real SQL parsing with DataFusion
 
-See `examples/README.md` for detailed usage.
+See `src/main/java/org/qed/Backends/Datafusion/examples/README.md` for detailed usage.
 
 ## Run Tests
 
@@ -246,15 +251,6 @@ RuleScript solves this by:
 - DefaultMatcher manages three binding types: fields, functions, sources
 - Context-preserving instantiation (bindings stay in their context)
 - Recursive plan transformation with captured bindings
-
-## External Resources
-
-The project references two external directories not tracked in git:
-
-- `parser/` - Java implementation with QED-verified rules
-- `calcite/` - Apache Calcite source for rule reference
-
-See `PARSER_AND_CALCITE_NOTES.txt` for details on these directories.
 
 ## Future Work
 

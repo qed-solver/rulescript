@@ -20,8 +20,6 @@ Cockroach test cases are maintained in:
 
 ## Running against CockroachDB
 
-The workflow below is the Cockroach-specific setup that used to live in the root README.
-
 1. Clone [cockroachdb/cockroach](https://github.com/cockroachdb/cockroach) and check out commit:
 
    ```text
