@@ -59,7 +59,7 @@ For a full description of the rule language and available operators, see the [pa
 
 RuleScript turns each `RRule` into Qed JSON and runs the Rust [Qed prover](https://github.com/qed-solver/prover) against it to check Ged-level provability of the before/after pair.
 
-You will need to install `jq`, `z3`, and `cvc5` yourself and put them on `PATH`. Read [qed-solver/prover](https://github.com/qed-solver/prover) for how to install compatible versions.
+You will need to install `jq`, `z3`, and `cvc5` yourself and put them on `PATH`. Read [qed-solver/prover](https://github.com/qed-solver/prover) for more details.
 
 After you add or change rules as Java records in `src/main/java/org/qed/RRuleInstances/`, run the following from the repository root:
 
@@ -69,6 +69,8 @@ bash scripts/generate-rule-json.sh    # Qed JSON under tmp-rules/
 bash scripts/build-qed-prover.sh      # clone ./qed-prover and build target/release/qed-prover (skip if already built)
 bash scripts/test-rules.sh            # run the prover on tmp-rules/*.json
 ```
+
+After `scripts/test-rules.sh` finishes, the markdown summary is written to `tmp-rules/qed-prover-step-summary.md`.
 
 ## License
 
