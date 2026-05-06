@@ -2,8 +2,18 @@
 
 # Test all generated rules with qed-prover
 
-echo "## QED Prover Test Results" >> $GITHUB_STEP_SUMMARY
-echo "" >> $GITHUB_STEP_SUMMARY
+if [ -z "${GITHUB_STEP_SUMMARY:-}" ]; then
+    GITHUB_STEP_SUMMARY="tmp-rules/qed-prover-step-summary.md"
+fi
+mkdir -p "$(dirname "$GITHUB_STEP_SUMMARY")"
+
+log_line() {
+    printf '%s\n' "$@"
+    printf '%s\n' "$@" >> "$GITHUB_STEP_SUMMARY"
+}
+
+log_line "## QED Prover Test Results"
+log_line ""
 
 failed_rules=""
 total_count=0
@@ -13,21 +23,25 @@ for json_file in tmp-rules/*.json; do
     rule_name=$(basename "$json_file" .json)
     total_count=$((total_count + 1))
     ./qed-prover/target/release/qed-prover "$json_file" || true
-    
+
     result_file="${json_file%.json}.result"
     if [ -f "$result_file" ] && jq -e '.provable == true' "$result_file" > /dev/null 2>&1; then
-        echo "✅ $rule_name: PASSED" >> $GITHUB_STEP_SUMMARY
+        log_line "✅ $rule_name: PASSED"
         passed_count=$((passed_count + 1))
     else
-        echo "❌ $rule_name: FAILED" >> $GITHUB_STEP_SUMMARY
+        log_line "❌ $rule_name: FAILED"
         failed_rules="$failed_rules$rule_name,"
     fi
 done
 
-echo "" >> $GITHUB_STEP_SUMMARY
-echo "**Summary:** $passed_count/$total_count passed" >> $GITHUB_STEP_SUMMARY
+log_line ""
+log_line "**Summary:** $passed_count/$total_count passed"
 
 if [ -n "$failed_rules" ]; then
-    echo "::error::Failed rules: ${failed_rules%,}"
+    msg="Failed rules: ${failed_rules%,}"
+    echo "$msg" >&2
+    if [ -n "${GITHUB_ACTIONS:-}" ]; then
+        echo "::error::$msg"
+    fi
     exit 1
 fi

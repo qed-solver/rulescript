@@ -45,6 +45,12 @@
                         </configuration>
                     </execution>
                     <execution>
+                        <id>mysql-tester</id>
+                        <configuration>
+                            <mainClass>org.qed.Backends.MySQL.Tests.MySQLTester</mainClass>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>qed-parser-main</id>
                         <configuration>
                             <mainClass>org.qed.Main</mainClass>

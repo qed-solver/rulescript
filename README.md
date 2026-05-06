@@ -1,11 +1,11 @@
 # RuleScript
 
-RuleScript is an engine-agnostic domain-specific language (DSL) for developing query rewrite rules.
+RuleScript is an engine-agnostic domain-specific language for developing query rewrite rules.
 For details, please see our [paper](http://www2.eecs.berkeley.edu/Pubs/TechRpts/2024/EECS-2024-140.pdf).
 
 ## Build
 
-The project targets **Java 25** ([OpenJDK](https://openjdk.org/) / Temurin builds). Build with Maven:
+The project targets Java 25. Build with Maven:
 
 ```sh
 ./mvnw compile -q
@@ -13,23 +13,13 @@ The project targets **Java 25** ([OpenJDK](https://openjdk.org/) / Temurin build
 
 ## Generate Rules
 
-Rules are generated per backend by running the corresponding tester. First build a classpath:
+Rules are generated per backend by running the corresponding tester:
 
 ```sh
-./mvnw dependency:build-classpath -q -DincludeTypes=jar -Dmdep.outputFile=/tmp/cp.txt
-```
-
-Then run the tester for the target backend:
-
-```sh
-# CockroachDB
-java -cp "target/classes:$(cat /tmp/cp.txt)" org.qed.Backends.Cockroach.CockroachTester
-
-# Apache Calcite
-java -cp "target/classes:$(cat /tmp/cp.txt)" org.qed.Backends.Calcite.CalciteTester
-
-# MySQL
-java -cp "target/classes:$(cat /tmp/cp.txt)" org.qed.Backends.MySQL.Tests.MySQLTester
+./mvnw -q compile exec:java@cockroach-codegen    # CockroachDB
+./mvnw -q compile exec:java@calcite-codegen-test # Apache Calcite
+./mvnw -q compile exec:java@mysql-tester         # MySQL
+# See the Datafusion folder for details about RuleScript generation for DataFusion
 ```
 
 Generated rule files are written to each backend's `Generated/` directory.
@@ -38,7 +28,7 @@ Generated rule files are written to each backend's `Generated/` directory.
 
 Rules are defined in `src/main/java/org/qed/RRuleInstances/` as Java records implementing `RRule`. Each rule provides a `before()` pattern and an `after()` transformation in terms of RuleScript's relational algebra operators. The generators pick up every file in that directory automatically.
 
-**Example: `FilterMerge`**
+Example: `FilterMerge`
 
 ```java
 // src/main/java/org/qed/RRuleInstances/FilterMerge.java
@@ -63,50 +53,22 @@ Running the generators will produce:
 - `src/main/java/org/qed/Backends/Calcite/Generated/FilterMerge.java` — the Apache Calcite rule implementation
 - `src/main/java/org/qed/Backends/Cockroach/Generated/FilterMerge.opt` — the CockroachDB optgen rule
 
-To also add a Calcite test, create `src/main/java/org/qed/Backends/Calcite/Tests/FilterMergeTest.java` with a `public static void runTest()` method that constructs `before` and `after` plans using `RuleBuilder` and calls `tester.verify(runner, before, after)`. The CalciteTester discovers and runs all `*Test.java` files in that directory automatically.
-
 For a full description of the rule language and available operators, see the [paper](http://www2.eecs.berkeley.edu/Pubs/TechRpts/2024/EECS-2024-140.pdf).
 
-## Apache DataFusion Backend
+## Qed Proofs on Rules
 
-A separate Rust implementation targeting Apache DataFusion is available at [here](https://github.com/qed-solver/rulescript).
+RuleScript turns each `RRule` into Qed JSON and runs the Rust [Qed prover](https://github.com/qed-solver/prover) against it to check Ged-level provability of the before/after pair.
 
-## Test Cases
+You will need to install `jq`, `z3`, and `cvc5` yourself and put them on `PATH`. Read [qed-solver/prover](https://github.com/qed-solver/prover) for how to install compatible versions.
 
-### Apache Calcite
-
-Individual rule tests live in `src/main/java/org/qed/Backends/Calcite/Tests/`. All tests are run automatically when the Calcite tester is invoked:
+After you add or change rules as Java records in `src/main/java/org/qed/RRuleInstances/`, run the following from the repository root:
 
 ```sh
-java -cp "target/classes:$(cat /tmp/cp.txt)" org.qed.Backends.Calcite.CalciteTester
+./mvnw compile
+bash scripts/generate-rule-json.sh    # Qed JSON under tmp-rules/
+bash scripts/build-qed-prover.sh      # clone ./qed-prover and build target/release/qed-prover (skip if already built)
+bash scripts/test-rules.sh            # run the prover on tmp-rules/*.json
 ```
-
-### CockroachDB
-
-The generated `.opt` rule files live in `src/main/java/org/qed/Backends/Cockroach/Generated/`.
-
-To run them against CockroachDB:
-
-1. Clone the [CockroachDB repository](https://github.com/cockroachdb/cockroach) and check out commit `4b80cd59c6299f26b2b4f02a96064d5127ccad94` — this is the exact state of the codebase the rules were developed against.
-
-2. Copy the generated rule files and test data into the CockroachDB source tree:
-   - Rule files → `pkg/sql/opt/norm/rules/`
-   - Test data → `pkg/sql/opt/norm/testdata/rules/CockroachTests`
-
-3. Check your environment is set up correctly:
-   ```sh
-   ./dev doctor
-   ```
-
-4. Build CockroachDB:
-   ```sh
-   ./dev build
-   ```
-
-5. Run the CockroachDB tests:
-   ```sh
-   ./dev test pkg/sql/opt/norm -f=TestNormRules/CockroachTests -v
-   ```
 
 ## License
 

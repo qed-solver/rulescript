@@ -26,7 +26,7 @@ public class JsonGenerator {
 EOF
 
 # Build classpath
-MAVEN_CP=$(mvn dependency:build-classpath -Dmdep.outputFile=/dev/stdout -q)
+MAVEN_CP=$(./mvnw dependency:build-classpath -Dmdep.outputFile=/dev/stdout -q)
 CLASSPATH="target/classes:${MAVEN_CP}"
 
 # Compile the generator
