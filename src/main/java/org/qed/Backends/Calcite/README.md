@@ -1,7 +1,5 @@
 # Apache Calcite
 
-This directory contains Apache Calcite-specific artifacts generated from RuleScript rules.
-
 ## Generate Rules and Execute Tests
 
 Run the Calcite generator from the repository root:
