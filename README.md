@@ -1,7 +1,7 @@
 # RuleScript
 
 RuleScript is an engine-agnostic domain-specific language for developing query rewrite rules.
-For details, please see our [paper](http://www2.eecs.berkeley.edu/Pubs/TechRpts/2024/EECS-2024-140.pdf).
+For details, please see our [paper](https://arxiv.org/abs/2605.05536).
 
 ## Build
 
