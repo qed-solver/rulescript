@@ -1,7 +1,9 @@
-# RuleScript
+# RuleScript — Java DSL
 
 RuleScript is an engine-agnostic domain-specific language for developing query rewrite rules.
 For details, please see our [paper](https://arxiv.org/abs/2605.05536).
+
+For the Rust/DataFusion backend, see the [root README](../README.md).
 
 ## Build
 
@@ -12,27 +14,6 @@ The project targets Java 25. Build with Maven:
 ```
 
 ## Generate Rules
-
-We implement two different styles of RuleScript:
-
-- One style uses code-generation backends that translate Java `RRule` definitions directly into engine-specific artifacts to be injected into the backend repository.
-
-To see the rules generated per backend in this style, you can run the corresponding tester:
-
-```sh
-./mvnw -q compile exec:java@cockroach-codegen    # CockroachDB
-./mvnw -q compile exec:java@calcite-codegen-test # Apache Calcite
-./mvnw -q compile exec:java@mysql-tester         # MySQL
-```
-
-Generated rule files are written to each backend's `Generated/` directory.
-
-- One style uses a native runtime backend in which rules are defined and directly applied through backend integration.
-
-Please check out `src/main/java/org/qed/Backends/Datafusion` for more details.
-
-
-## Adding Rules
 
 Rules are defined in `src/main/java/org/qed/RRuleInstances/` as Java records implementing `RRule`. Each rule provides a `before()` pattern and an `after()` transformation in terms of RuleScript's relational algebra operators. The generators pick up every file in that directory automatically.
 
@@ -47,7 +28,7 @@ public record FilterMerge() implements RRule {
 
     @Override
     public RelRN before() {
-        return source.filter(inner).filter(outer);   // source.filter(P).filter(Q)
+        return source.filter(inner).filter(outer);     // source.filter(P).filter(Q)
     }
 
     @Override
@@ -57,24 +38,34 @@ public record FilterMerge() implements RRule {
 }
 ```
 
-Running the generators will produce:
-- `src/main/java/org/qed/Backends/Calcite/Generated/FilterMerge.java` — the Apache Calcite rule implementation
-- `src/main/java/org/qed/Backends/Cockroach/Generated/FilterMerge.opt` — the CockroachDB optgen rule
+RuleScript supports two styles of backend integration:
 
-For a full description of the rule language and available operators, see the [paper](http://www2.eecs.berkeley.edu/Pubs/TechRpts/2024/EECS-2024-140.pdf).
+**Code-generation backends** translate `RRule` definitions into engine-specific artifacts. Run the corresponding generator to produce files under each backend's `Generated/` directory:
+
+```sh
+./mvnw -q compile exec:java@cockroach-codegen    # CockroachDB
+./mvnw -q compile exec:java@calcite-codegen-test # Apache Calcite
+./mvnw -q compile exec:java@mysql-tester         # MySQL
+```
+
+For `FilterMerge` this produces:
+- `src/main/java/org/qed/Backends/Calcite/Generated/FilterMerge.java` — Apache Calcite rule
+- `src/main/java/org/qed/Backends/Cockroach/Generated/FilterMerge.opt` — CockroachDB optgen rule
+
+**Native runtime backend** — rules are defined and applied directly through backend integration. See the [Datafusion backend](../README.md) for details.
 
 ## Qed Proofs on Rules
 
-RuleScript turns each `RRule` into Qed JSON and runs the Rust [Qed prover](https://github.com/qed-solver/prover) against it to check Ged-level provability of the before/after pair.
+RuleScript turns each `RRule` into QED JSON and runs the Rust [Qed prover](https://github.com/qed-solver/prover) against it to check QED-level provability of the before/after pair.
 
 You will need to install `jq`, `z3`, and `cvc5` yourself and put them on `PATH`. Read [qed-solver/prover](https://github.com/qed-solver/prover) for more details.
 
-After you add or change rules as Java records in `src/main/java/org/qed/RRuleInstances/`, run the following from the repository root:
+After you add or change rules, run the following from the `java/` directory:
 
 ```sh
 ./mvnw compile
-bash scripts/generate-rule-json.sh    # Qed JSON under tmp-rules/
-bash scripts/build-qed-prover.sh      # clone ./qed-prover and build target/release/qed-prover (skip if already built)
+bash scripts/generate-rule-json.sh    # QED JSON under tmp-rules/
+bash scripts/build-qed-prover.sh      # clone ./qed-prover and build (skip if already built)
 bash scripts/test-rules.sh            # run the prover on tmp-rules/*.json
 ```
 
@@ -82,13 +73,4 @@ After `scripts/test-rules.sh` finishes, the markdown summary is written to `tmp-
 
 ## License
 
-Copyright 2026 The Qed Team
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this project except in compliance with
-the License. You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "
-AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific
-language governing permissions and limitations under the License.
+Copyright 2026 The Qed Team. Licensed under the Apache License, Version 2.0.

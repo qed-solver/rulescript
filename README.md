@@ -1,13 +1,23 @@
-# RuleScript for Datafusion
+# RuleScript
 
-A Rust DSL for building database query rewrite rules with uninterpreted symbols. RuleScript provides a minimal, pragmatic API that wraps DataFusion's native query planning while enabling rule verification and code generation.
+A Rust DSL for building database query rewrite rules with uninterpreted symbols. RuleScript wraps DataFusion's native query planning to enable declarative rule definition, pattern matching, and verification.
 
-## What It Does
+For details, see our [paper](https://arxiv.org/abs/2605.05536).
 
-RuleScript lets you express query optimizer rewrite rules using abstract patterns with uninterpreted symbols:
+For the engine-agnostic Java DSL implementation (Calcite, CockroachDB, MySQL, ProxySQL backends), see [`java/`](java/README.md).
+
+## Build
+
+```bash
+cargo build
+cargo test
+```
+
+## Quick Start
+
+### Define a Rule
 
 ```rust
-// Pattern: source.filter(P).filter(Q) → source.filter(P AND Q)
 crate::rule! {
     FilterMergeRule {
         schemas: {
@@ -26,108 +36,7 @@ crate::rule! {
 }
 ```
 
-The `P` and `Q` are uninterpreted predicates - they can represent ANY boolean expression. This means one rule definition covers infinite concrete cases.
-
-## Current State
-
-### Implemented Rules (22 total)
-
-**Filter Rules:**
-- FilterMergeRule - Merge consecutive filters
-- FilterProjectTransposeRule - Push filter below projection
-- FilterAggregateTransposeRule - Push filter predicates on GROUP BY columns below aggregate
-- FilterIntoJoinRule - Merge filter into join condition
-- FilterReduceTrueRule - Remove filter with true predicate
-- FilterReduceFalseRule - Replace filter with false predicate with empty relation
-
-**Project Rules:**
-- ProjectMergeRule - Merge consecutive projections
-- ProjectRemoveRule - Remove identity projections
-
-**Join Rules:**
-- JoinCommuteRule - Swap join inputs
-- JoinLeftConditionPushRule - Push left-table predicates down as filter on left input
-- JoinRightConditionPushRule - Push right-table predicates down as filter on right input
-- JoinExtractFilterRule - Extract join condition as filter above join
-- JoinLeftProjectTransposeRule - Pull projection from left join input up
-- JoinRightProjectTransposeRule - Pull projection from right join input up
-- JoinAssociateRule - Restructure nested joins using associativity
-
-**Semi-Join Rules:**
-- LeftSemiJoinFilterTransposeRule - Pull filter above left semi-join
-- RightSemiJoinFilterTransposeRule - Pull filter above right semi-join
-
-**Prune Empty Rules:**
-- PruneEmptyFilterRule - Remove filter over empty relation
-- PruneEmptyProjectRule - Remove projection over empty relation
-- PruneEmptyUnionLeftRule - Simplify union with empty left input
-- PruneEmptyUnionRightRule - Simplify union with empty right input
-- PruneEmptyUnionBothRule - Simplify union with both inputs empty
-
-All rules have comprehensive tests (79 unit tests + 21 doc tests, all passing).
-
-See `src/main/java/org/qed/Backends/Datafusion/src/rule/impls/README.md` for detailed rule documentation.
-
-### Core Features
-
-- **Pattern Matching**: Full support for Filter, Project, Join, and user-defined operators
-- **Predicate Decomposition**: Automatic splitting of conjunctive predicates based on column dependencies
-- **Function Composition**: Support for nested function applications (e.g., `f(g(x))`)
-- **Alias Handling**: Transparent matching through alias wrappers
-- **Column Abstraction**: Smart column pattern matching that works with field partitions
-- **User-Defined Operators**: Extensibility for custom logical operators with pattern matching and QED verification support
-- **QED Export**: Serialization to QED format for rule verification, including EXISTS subqueries with outer column references
-- **DataFusion Integration**: RuleWrapper adapter for seamless optimizer integration
-
-### Architecture
-
-```
-src/
-  ast/
-    empty.rs       - Empty relation representation
-    opaque.rs      - Abstract types, fields, schemas
-    relational.rs  - Logical plan patterns (Source, Filter, Project, Join)
-    pattern.rs     - Pattern functions (ScalarPattern, AggregatePattern)
-    extension.rs   - User-defined operator support (UserDefinedLogicalOperator trait)
-    source.rs      - Source node implementation
-  matcher/
-    mod.rs         - PatternMatcher trait and error types
-    default.rs     - DefaultMatcher with full pattern matching logic
-  rule/
-    mod.rs         - Rule traits (RewriteRule, ApplicableRule)
-    test.rs        - Test utilities (table helpers)
-    impls/         - Concrete rule implementations
-  verifier/
-    mod.rs         - Verifier trait for rule verification
-    qed.rs         - QED format serialization with subquery support
-  lib.rs           - Public API exports
-examples/
-  optimizer.rs      - Main interactive optimizer demo
-  optimizer_repl/   - REPL support modules used by optimizer example
-  export_rules_to_qed.rs - Export rules to QED format
-  tpch_optimize.rs  - Run rule optimization on TPC-H queries
-  tpch/             - TPC-H schema and query definitions
-  user_defined_left_semi_join.rs - Example of user-defined operator with EXISTS semantics
-```
-
-## Quick Start
-
-### Define a Rule
-
-```rust
-crate::rule! {
-    MyRule {
-        schemas: {
-            source: (x: T),
-        },
-        functions: {
-            P(T) -> Bool,
-        },
-        from: crate::filter!(source, P(x)),
-        to: source,  // Remove the filter
-    }
-}
-```
+`P` and `Q` are uninterpreted predicates — they represent any boolean expression, so one rule definition covers infinite concrete cases.
 
 ### Apply a Rule
 
@@ -142,149 +51,84 @@ let optimized_plan = rule.try_apply(&concrete_plan)?;
 
 ```rust
 use rulescript::rule::RuleWrapper;
-use datafusion::optimizer::Optimizer;
+use datafusion::optimizer::OptimizerRule;
 
-let optimizer_rule = RuleWrapper::new(FilterMergeRule);
-optimizer.add_rule(Arc::new(optimizer_rule));
+// wrap any RuleScript rule as a DataFusion optimizer rule
+let rule: Arc<dyn OptimizerRule> = Arc::new(RuleWrapper::new(FilterMergeRule));
 ```
 
-## Run Interactive Demo
+## Interactive Demo
 
 ```bash
 cargo run --example optimizer
 ```
 
-Interactive demonstration with optimization rules:
-- Choose which rules to apply
-- See before/after query plans
-- Real SQL parsing with DataFusion
+See [`examples/README.md`](examples/README.md) for detailed usage.
 
-See `src/main/java/org/qed/Backends/Datafusion/examples/README.md` for detailed usage.
-
-## Run Tests
+## Tests
 
 ```bash
-# All tests
 cargo test
-
-# Specific rule
-cargo test filter_merge
-
-# With output
-cargo test -- --nocapture
-
-# Clippy checks
+cargo test filter_merge        # specific rule
 cargo clippy --all-targets
 ```
 
-## Macro Reference
-
-### rule! - Define Complete Rules
+## Macros
 
 ```rust
+// Define a rule
 crate::rule! {
     RuleName {
-        schemas: {
-            input_name: (field: Type),
-            other_input: (x: T1, y: T2),
-        },
-        functions: {
-            FuncName(InputType) -> OutputType,
-            Predicate(T1, T2) -> Bool,
-        },
+        schemas:   { input: (field: Type) },
+        functions: { F(Type) -> OutputType },
         from: { /* pattern to match */ },
-        to: { /* replacement pattern */ },
+        to:   { /* replacement */      },
     }
 }
-```
 
-### Plan Construction Macros
-
-```rust
-// Filter
+// Build plan nodes
 crate::filter!(source, predicate)
-
-// Project
 crate::project!(source, [expr1, expr2])
 crate::project!(source, [expr as alias])
-
-// Join
 crate::join!(left, right, Inner, condition)
 crate::join!(left, right, Left, condition)
 ```
 
-## Theoretical Foundation
+## Architecture
 
-Based on the paper "RuleScript: A DSL for Query Optimizer Rules" which addresses the challenge of correctly implementing hundreds of rewrite rules in modern optimizers.
+```
+src/
+  ast/
+    opaque.rs      - Abstract types, fields, schemas
+    relational.rs  - Logical plan patterns (Source, Filter, Project, Join)
+    pattern.rs     - Pattern functions (ScalarPattern, AggregatePattern)
+    extension.rs   - User-defined operator support
+    source.rs      - Source node implementation
+  matcher/
+    mod.rs         - PatternMatcher trait and error types
+    default.rs     - DefaultMatcher implementation
+  rule/
+    mod.rs         - Rule traits (RewriteRule, ApplicableRule)
+    impls/         - Concrete rule implementations
+  verifier/
+    mod.rs         - Verifier trait
+    qed.rs         - QED format serialization
+  lib.rs           - Public API
+examples/
+  optimizer.rs                    - Interactive optimizer demo
+  export_rules_to_qed.rs          - Export rules to QED format
+  tpch_optimize.rs                - TPC-H query optimization
+  user_defined_left_semi_join.rs  - User-defined operator example
+```
 
-**Key Concepts:**
-- **Uninterpreted Symbols**: Abstract types/functions represent families of concrete queries
-- **Pattern Matching**: Declarative patterns with automatic instantiation
-- **Verification**: Rules can be verified via QED solver (future integration)
-
-**Why This Approach:**
-
-Modern query optimizers suffer from:
-1. Error-prone manual implementation (100-200+ rules per optimizer)
-2. Difficult to verify correctness
-3. Redundant code across similar rules
-
-RuleScript solves this by:
-1. One rule definition → many concrete applications
-2. Automated verification possible
-3. Declarative patterns reduce implementation complexity
-
-## Key Design Decisions
-
-**Pattern Matching:**
-- Column patterns match based on field partitions (one pattern can match multiple columns)
-- Predicates decompose automatically based on column dependencies
-- Function composition works through context mapping
-
-**Implementation:**
-- Minimal abstraction over DataFusion's native types
-- No async/tokio in tests (fast, simple tests)
-- Smart defaults (all types map to Binary for uniformity)
-- Functions are UDFs that error on execution (pattern-only)
-
-**Rule Application:**
-- DefaultMatcher manages three binding types: fields, functions, sources
-- Context-preserving instantiation (bindings stay in their context)
-- Recursive plan transformation with captured bindings
-
-## Future Work
-
-**Near-term:**
-- More complex join rules (with 4-predicate decomposition)
-- Rule families with meta-variables
-- Additional user-defined operator examples
-
-**Long-term:**
-- SMT solver integration for automated verification
-- Code generation adapters for different engines
-- Performance optimizations for pattern matching
+See [`src/rule/impls/README.md`](src/rule/impls/README.md) for documentation on each implemented rule.
 
 ## Known Limitations
 
-**Current Implementation:**
 - Join rules only support INNER joins (OUTER joins require IS NOT NULL predicates)
-- Some complex expression types not yet handled (SIMILAR TO with escape)
-- No optimization for pattern matching efficiency
-
-**Design Constraints:**
 - All abstract symbols must bind to at least one match (no optional predicates)
 - Single binding per symbol per rule application
-- Strict column validation (all references must exist in context)
 
-## Dependencies
+## License
 
-- datafusion - Query planning framework
-- thiserror - Error handling macros
-
-## Status
-
-Active development. Core pattern matching complete. User-defined operator support implemented. QED export working with subquery support. API stabilizing.
-
-**Test Status**: 79 unit tests + 21 doc tests passing
-
-The project emphasizes correctness and extensibility. Pattern matching, instantiation, and user-defined operators are fully implemented with 22 working rules demonstrating the approach works with real DataFusion plans. QED serialization enables rule verification including complex cases like EXISTS subqueries with outer column references.
+Copyright 2026 The Qed Team. Licensed under the Apache License, Version 2.0.
