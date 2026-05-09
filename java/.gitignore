@@ -1,0 +1,8 @@
+target/
+.mvn/wrapper/maven-wrapper.jar
+tmp-rules/
+qed-prover/
+*.class
+RuleGenerator.java
+JsonGenerator.java
+.DS_Store

@@ -7,6 +7,9 @@ on:
 jobs:
   test-provability:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: java
 
     steps:
       - uses: actions/checkout@v4
@@ -21,17 +24,17 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          key: ${{ runner.os }}-maven-${{ hashFiles('java/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
 
       - name: Build project
-        run: mvn -B compile --file pom.xml
+        run: ./mvnw -B compile -q
 
       - name: Generate JSON for all rules
         run: |
           mkdir -p tmp-rules
-          mvn dependency:resolve
+          ./mvnw dependency:resolve -q
           chmod +x scripts/generate-rule-json.sh
           ./scripts/generate-rule-json.sh
 
@@ -55,4 +58,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: results
-          path: tmp-rules/
+          path: java/tmp-rules/

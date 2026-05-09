@@ -1,59 +1,50 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    devenv = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:cachix/devenv";
+    };
     flake-utils.url = "github:numtide/flake-utils";
-    cvc5-src = {
-      flake = false;
-      url = "github:cvc5/cvc5";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs-python = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:cachix/nixpkgs-python";
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, cvc5-src }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        pkgs = nixpkgs.legacyPackages.${system};
-        cvc5-pname = "cvc5-1.0.5";
-        cvc5-java = pkgs.stdenv.mkDerivation {
-          name = cvc5-pname;
-          src = cvc5-src;
+  outputs = inputs @ {
+    self,
+    devenv,
+    flake-utils,
+    nixpkgs,
+    ...
+  }:
+    flake-utils.lib.eachDefaultSystem (system: let
+      pkgs = import nixpkgs {
+        inherit system;
+        config.allowUnfree = true;
+      };
+    in {
+      packages = {
+        devenv-up = self.devShells.${system}.default.config.procfileScript;
+        devenv-test = self.devShells.${system}.default.config.test;
+      };
 
-          nativeBuildInputs = with pkgs; [ pkg-config cmake flex ];
-
-          buildInputs = with pkgs; [
-            cadical.dev
-            symfpu
-            gmp
-            gtest
-            libantlr3c
-            antlr3_4
-            boost
-            jdk21
-            (python3.withPackages (ps: with ps; [ pyparsing toml ]))
-          ];
-
-          cmakeFlags = [
-            "-DBUILD_BINDINGS_JAVA=ON"
-            "-DBUILD_SHARED_LIBS=1"
-            "-DCMAKE_BUILD_TYPE=Production"
-            "-DANTLR3_JAR=${pkgs.antlr3_4}/lib/antlr/antlr-3.4-complete.jar"
-          ];
-
-          preConfigure = ''
-            patchShebangs ./src/
-          '';
-
-        };
-      in
-      {
-        devShells.default = pkgs.mkShell {
-          packages = with pkgs; [
-            cvc5-java
-            jdk25_headless
-            maven
-            jetbrains.idea-community
-          ];
-          CVC5_JAVA = "${cvc5-java}/share/java/cvc5.jar";
-          LD_LIBRARY_PATH = pkgs.lib.strings.makeLibraryPath [ cvc5-java ];
-        };
-      });
+      devShells.default = devenv.lib.mkShell {
+        inherit inputs pkgs;
+        modules = [
+          {
+            git-hooks.hooks.alejandra.enable = true;
+            languages = {
+              nix.enable = true;
+              rust.enable = true;
+            };
+            packages = with pkgs; [
+              cvc5
+              opencode
+            ];
+          }
+        ];
+      };
+    });
 }
