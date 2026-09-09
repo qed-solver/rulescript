@@ -637,9 +637,9 @@ select
       └── id_plus_one:11 > 100 [outer=(11), constraints=(/11: [/101 - ]; tight)]
 
 # --------------------------------------------------
-# PruneEmptyIntersect
+# PruneEmptyIntersectRight
 # --------------------------------------------------
-norm expect=PruneEmptyIntersect disable=(ProjectFilterTranspose,SimplifyZeroCardinalityGroup,PruneEmptyFilter,JoinConditionPush,FilterProjectTranspose,JoinExtractFilter)
+norm expect=PruneEmptyIntersectRight disable=(ProjectFilterTranspose,SimplifyZeroCardinalityGroup,PruneEmptyFilter,JoinConditionPush,FilterProjectTranspose,JoinExtractFilter)
 SELECT empno
 FROM emp
 INTERSECT
@@ -651,7 +651,7 @@ values
  ├── key: ()
  └── fd: ()-->(1)
 
-norm expect-not=PruneEmptyIntersect disable=(ProjectFilterTranspose,SimplifyZeroCardinalityGroup,PruneEmptyFilter,JoinConditionPush,FilterProjectTranspose,JoinExtractFilter)
+norm expect-not=PruneEmptyIntersectRight disable=(ProjectFilterTranspose,SimplifyZeroCardinalityGroup,PruneEmptyFilter,JoinConditionPush,FilterProjectTranspose,JoinExtractFilter)
 SELECT empno FROM emp
 INTERSECT
 SELECT empno FROM emp

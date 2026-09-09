@@ -429,7 +429,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
 
     @Override
     public Env transformIntersect(Env env, RelRN.Intersect intersect) {
-        if (env.rulename.equals("PruneEmptyIntersect")) {
+        if (env.rulename.equals("PruneEmptyIntersectRight")) {
             String builderVar = env.symbols().get("__builder");
             return env.focus(builderVar + ".push(call.rel(1)).empty()" + ".push(call.rel(2))" + ".intersect(false, 2)");
         }

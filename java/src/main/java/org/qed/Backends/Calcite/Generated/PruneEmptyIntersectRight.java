@@ -8,8 +8,8 @@ import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.logical.*;
 import org.qed.Backends.Calcite.EmptyConfig;
 
-public class PruneEmptyIntersect extends RelRule<PruneEmptyIntersect.Config> {
-	protected PruneEmptyIntersect(Config config) {
+public class PruneEmptyIntersectRight extends RelRule<PruneEmptyIntersectRight.Config> {
+	protected PruneEmptyIntersectRight(Config config) {
 		super(config);
 	}
 
@@ -23,13 +23,13 @@ public class PruneEmptyIntersect extends RelRule<PruneEmptyIntersect.Config> {
 		Config DEFAULT = new Config() {};
 
 		@Override
-		default PruneEmptyIntersect toRule() {
-			return new PruneEmptyIntersect(this);
+		default PruneEmptyIntersectRight toRule() {
+			return new PruneEmptyIntersectRight(this);
 		}
 
 		@Override
 		default String description() {
-			return "PruneEmptyIntersect";
+			return "PruneEmptyIntersectRight";
 		}
 
 		@Override

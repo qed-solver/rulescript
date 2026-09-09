@@ -6,7 +6,7 @@ import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
 
-public class PruneEmptyIntersectTest {
+public class PruneEmptyIntersectRightTest {
 
     public static void runTest() {
         var tester = new CalciteTester();
@@ -46,13 +46,13 @@ public class PruneEmptyIntersectTest {
             .build();
             
         var runner = CalciteTester.loadRule(
-            org.qed.Backends.Calcite.Generated.PruneEmptyIntersect.Config.DEFAULT.toRule()
+            org.qed.Backends.Calcite.Generated.PruneEmptyIntersectRight.Config.DEFAULT.toRule()
         );
         tester.verify(runner, before, after);
     }
 
     public static void main(String[] args) {
-        System.out.println("Running PruneEmptyIntersect test...");
+        System.out.println("Running PruneEmptyIntersectRight test...");
         runTest();
     }
 }

@@ -528,7 +528,7 @@ public class CockroachGenerator implements CodeGenerator<CockroachGenerator.Env>
             String rightVar = env.generateVar("right");
             String iType = intersect.all() ? "IntersectAll" : "Intersect";
             String pattern = "(" + iType + "\n" + "    " + b(leftVar) + "\n" + "    " + b(rightVar) + " & (HasZeroRows " + r(rightVar) + ")\n" + ")";
-            return env.addBinding("isPruneEmptyIntersect", "true") .addBinding("pruneEmptyLeft", leftVar) .setPattern(pattern).focus(pattern);
+            return env.addBinding("isPruneEmptyIntersectRight", "true") .addBinding("pruneEmptyLeft", leftVar) .setPattern(pattern).focus(pattern);
         }
         Env currentEnv = env;
         Seq<String> sourcePatterns = Seq.empty();
@@ -1200,7 +1200,7 @@ public class CockroachGenerator implements CodeGenerator<CockroachGenerator.Env>
             String pattern = N(iType, r(llVar), inner, "(MakeSetPrivate " + r(ilcVar) + " " + r(ircVar) + " " + r(oocVar) + ")" );
             return env.setPattern(pattern).focus(pattern);
         }
-        if (flag(env, "isPruneEmptyIntersect")) {
+        if (flag(env, "isPruneEmptyIntersectRight")) {
             String leftVar = get(env, "pruneEmptyLeft");
             String pattern = "(ConstructEmptyValues (OutputCols " + r(leftVar) + "))";
             return env.setPattern(pattern).focus(pattern);
