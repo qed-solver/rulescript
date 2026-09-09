@@ -2,12 +2,16 @@
 
 # Script to generate code for each rule and test whether the rules can be applied correctly
 
+./mvnw -q -DskipTests compile
+
 echo "## Code Generation Test Results" >> $GITHUB_STEP_SUMMARY
 echo "" >> $GITHUB_STEP_SUMMARY
 
 # Step 1: Generate code for each rule in RRuleInstances
 # Create temporary Java file for code generation
-cat > RuleGenerator.java << 'EOF'
+GEN_TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/rulescript-codegen.XXXXXX")
+trap 'rm -rf "$GEN_TMP_DIR"' EXIT
+cat > "$GEN_TMP_DIR/RuleGenerator.java" << 'EOF'
 import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.*;
 import java.nio.file.*;
@@ -26,17 +30,18 @@ public class RuleGenerator {
 }
 EOF
 
-# Build classpath
-MAVEN_CP=$(./mvnw dependency:build-classpath -Dmdep.outputFile=/dev/stdout -q)
+MAVEN_CP_FILE="target/rulescript-classpath.txt"
+./mvnw dependency:build-classpath -Dmdep.outputFile="$MAVEN_CP_FILE" -q
+MAVEN_CP=$(<"$MAVEN_CP_FILE")
 CLASSPATH="target/classes:${MAVEN_CP}"
 
 # Compile the generator
-javac -cp "$CLASSPATH" RuleGenerator.java
+javac -cp "$CLASSPATH" -d "$GEN_TMP_DIR" "$GEN_TMP_DIR/RuleGenerator.java"
 
 # Generate code for each rule
 find src/main/java/org/qed/RRuleInstances -name '*.java' -not -path '*/RRuleInstances-unprovable/*' | while read file; do
     className=$(echo "$file" | sed 's|src/main/java/||; s|/|.|g; s|\.java$||')
-    java -cp ".:$CLASSPATH" RuleGenerator "$className"
+    java -cp "$GEN_TMP_DIR:$CLASSPATH" RuleGenerator "$className"
 done
 
 # Step 2: Check for missing tests
@@ -55,6 +60,8 @@ if [ $missing_count -gt 0 ]; then
 fi
 
 # Step 3: Run all test classes
+./mvnw -q -DskipTests compile
+
 # Store results for summary
 total_tests=0
 passed_tests=0
@@ -72,7 +79,8 @@ for test_file in src/main/java/org/qed/Backends/Calcite/Tests/*Test.java; do
     total_tests=$((total_tests + 1))
     
     # Run the test and capture output
-    if java -cp "$CLASSPATH" "$class_name" > /tmp/test_output.txt 2>&1; then
+    if java -cp "$CLASSPATH" org.qed.Backends.Calcite.CalciteTestRunner \
+        "$class_name" > /tmp/test_output.txt 2>&1; then
         if grep -q "trivial" /tmp/test_output.txt; then
             echo "⚠️ ${display_name}: TRIVIAL" >> $GITHUB_STEP_SUMMARY
         elif grep -q "succeeded" /tmp/test_output.txt && ! grep -q "failed" /tmp/test_output.txt; then
@@ -87,7 +95,7 @@ for test_file in src/main/java/org/qed/Backends/Calcite/Tests/*Test.java; do
 done
 
 # Clean up
-rm -f RuleGenerator.java RuleGenerator.class /tmp/test_output.txt
+rm -f /tmp/test_output.txt
 
 echo "" >> $GITHUB_STEP_SUMMARY
 echo "**Summary:** $passed_tests/$total_tests passed" >> $GITHUB_STEP_SUMMARY

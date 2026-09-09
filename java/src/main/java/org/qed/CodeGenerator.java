@@ -23,6 +23,8 @@ public interface CodeGenerator<E> {
             case RelRN.Scan scan -> onMatchScan(env, scan);
             case RelRN.Filter filter -> onMatchFilter(env, filter);
             case RelRN.Project project -> onMatchProject(env, project);
+            case RelRN.IdentityProject project -> onMatchIdentityProject(env, project);
+            case RelRN.Distinct distinct -> onMatchDistinct(env, distinct);
             case RelRN.Join join -> onMatchJoin(env, join);
             case RelRN.JoinWithSeparateConds join -> onMatchJoinWithSeparateConds(env, join);
             case RelRN.Union union -> onMatchUnion(env, union);
@@ -45,6 +47,7 @@ public interface CodeGenerator<E> {
             case RexRN.Not not -> onMatchNot(env, not);
             case RexRN.True literal -> onMatchTrue(env, literal);
             case RexRN.False literal -> onMatchFalse(env, literal);
+            case RexRN.IsNotTrue isNotTrue -> onMatchIsNotTrue(env, isNotTrue);
             default -> onMatchCustom(env, pattern);
         };
     }
@@ -62,6 +65,8 @@ public interface CodeGenerator<E> {
             case RelRN.Scan scan -> transformScan(env, scan);
             case RelRN.Filter filter -> transformFilter(env, filter);
             case RelRN.Project project -> transformProject(env, project);
+            case RelRN.IdentityProject project -> transformIdentityProject(env, project);
+            case RelRN.Distinct distinct -> transformDistinct(env, distinct);
             case RelRN.Join join -> transformJoin(env, join);
             case RelRN.JoinWithPushedConds join -> transformJoinWithPushedConds(env, join);
             case RelRN.Union union -> transformUnion(env, union);
@@ -84,6 +89,7 @@ public interface CodeGenerator<E> {
             case RexRN.Not not -> transformNot(env, not);
             case RexRN.True literal -> transformTrue(env, literal);
             case RexRN.False literal -> transformFalse(env, literal);
+            case RexRN.IsNotTrue isNotTrue -> transformIsNotTrue(env, isNotTrue);
             default -> transformCustom(env, target);
         };
     }
@@ -113,6 +119,14 @@ public interface CodeGenerator<E> {
 
     default E onMatchProject(E env, RelRN.Project project) {
         return unimplementedOnMatch(env, project);
+    }
+
+    default E onMatchIdentityProject(E env, RelRN.IdentityProject project) {
+        return unimplementedOnMatch(env, project);
+    }
+
+    default E onMatchDistinct(E env, RelRN.Distinct distinct) {
+        return unimplementedOnMatch(env, distinct);
     }
 
     default E onMatchJoin(E env, RelRN.Join join) {
@@ -179,6 +193,10 @@ public interface CodeGenerator<E> {
         return unimplementedOnMatch(env, literal);
     }
 
+    default E onMatchIsNotTrue(E env, RexRN.IsNotTrue isNotTrue) {
+        return unimplementedOnMatch(env, isNotTrue);
+    }
+
     default E onMatchEmpty(E env, RelRN.Empty empty) {
         return unimplementedOnMatch(env, empty);
     }
@@ -193,6 +211,14 @@ public interface CodeGenerator<E> {
 
     default E transformProject(E env, RelRN.Project project) {
         return unimplementedTransform(env, project);
+    }
+
+    default E transformIdentityProject(E env, RelRN.IdentityProject project) {
+        return unimplementedTransform(env, project);
+    }
+
+    default E transformDistinct(E env, RelRN.Distinct distinct) {
+        return unimplementedTransform(env, distinct);
     }
 
     default E transformJoin(E env, RelRN.Join join) {
@@ -257,6 +283,10 @@ public interface CodeGenerator<E> {
 
     default E transformFalse(E env, RexRN literal) {
         return unimplementedTransform(env, literal);
+    }
+
+    default E transformIsNotTrue(E env, RexRN.IsNotTrue isNotTrue) {
+        return unimplementedTransform(env, isNotTrue);
     }
 
     default E transformEmpty(E env, RelRN.Empty empty) {

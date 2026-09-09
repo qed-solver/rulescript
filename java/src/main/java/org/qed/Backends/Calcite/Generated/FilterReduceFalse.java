@@ -16,7 +16,7 @@ public class FilterReduceFalse extends RelRule<FilterReduceFalse.Config> {
 	@Override
 	public void onMatch(RelOptRuleCall call) {
 		var var_3 = call.builder();
-		call.transformTo(var_3.empty().build());
+		call.transformTo(var_3.push(call.rel(1)).empty().build());
 	}
 
 	public interface Config extends EmptyConfig {

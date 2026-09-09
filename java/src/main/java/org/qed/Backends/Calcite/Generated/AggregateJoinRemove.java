@@ -36,7 +36,7 @@ public class AggregateJoinRemove extends RelRule<AggregateJoinRemove.Config> {
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_9 -> s_9.operand(LogicalAggregate.class).oneInput(s_8 -> s_8.operand(LogicalJoin.class).inputs(s_2 -> s_2.operand(LogicalJoin.class).inputs(s_0 -> s_0.operand(RelNode.class).anyInputs(), s_1 -> s_1.operand(RelNode.class).anyInputs()), s_6 -> s_6.operand(LogicalJoin.class).inputs(s_4 -> s_4.operand(RelNode.class).anyInputs(), s_5 -> s_5.operand(RelNode.class).anyInputs())));
+			return s_9 -> s_9.operand(LogicalAggregate.class).oneInput(s_8 -> s_8.operand(LogicalJoin.class).predicate(join -> join.getJoinType() == JoinRelType.LEFT).inputs(s_2 -> s_2.operand(LogicalJoin.class).predicate(join -> join.getJoinType() == JoinRelType.INNER).inputs(s_0 -> s_0.operand(RelNode.class).anyInputs(), s_1 -> s_1.operand(RelNode.class).anyInputs()), s_6 -> s_6.operand(LogicalJoin.class).predicate(join -> join.getJoinType() == JoinRelType.INNER).inputs(s_4 -> s_4.operand(RelNode.class).anyInputs(), s_5 -> s_5.operand(RelNode.class).anyInputs())));
 		}
 
 	}

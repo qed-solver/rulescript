@@ -34,7 +34,7 @@ public class PruneEmptyUnion extends RelRule<PruneEmptyUnion.Config> {
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_2 -> s_2.operand(LogicalUnion.class).inputs(s_0 -> s_0.operand(LogicalValues.class).noInputs(), s_1 -> s_1.operand(LogicalValues.class).noInputs());
+			return s_2 -> s_2.operand(LogicalUnion.class).predicate(union -> !union.all).inputs(s_0 -> s_0.operand(LogicalValues.class).noInputs(), s_1 -> s_1.operand(LogicalValues.class).noInputs());
 		}
 
 	}

@@ -23,6 +23,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -52,6 +53,18 @@ public class CalciteTester {
         System.out.printf("Loading Rule: %s\n", rule.getClass().getSimpleName());
         var builder = new HepProgramBuilder().addRuleInstance(rule);
         return new HepPlanner(builder.build());
+    }
+
+    public static RelOptRule generatedRule(String name) {
+        try {
+            var configClass = Class.forName(
+                    "org.qed.Backends.Calcite.Generated." + name + "$Config");
+            var config = (org.apache.calcite.plan.RelRule.Config)
+                    configClass.getField("DEFAULT").get(null);
+            return config.toRule();
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException("Failed to load generated rule: " + name, e);
+        }
     }
 
     public static HepPlanner loadRule(RelOptRule rule, int matchLimit) {
@@ -142,7 +155,11 @@ public class CalciteTester {
         var generator = new CalciteGenerator();
         var code_gen = generator.generate(rule);
         try {
-            Files.write(Path.of(path, rule.name() + ".java"), code_gen.getBytes());
+            var directory = Path.of(path);
+            var target = directory.resolve(rule.name() + ".java");
+            var temporary = Files.createTempFile(directory, "." + rule.name(), ".tmp");
+            Files.write(temporary, code_gen.getBytes());
+            Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException ioe) {
             System.err.println(ioe.getMessage());
         }
@@ -176,5 +193,6 @@ public class CalciteTester {
         System.out.println("> Given source RelNode:\n" + source.explain());
         System.out.println("> Actual rewritten RelNode:\n" + answerExplain);
         System.out.println("> Expected rewritten RelNode:\n" + targetExplain);
+        throw new AssertionError("Calcite rewrite did not produce the expected plan");
     }
 }

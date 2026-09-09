@@ -34,7 +34,7 @@ public class PruneEmptyIntersect extends RelRule<PruneEmptyIntersect.Config> {
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_2 -> s_2.operand(LogicalIntersect.class).inputs(s_0 -> s_0.operand(RelNode.class).anyInputs(), s_1 -> s_1.operand(LogicalValues.class).noInputs());
+			return s_2 -> s_2.operand(LogicalIntersect.class).predicate(intersect -> !intersect.all).inputs(s_0 -> s_0.operand(RelNode.class).anyInputs(), s_1 -> s_1.operand(LogicalValues.class).noInputs());
 		}
 
 	}

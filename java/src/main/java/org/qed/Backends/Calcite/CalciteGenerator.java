@@ -8,6 +8,7 @@ import org.qed.CodeGenerator;
 import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.Backends.Calcite.CalciteGenerator.Env;
+import org.apache.calcite.rel.core.JoinRelType;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.processing.Generated;
 
@@ -21,7 +22,8 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     @Override
     public Env preTransform(Env env) {
         var buildEnv = env.declare("call.builder()");
-        return buildEnv.getValue().focus(buildEnv.getKey());
+        return buildEnv.getValue().symbol("__builder", buildEnv.getKey())
+                .focus(buildEnv.getKey());
     }
 
     @Override
@@ -65,7 +67,18 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
 
     @Override
     public Env onMatchScan(Env env, RelRN.Scan scan) {
-        return env.symbol(scan.name(), env.current()).grow("operand(RelNode.class).anyInputs()");
+        if (env.symbols().containsKey(scan.name())) {
+            return env.state("if (" + env.current() + " != "
+                    + env.symbols().get(scan.name()) + ") return;")
+                    .grow("operand(RelNode.class).anyInputs()");
+        }
+        String uniquePredicate = scan.unique()
+                ? ".predicate(input -> Boolean.TRUE.equals(input.getCluster().getMetadataQuery()"
+                    + ".areColumnsUnique(input, org.apache.calcite.util.ImmutableBitSet.range("
+                    + "input.getRowType().getFieldCount()))))"
+                : "";
+        return env.symbol(scan.name(), env.current())
+                .grow("operand(RelNode.class)" + uniquePredicate + ".anyInputs()");
     }
 
     @Override
@@ -86,6 +99,26 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     }
 
     @Override
+    public Env onMatchIdentityProject(Env env, RelRN.IdentityProject project) {
+        var sourceMatch = onMatch(env.next(), project.source());
+        return sourceMatch.grow("operand(LogicalProject.class)"
+                + ".predicate(project -> org.apache.calcite.rex.RexUtil.isIdentity("
+                + "project.getProjects(), project.getInput().getRowType()))"
+                + ".oneInput(" + sourceMatch.skeleton() + ")");
+    }
+
+    @Override
+    public Env onMatchDistinct(Env env, RelRN.Distinct distinct) {
+        var sourceMatch = onMatch(env.next(), distinct.source());
+        return sourceMatch.grow("operand(LogicalAggregate.class)"
+                + ".predicate(aggregate -> org.apache.calcite.rel.core.Aggregate.isSimple(aggregate)"
+                + " && aggregate.getAggCallList().isEmpty()"
+                + " && aggregate.getGroupSet().cardinality()"
+                + " == aggregate.getInput().getRowType().getFieldCount())"
+                + ".oneInput(" + sourceMatch.skeleton() + ")");
+    }
+
+    @Override
     public Env onMatchPred(Env env, RexRN.Pred pred) {
         return env.symbol(pred.operator().getName(), env.current());
     }
@@ -102,8 +135,9 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         var left_match_env = onMatch(left_source_env, join.left());
         var right_source_env = left_match_env.next();
         var right_match_env = onMatch(right_source_env, join.right());
-        var operator_match =
-                right_match_env.grow("operand(LogicalJoin.class).inputs(" + left_match_env.skeleton() + ", " + right_match_env.skeleton() + ")");
+        var operator_match = right_match_env.grow("operand(LogicalJoin.class)"
+                + joinTypePredicate(join.ty().semantics())
+                + ".inputs(" + left_match_env.skeleton() + ", " + right_match_env.skeleton() + ")");
         var cond_source_env = operator_match.focus(current_join + ".getCondition()");
         return onMatch(cond_source_env, join.cond());
     }
@@ -115,10 +149,15 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         var left_match_env = onMatch(left_source_env, join.left());
         var right_source_env = left_match_env.next();
         var right_match_env = onMatch(right_source_env, join.right());
-        var operator_match =
-                right_match_env.grow("operand(LogicalJoin.class).inputs(" + left_match_env.skeleton() + ", " + right_match_env.skeleton() + ")");
+        var operator_match = right_match_env.grow("operand(LogicalJoin.class)"
+                + joinTypePredicate(join.ty().semantics())
+                + ".inputs(" + left_match_env.skeleton() + ", " + right_match_env.skeleton() + ")");
         var cond_source_env = operator_match.focus(current_join + ".getCondition()");
         return onMatch(cond_source_env, join.cond());
+    }
+
+    private static String joinTypePredicate(JoinRelType type) {
+        return ".predicate(join -> join.getJoinType() == JoinRelType." + type.name() + ")";
     }
 
     @Override
@@ -150,8 +189,8 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             }
             inputsBuilder.append(skeletons.get(i).toString());
         }
-        String operatorClass = all ? "LogicalUnionAll" : "LogicalUnion";
-        return current_env.grow("operand(" + operatorClass + ".class).inputs(" + inputsBuilder.toString() + ")");
+        String allPredicate = all ? ".predicate(union -> union.all)" : ".predicate(union -> !union.all)";
+        return current_env.grow("operand(LogicalUnion.class)" + allPredicate + ".inputs(" + inputsBuilder.toString() + ")");
     }
 
     @Override
@@ -172,8 +211,8 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             }
             inputsBuilder.append(skeletons.get(i).toString());
         }
-        String operatorClass = all ? "LogicalIntersectAll" : "LogicalIntersect";
-        return current_env.grow("operand(" + operatorClass + ".class).inputs(" + inputsBuilder.toString() + ")");
+        String allPredicate = all ? ".predicate(intersect -> intersect.all)" : ".predicate(intersect -> !intersect.all)";
+        return current_env.grow("operand(LogicalIntersect.class)" + allPredicate + ".inputs(" + inputsBuilder.toString() + ")");
     }
 
     @Override
@@ -194,7 +233,8 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             }
             inputsBuilder.append(skeletons.get(i).toString());
         }
-        return current_env.grow("operand(LogicalMinus.class).inputs(" + inputsBuilder.toString() + ")");
+        String allPredicate = all ? ".predicate(minus -> minus.all)" : ".predicate(minus -> !minus.all)";
+        return current_env.grow("operand(LogicalMinus.class)" + allPredicate + ".inputs(" + inputsBuilder.toString() + ")");
     }
 
     @Override
@@ -213,6 +253,11 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     public Env onMatchFalse(Env env, RexRN literal) {
         String falseSymbol = "false_" + env.varId.getAndIncrement();
         return env.symbol(falseSymbol, env.current());
+    }
+
+    @Override
+    public Env onMatchIsNotTrue(Env env, RexRN.IsNotTrue isNotTrue) {
+        return onMatch(env, isNotTrue.source());
     }
 
     @Override
@@ -359,6 +404,19 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     }
 
     @Override
+    public Env transformOr(Env env, RexRN.Or or) {
+        var sourceTransform = env;
+        var operands = Seq.<String>empty();
+        for (var source : or.sources()) {
+            sourceTransform = transform(sourceTransform, source);
+            operands = operands.appended(sourceTransform.current());
+            sourceTransform = sourceTransform.focus(env.current());
+        }
+        return sourceTransform.focus(env.current() + ".or("
+                + operands.joinToString(", ") + ")");
+    }
+
+    @Override
     public Env transformUnion(Env env, RelRN.Union union) {
         boolean all = union.all();
         int sourceCount = union.sources().size();
@@ -372,7 +430,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     @Override
     public Env transformIntersect(Env env, RelRN.Intersect intersect) {
         if (env.rulename.equals("PruneEmptyIntersect")) {
-            String builderVar = env.statements().get(0).split(" ")[1];
+            String builderVar = env.symbols().get("__builder");
             return env.focus(builderVar + ".push(call.rel(1)).empty()" + ".push(call.rel(2))" + ".intersect(false, 2)");
         }
         boolean all = intersect.all();
@@ -381,8 +439,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         for (var source : intersect.sources()) {
             current_env = transform(current_env, source);
         }
-        String methodName = all ? "intersectAll" : "intersect";
-        return current_env.focus(current_env.current() + "." + methodName + "(" + all + ", " + sourceCount + ")");
+        return current_env.focus(current_env.current() + ".intersect(" + all + ", " + sourceCount + ")");
     }
 
     @Override
@@ -419,6 +476,26 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     }
 
     @Override
+    public Env transformIdentityProject(Env env, RelRN.IdentityProject project) {
+        var sourceTransform = transform(env, project.source());
+        var inputDecl = sourceTransform.declare(sourceTransform.current() + ".build()");
+        var envWithInput = inputDecl.getValue();
+        String builder = env.symbols().get("__builder");
+        return envWithInput.focus(builder + ".push(" + inputDecl.getKey() + ")"
+                + ".project(" + builder + ".fields())");
+    }
+
+    @Override
+    public Env transformDistinct(Env env, RelRN.Distinct distinct) {
+        var sourceTransform = transform(env, distinct.source());
+        var inputDecl = sourceTransform.declare(sourceTransform.current() + ".build()");
+        var envWithInput = inputDecl.getValue();
+        String builder = env.symbols().get("__builder");
+        return envWithInput.focus(builder + ".push(" + inputDecl.getKey() + ")"
+                + ".aggregate(" + builder + ".groupKey(" + builder + ".fields()))");
+    }
+
+    @Override
     public Env transformTrue(Env env, RexRN literal) {
         return env.focus(env.current() + ".literal(true)");
     }
@@ -429,7 +506,20 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     }
 
     @Override
+    public Env transformIsNotTrue(Env env, RexRN.IsNotTrue isNotTrue) {
+        var sourceTransform = transform(env, isNotTrue.source());
+        return sourceTransform.focus(env.current()
+                + ".call(org.apache.calcite.sql.fun.SqlStdOperatorTable.IS_NOT_TRUE, "
+                + sourceTransform.current() + ")");
+    }
+
+    @Override
     public Env transformEmpty(Env env, RelRN.Empty empty) {
+        if (empty.sourceType() instanceof RelRN.Scan scan
+                && env.symbols().containsKey(scan.name())) {
+            var sourceTransform = transform(env, empty.sourceType());
+            return sourceTransform.focus(sourceTransform.current() + ".empty()");
+        }
         return env.focus(env.current() + ".empty()");
     }
 
@@ -442,7 +532,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             var envWithGroupSet = groupSetDecl.getValue();
             var aggCallsDecl = envWithGroupSet.declare("((LogicalAggregate) call.rel(0)).getAggCallList()");
             var envWithAggCalls = aggCallsDecl.getValue();
-            String builderVar = env.statements().get(0).split(" ")[1];
+            String builderVar = env.symbols().get("__builder");
             return envWithAggCalls.focus(builderVar + ".push(call.rel(3)).push(call.rel(4))" + ".join(JoinRelType.INNER, " + builderVar + ".literal(true))" + ".aggregate(" + builderVar + ".groupKey(" + groupSetDecl.getKey() + "), " + aggCallsDecl.getKey() + ")");
         }
         if (env.rulename.equals("AggregateJoinJoinRemove")) {return env.focus("org.qed.Backends.Calcite.HelperFunctions.aggregateJoinJoinRemove(call)");}

@@ -34,7 +34,7 @@ public class UnionMerge extends RelRule<UnionMerge.Config> {
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_4 -> s_4.operand(LogicalUnion.class).inputs(s_2 -> s_2.operand(LogicalUnion.class).inputs(s_0 -> s_0.operand(RelNode.class).anyInputs(), s_1 -> s_1.operand(RelNode.class).anyInputs()), s_3 -> s_3.operand(RelNode.class).anyInputs());
+			return s_4 -> s_4.operand(LogicalUnion.class).predicate(union -> !union.all).inputs(s_2 -> s_2.operand(LogicalUnion.class).predicate(union -> !union.all).inputs(s_0 -> s_0.operand(RelNode.class).anyInputs(), s_1 -> s_1.operand(RelNode.class).anyInputs()), s_3 -> s_3.operand(RelNode.class).anyInputs());
 		}
 
 	}

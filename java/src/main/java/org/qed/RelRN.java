@@ -26,6 +26,10 @@ public interface RelRN {
         return scan(id, RexRN.varType(typeName, true), false);
     }
 
+    static Scan uniqueScan(String id, String typeName) {
+        return scan(id, RexRN.varType(typeName, true), true);
+    }
+
     RelNode semantics();
 
     default RexRN field(int ordinal) {
@@ -93,6 +97,14 @@ public interface RelRN {
         return project(proj(name, type_name));
     }
 
+    default IdentityProject identityProject() {
+        return new IdentityProject(this);
+    }
+
+    default Distinct distinct() {
+        return new Distinct(this);
+    }
+
     default Join join(Join.JoinType ty, RexRN cond, RelRN right) {
         return new Join(ty, cond, this, right);
     }
@@ -149,6 +161,30 @@ public interface RelRN {
         @Override
         public RelNode semantics() {
             return RuleBuilder.create().push(source.semantics()).project(map.semantics()).build();
+        }
+    }
+
+    record IdentityProject(RelRN source) implements RelRN {
+        @Override
+        public RelNode semantics() {
+            var input = source.semantics();
+            var rexBuilder = input.getCluster().getRexBuilder();
+            var projects = input.getRowType().getFieldList().stream()
+                    .map(field -> rexBuilder.makeInputRef(field.getType(), field.getIndex()))
+                    .toList();
+            return org.apache.calcite.rel.logical.LogicalProject.create(
+                    input, java.util.List.of(), projects, input.getRowType());
+        }
+    }
+
+    record Distinct(RelRN source) implements RelRN {
+        @Override
+        public RelNode semantics() {
+            var input = source.semantics();
+            var groupSet = ImmutableBitSet.range(input.getRowType().getFieldCount());
+            return org.apache.calcite.rel.logical.LogicalAggregate.create(
+                    input, java.util.List.of(), groupSet, java.util.List.of(groupSet),
+                    java.util.List.of());
         }
     }
 

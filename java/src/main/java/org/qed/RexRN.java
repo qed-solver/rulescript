@@ -31,7 +31,20 @@ public interface RexRN {
         return new True();
     }
 
+    static IsNotTrue isNotTrue(RexRN source) {
+        return new IsNotTrue(source);
+    }
+
     RexNode semantics();
+
+    record IsNotTrue(RexRN source) implements RexRN {
+        @Override
+        public RexNode semantics() {
+            return RuleBuilder.create().call(
+                    org.apache.calcite.sql.fun.SqlStdOperatorTable.IS_NOT_TRUE,
+                    source.semantics());
+        }
+    }
 
     default Pred pred(SqlOperator op) {
         return new Pred(op, Seq.of(this));

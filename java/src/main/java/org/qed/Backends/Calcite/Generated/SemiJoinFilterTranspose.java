@@ -34,7 +34,7 @@ public class SemiJoinFilterTranspose extends RelRule<SemiJoinFilterTranspose.Con
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_3 -> s_3.operand(LogicalFilter.class).oneInput(s_2 -> s_2.operand(LogicalJoin.class).inputs(s_0 -> s_0.operand(RelNode.class).anyInputs(), s_1 -> s_1.operand(RelNode.class).anyInputs()));
+			return s_3 -> s_3.operand(LogicalFilter.class).oneInput(s_2 -> s_2.operand(LogicalJoin.class).predicate(join -> join.getJoinType() == JoinRelType.SEMI).inputs(s_0 -> s_0.operand(RelNode.class).anyInputs(), s_1 -> s_1.operand(RelNode.class).anyInputs()));
 		}
 
 	}

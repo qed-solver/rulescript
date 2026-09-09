@@ -34,7 +34,7 @@ public class JoinExtractFilter extends RelRule<JoinExtractFilter.Config> {
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_2 -> s_2.operand(LogicalJoin.class).inputs(s_0 -> s_0.operand(RelNode.class).anyInputs(), s_1 -> s_1.operand(RelNode.class).anyInputs());
+			return s_2 -> s_2.operand(LogicalJoin.class).predicate(join -> join.getJoinType() == JoinRelType.INNER).inputs(s_0 -> s_0.operand(RelNode.class).anyInputs(), s_1 -> s_1.operand(RelNode.class).anyInputs());
 		}
 
 	}

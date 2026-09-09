@@ -34,7 +34,7 @@ public class AggregateJoinJoinRemove extends RelRule<AggregateJoinJoinRemove.Con
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_14 -> s_14.operand(LogicalAggregate.class).oneInput(s_13 -> s_13.operand(LogicalJoin.class).inputs(s_8 -> s_8.operand(LogicalJoin.class).inputs(s_2 -> s_2.operand(LogicalJoin.class).inputs(s_0 -> s_0.operand(RelNode.class).anyInputs(), s_1 -> s_1.operand(RelNode.class).anyInputs()), s_6 -> s_6.operand(LogicalJoin.class).inputs(s_4 -> s_4.operand(RelNode.class).anyInputs(), s_5 -> s_5.operand(RelNode.class).anyInputs())), s_11 -> s_11.operand(LogicalJoin.class).inputs(s_9 -> s_9.operand(RelNode.class).anyInputs(), s_10 -> s_10.operand(RelNode.class).anyInputs())));
+			return s_14 -> s_14.operand(LogicalAggregate.class).oneInput(s_13 -> s_13.operand(LogicalJoin.class).predicate(join -> join.getJoinType() == JoinRelType.LEFT).inputs(s_8 -> s_8.operand(LogicalJoin.class).predicate(join -> join.getJoinType() == JoinRelType.LEFT).inputs(s_2 -> s_2.operand(LogicalJoin.class).predicate(join -> join.getJoinType() == JoinRelType.INNER).inputs(s_0 -> s_0.operand(RelNode.class).anyInputs(), s_1 -> s_1.operand(RelNode.class).anyInputs()), s_6 -> s_6.operand(LogicalJoin.class).predicate(join -> join.getJoinType() == JoinRelType.INNER).inputs(s_4 -> s_4.operand(RelNode.class).anyInputs(), s_5 -> s_5.operand(RelNode.class).anyInputs())), s_11 -> s_11.operand(LogicalJoin.class).predicate(join -> join.getJoinType() == JoinRelType.INNER).inputs(s_9 -> s_9.operand(RelNode.class).anyInputs(), s_10 -> s_10.operand(RelNode.class).anyInputs())));
 		}
 
 	}
