@@ -5,6 +5,8 @@ import kala.collection.Set;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.logical.LogicalCorrelate;
+import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlOperator;
@@ -24,6 +26,10 @@ public interface RelRN {
 
     static Scan scan(String id, String typeName) {
         return scan(id, RexRN.varType(typeName, true), false);
+    }
+
+    static ScanMany scanMany(String id, Seq<RelType.VarType> tys) {
+        return new ScanMany(id, tys);
     }
 
     RelNode semantics();
@@ -93,6 +99,10 @@ public interface RelRN {
         return project(proj(name, type_name));
     }
 
+    default ProjectMany project(Seq<RexRN> exprs) {
+        return new ProjectMany(exprs, this);
+    }
+
     default Join join(Join.JoinType ty, RexRN cond, RelRN right) {
         return new Join(ty, cond, this, right);
     }
@@ -110,6 +120,10 @@ public interface RelRN {
     }
 
     default Join join(JoinRelType ty, String name, RelRN right) {return join(ty, joinPred(name, right), right);}
+
+    default Correlate correlate(JoinRelType ty, SqlOperator cond, RelRN right) {
+        return new Correlate(ty, cond, this, right);
+    }
 
     default Union union(boolean all, RelRN... sources) {
         return new Union(all, Seq.of(this).appendedAll(sources));
@@ -138,6 +152,16 @@ public interface RelRN {
         }
     }
 
+    record ScanMany(String name, Seq<RelType.VarType> tys) implements RelRN {
+        @Override
+        public RelNode semantics() {
+            var colNames = tys.mapIndexed((i, t) -> "col-" + name + "-" + i);
+            Seq<org.apache.calcite.rel.type.RelDataType> colTypes = tys.map(t -> t);
+            var table = new QedTable(name, colNames, colTypes, Set.empty(), Set.empty());
+            return RuleBuilder.create().addTable(table).scan(name).build();
+        }
+    }
+
     record Filter(RexRN cond, RelRN source) implements RelRN {
         @Override
         public RelNode semantics() {
@@ -149,6 +173,14 @@ public interface RelRN {
         @Override
         public RelNode semantics() {
             return RuleBuilder.create().push(source.semantics()).project(map.semantics()).build();
+        }
+    }
+
+    record ProjectMany(Seq<RexRN> exprs, RelRN source) implements RelRN {
+        @Override
+        public RelNode semantics() {
+            return RuleBuilder.create().push(source.semantics())
+                    .project(exprs.map(RexRN::semantics).asJava()).build();
         }
     }
 
@@ -242,6 +274,29 @@ public interface RelRN {
                     return JoinRelType.INNER;
                 }
             }
+        }
+    }
+
+    record Correlate(JoinRelType ty, SqlOperator cond, RelRN left, RelRN right) implements RelRN {
+        @Override
+        public RelNode semantics() {
+            var builder = RuleBuilder.create();
+            var l = left.semantics();
+            var r = right.semantics();
+            int lc = l.getRowType().getFieldCount();
+            int rc = r.getRowType().getFieldCount();
+            var rexBuilder = builder.getRexBuilder();
+            var corrId = builder.getCluster().createCorrel();
+            var corrVar = rexBuilder.makeCorrel(l.getRowType(), corrId);
+            var rFields = r.getRowType().getFieldList();
+            Seq<RexNode> leftArgs = Seq.from(IntStream.range(0, lc)
+                    .<RexNode>mapToObj(i -> rexBuilder.makeFieldAccess(corrVar, i)).iterator());
+            Seq<RexNode> rightArgs = Seq.from(IntStream.range(0, rc)
+                    .<RexNode>mapToObj(j -> rexBuilder.makeInputRef(rFields.get(j).getType(), j)).iterator());
+            var condition = builder.call(cond, leftArgs.appendedAll(rightArgs).asJava());
+            var filteredRight = LogicalFilter.create(r, condition);
+            return LogicalCorrelate.create(l, filteredRight, java.util.List.of(), corrId,
+                    ImmutableBitSet.range(lc), ty);
         }
     }
 
