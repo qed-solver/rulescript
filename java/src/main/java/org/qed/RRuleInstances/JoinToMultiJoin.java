@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — only the INNER-join case (the real rule also refuses outer/null-producing inputs), fixed 3-way flattening of Join(C, X, MultiJoin(Y, Z, filter F_M)) into the flat 3-input MultiJoin with the combined filter F_M ∧ C
 public record JoinToMultiJoin() implements RRule {
     static final RelRN X = RelRN.scan("X", "X_Type");
     static final RelRN Y = RelRN.scan("Y", "Y_Type");

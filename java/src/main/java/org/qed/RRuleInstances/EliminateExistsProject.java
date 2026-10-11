@@ -1,4 +1,3 @@
-// SCOPE: FULL — EXISTS is unconditionally insensitive to any Project on its input, since Project never changes row cardinality
 package org.qed.RRuleInstances;
 
 import org.apache.calcite.rex.RexNode;
@@ -8,6 +7,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 
 // ORIGIN: CockroachDB
+// SCOPE: FULL — EXISTS is unconditionally insensitive to any Project on its input, since Project never changes row cardinality
 public record EliminateExistsProject() implements RRule {
     record Exists(RelRN input) implements RexRN {
         @Override

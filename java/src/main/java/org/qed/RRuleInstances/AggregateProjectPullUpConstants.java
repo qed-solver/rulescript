@@ -6,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the aggregate's constant group key is a literal column emitted by a projection directly below the aggregate, not deduced from pulled-up predicates over an arbitrary input.
 public record AggregateProjectPullUpConstants() implements RRule {
     static final RelRN source = RelRN.scan("S", "S_Type");
     static final RexRN constant = RexRN.trueLiteral();

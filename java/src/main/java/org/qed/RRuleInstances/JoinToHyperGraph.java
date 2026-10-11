@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — a 3-way inner-join tree whose left child is a 2-way join denoting an existing HyperGraph, flattened into the 3-input hypergraph and enumerated as the right-deep tree A⋈(B⋈C) rather than the original left-deep (A⋈B)⋈C, rather than the rule's general flattening of arbitrary input trees and all its supported join types
 public record JoinToHyperGraph() implements RRule {
     static final RelRN A = RelRN.scan("A", "A_Type");
     static final RelRN B = RelRN.scan("B", "B_Type");

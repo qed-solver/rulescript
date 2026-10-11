@@ -11,6 +11,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the LEFT-join case in which the null-generating (right) input's column is declared non-nullable and the filter sits directly above the join (a surviving left-only conjunct is not modeled).
 public record OuterJoinToAntiJoin() implements RRule {
     static final RelRN left = RelRN.scan("L", new RelType.VarType("L_T", true), false);
     static final RelRN right = RelRN.scan("R", new RelType.VarType("R_T", false), false);

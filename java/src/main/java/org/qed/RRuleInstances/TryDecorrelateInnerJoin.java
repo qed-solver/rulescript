@@ -1,5 +1,4 @@
 package org.qed.RRuleInstances;
-// SCOPE: PARTIAL — INNER joins only, single-column L/IL/IR, uninterpreted 3-ary on and 2-ary innerOn
 import kala.collection.Seq;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.sql.SqlOperator;
@@ -9,6 +8,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — INNER joins only, single-column L/IL/IR, uninterpreted 3-ary on and 2-ary innerOn
 public record TryDecorrelateInnerJoin() implements RRule {
   static final RelRN L  = RelRN.scan("L",  RexRN.varType("T", true), false);
   static final RelRN IL = RelRN.scan("IL", RexRN.varType("T", true), false);

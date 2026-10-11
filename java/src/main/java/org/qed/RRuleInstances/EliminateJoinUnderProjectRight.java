@@ -1,4 +1,3 @@
-// SCOPE: PARTIAL — the INNER-join variant only, on a self-join of the same unique single non-nullable-column scan on equality of that column, with the project using only the preserved right column
 package org.qed.RRuleInstances;
 
 import kala.collection.Seq;
@@ -11,6 +10,7 @@ import org.qed.RexRN;
 import org.qed.RexRN.Pred;
 
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — the INNER-join variant only, on a self-join of the same unique single non-nullable-column scan on equality of that column, with the project using only the preserved right column
 public record EliminateJoinUnderProjectRight() implements RRule {
     // Single NON-NULLABLE column and scan UNIQUE on that column: every row
     // matches exactly itself (non-null, so r.c = r.c holds, and at most one

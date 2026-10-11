@@ -6,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the trivial Calc's identity projection is over a fixed 2-column input; the original rule applies to any input arity
 public record CalcRemove() implements RRule {
     static final RelRN source = RelRN.scanMany("Source",
             Seq.of(RexRN.varType("Source_Type_0", true), RexRN.varType("Source_Type_1", true)));

@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the project emits exactly two boolean-literal constant columns and one non-constant column, and the aggregate groups by exactly those three columns with a single call on the non-constant one
 public record AggregateProjectConstantToDummyJoin() implements RRule {
     static final RelRN source = RelRN.scan("S", "S_Type");
     static final RexRN lit0 = RexRN.trueLiteral();

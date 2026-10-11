@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — assumes the (single-input, identity 1-to-1 column mapping) table function has a 2-column input row; the original rule admits any equal field count
 public record FilterTableFunctionTranspose() implements RRule {
     static final RelRN input = RelRN.scanMany("S", Seq.of(
             RexRN.varType("S0_Type", true),

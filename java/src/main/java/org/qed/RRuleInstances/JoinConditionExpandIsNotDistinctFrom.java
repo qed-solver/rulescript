@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RexRN.Pred;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — IS NOT DISTINCT FROM is the entire condition of an inner join between two single-column scans of a single shared type, with the 3-valued-logic expansion on the right-hand side rather than Calcite's COALESCE-based form
 public record JoinConditionExpandIsNotDistinctFrom() implements RRule {
     static final RelRN left = RelRN.scan("L", "V");
     static final RelRN right = RelRN.scan("R", "V");

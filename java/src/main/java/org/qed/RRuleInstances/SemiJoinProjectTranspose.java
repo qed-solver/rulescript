@@ -10,6 +10,7 @@ import org.qed.RelType;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — only the semi-join variant of the rule (the Calcite rule also fires on anti-joins); left projection is an arbitrary multi-expression project, join condition an uninterpreted predicate over the projected row
 public record SemiJoinProjectTranspose() implements RRule {
     static final RelRN x = RelRN.scanMany("X", Seq.of(
             new RelType.VarType("X0_Type", true),

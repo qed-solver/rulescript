@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the join condition is a fixed representative split into uninterpreted conjuncts over the single-column scans, not an arbitrary condition decomposition
 public record JoinAssociate() implements RRule {
     static final RelRN A = RelRN.scan("A", "A_Type");
     static final RelRN B = RelRN.scan("B", "B_Type");

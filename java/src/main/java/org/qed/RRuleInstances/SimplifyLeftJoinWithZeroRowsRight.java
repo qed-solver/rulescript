@@ -1,4 +1,3 @@
-// SCOPE: PARTIAL — fixed-shape pattern: a 2-column left and a 2-column zero-row right (both uninterpreted scans), versus the source rule's arbitrary-width $left/$right.
 package org.qed.RRuleInstances;
 
 import kala.collection.Seq;
@@ -11,6 +10,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — fixed-shape pattern: a 2-column left and a 2-column zero-row right (both uninterpreted scans), versus the source rule's arbitrary-width $left/$right.
 public record SimplifyLeftJoinWithZeroRowsRight() implements RRule {
     static final RelType.VarType l0 = new RelType.VarType("Left_Type0", true);
     static final RelType.VarType l1 = new RelType.VarType("Left_Type1", true);

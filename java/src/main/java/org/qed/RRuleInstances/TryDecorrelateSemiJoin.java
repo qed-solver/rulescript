@@ -1,5 +1,4 @@
 package org.qed.RRuleInstances;
-// SCOPE: PARTIAL — left is a fully-keyed (unique) single-column scan (modeling EnsureKey whose key is the column), right is a single-column scan, the correlate condition is an uninterpreted 2-ary predicate, and left has no non-key columns (so no ConstAgg output columns)
 import kala.collection.Seq;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.sql.SqlOperator;
@@ -9,6 +8,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — left is a fully-keyed (unique) single-column scan (modeling EnsureKey whose key is the column), right is a single-column scan, the correlate condition is an uninterpreted 2-ary predicate, and left has no non-key columns (so no ConstAgg output columns)
 public record TryDecorrelateSemiJoin() implements RRule {
     // EnsureKey($left): single column, fully keyed so KeyCols = {c0} and NonKeyCols = {}
     static final RelRN L = RelRN.scan("L", RexRN.varType("TL", true), true);

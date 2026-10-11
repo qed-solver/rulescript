@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — right side is a single-column table unique on its column.
 public record JoinAggregateTranspose() implements RRule {
     static final RelRN left = RelRN.scanMany("L", Seq.of(
             RexRN.varType("g_type", true), RexRN.varType("v_type", true)));

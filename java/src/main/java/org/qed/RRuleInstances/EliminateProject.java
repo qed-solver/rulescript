@@ -1,4 +1,3 @@
-// SCOPE: PARTIAL — the identity project is over a fixed two-column input; the original rule applies to any input arity
 package org.qed.RRuleInstances;
 
 import kala.collection.Seq;
@@ -7,6 +6,7 @@ import org.qed.RelType;
 import org.qed.RRule;
 
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — the identity project is over a fixed two-column input; the original rule applies to any input arity
 public record EliminateProject() implements RRule {
     // A two-column input standing in for $input (uninterpreted, any arity in
     // the original rule).

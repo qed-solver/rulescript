@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — only Calcite's DEFAULT (no aggregate-function) config of the rule: an Aggregate with no agg calls, whose group set spans both sides of an INNER equi-join (one join-key column plus one extra group column per side), is pushed below the join (grouping by that side's join key + group column) and re-grouped above the rejoined result. The EXTENDED config (splittable aggregate functions such as SUM/COUNT pushed through the join) is out of scope: QED treats every aggregate call as an uninterpreted function of its input bag, so it cannot verify that a function's value over the rejoined rows equals a combination of the two per-side partial aggregates.
 public record AggregateJoinTranspose() implements RRule {
     static final RelRN.ScanMany left = RelRN.scanMany("L", Seq.of(
             RexRN.varType("a_type", true), RexRN.varType("x_type", true)));

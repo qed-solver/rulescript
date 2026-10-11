@@ -6,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the 2-input UNION DISTINCT instance where both inputs are filters over the same single source with 2-valued predicates (Calcite's rule is general over arity, multiple distinct sources, and non-filter inputs).
 public record SetOpToFilter() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");
     static final RexRN p1 = source.pred("P1");

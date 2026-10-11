@@ -1,5 +1,4 @@
 package org.qed.RRuleInstances;
-// SCOPE: PARTIAL — the InnerJoinApply case only: both inputs are single-column scans of one shared uninterpreted type, ON is the genuine equality l.c0 = r.c0, and the remapped predicate is an uninterpreted 1-ary h over the outer column, swapped to the equal left column
 import kala.collection.Seq;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.sql.SqlOperator;
@@ -10,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — the InnerJoinApply case only: both inputs are single-column scans of one shared uninterpreted type, ON is the genuine equality l.c0 = r.c0, and the remapped predicate is an uninterpreted 1-ary h over the outer column, swapped to the equal left column
 public record TryRemapJoinOuterColsRight() implements RRule {
     static final RelRN L = RelRN.scan("L", RexRN.varType("T", true), false);
     static final RelRN R = RelRN.scan("R", RexRN.varType("T", true), false);

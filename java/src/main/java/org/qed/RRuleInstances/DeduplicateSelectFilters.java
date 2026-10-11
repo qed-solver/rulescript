@@ -1,4 +1,3 @@
-// SCOPE: PARTIAL — assumes a filter list of three conjuncts in which exactly one predicate is duplicated alongside one independent predicate
 package org.qed.RRuleInstances;
 
 import org.qed.RRule;
@@ -6,6 +5,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — assumes a filter list of three conjuncts in which exactly one predicate is duplicated alongside one independent predicate
 public record DeduplicateSelectFilters() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");
     static final RexRN p = source.pred("p");

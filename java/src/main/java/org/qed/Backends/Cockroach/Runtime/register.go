@@ -48,7 +48,7 @@ func LoadDir(dir string) ([]*Rule, []error, error) {
 			skipped = append(skipped, fmt.Errorf("%s: %w", filepath.Base(path), err))
 			continue
 		}
-		if rule.growsOwnPattern() {
+		if rule.GrowsOwnPattern() {
 			skipped = append(skipped, fmt.Errorf("%s: its output contains its own pattern, so it would keep growing", filepath.Base(path)))
 			continue
 		}

@@ -5,6 +5,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the 2-input UNION ALL instance with both inputs sharing one column type, whereas Calcite's rule applies to any set-op kind (UNION/INTERSECT/MINUS, ALL or DISTINCT) of any arity.
 public record FilterSetOpTranspose() implements RRule {
     static final RelRN left = RelRN.scan("L", "T");
     static final RelRN right = RelRN.scan("R", "T");

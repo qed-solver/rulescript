@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — single-column X/Y/Z, INNER lower join, and all semi-join keys referencing only X (the source rule's left-push branch; keys from both X and Y are rejected by the rule itself)
 public record SemiJoinJoinTranspose() implements RRule {
     static final RelRN X = RelRN.scan("X", "Key_Type");
     static final RelRN Y = RelRN.scan("Y", "Key_Type");

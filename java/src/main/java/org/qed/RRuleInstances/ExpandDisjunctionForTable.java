@@ -7,6 +7,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — INNER join of two plain table scans whose condition is a cross-table predicate E AND a one-level disjunction of two conjunctions, each branch pairing a left-table-only predicate (a, c) with a right-table-only predicate (b, d), expanded by AND-ing in the per-table disjunctions (a OR c) and (b OR D).
 public record ExpandDisjunctionForTable() implements RRule {
     static final RelRN t1 = RelRN.scan("t1", "T1_Type");
     static final RelRN t2 = RelRN.scan("t2", "T2_Type");

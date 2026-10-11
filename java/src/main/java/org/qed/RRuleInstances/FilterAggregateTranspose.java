@@ -7,6 +7,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — Group.SIMPLE, a single identity group key over a two-column input, one non-distinct aggregate call, one pushed conjunct depending only on the group key, one remaining conjunct over the aggregate output.
 public record FilterAggregateTranspose() implements RRule {
     static final RelRN scanA = RelRN.scan("A", "A_Type");
     static final RelRN scanB = RelRN.scan("B", "B_Type");

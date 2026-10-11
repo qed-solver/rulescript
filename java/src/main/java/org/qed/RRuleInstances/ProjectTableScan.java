@@ -9,6 +9,7 @@ import org.qed.RelType;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — assumes a fixed 3-column table and a fixed non-identity project (an uninterpreted F over columns 0 and 2 plus a direct reference to column 2); the original rule applies to any table arity and any projection over a ProjectableFilterableTable
 public record ProjectTableScan() implements RRule {
     static final RelRN table = RelRN.scanMany("T", Seq.of(
             RexRN.varType("T0_Type", true),

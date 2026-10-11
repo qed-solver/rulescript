@@ -10,6 +10,7 @@ import org.qed.RelType;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the LEFT_PROJECT variant of the rule (a two-input join with a project on the left input; the Calcite rule also has RIGHT_PROJECT and BOTH_PROJECT variants, and its input is a MultiJoin — here modeled as a two-column scan per side), with an inner join, the project's expression a single uninterpreted expression over the side's two columns, and the join condition an uninterpreted predicate over the projected row
 public record MultiJoinProjectTranspose() implements RRule {
     static final RelRN left = RelRN.scanMany("L", Seq.of(
             new RelType.VarType("L0_Type", true),

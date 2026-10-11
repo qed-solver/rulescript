@@ -9,16 +9,8 @@ import org.qed.RelType;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
-// SCOPE: PARTIAL -- LEFT join only, single-column L, 2-column selectInput
-// (k, v) with the Project passthrough keeping only v before the rewrite and
-// (k, v) after (matching UnionCols(passthrough, OutputCols(selectInput))).
-// The filter is modeled as uncorrelated (over selectInput's own k column
-// only) rather than genuinely referencing the outer L row -- same precedent
-// as the already-PROVED TryDecorrelateSelect: the $right-has-outer-cols /
-// FiltersBoundBy guard is a firing heuristic, not a soundness precondition,
-// since the filter-into-ON merge is valid regardless of what the filter
-// actually depends on.
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL -- LEFT join only, single-column L, 2-column selectInput (k, v) with the Project passthrough keeping only v before the rewrite and (k, v) after (matching UnionCols(passthrough, OutputCols(selectInput))). The filter is modeled as uncorrelated (over selectInput's own k column only) rather than genuinely referencing the outer L row -- same precedent as the already-PROVED TryDecorrelateSelect: the $right-has-outer-cols / FiltersBoundBy guard is a firing heuristic, not a soundness precondition, since the filter-into-ON merge is valid regardless of what the filter actually depends on.
 public record TryDecorrelateProjectSelect() implements RRule {
     static final RelType.VarType kType = new RelType.VarType("K", true);
     static final RelType.VarType vType = new RelType.VarType("V", true);

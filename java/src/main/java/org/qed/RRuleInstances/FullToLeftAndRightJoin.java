@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RexRN.Pred;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the join condition is a single equality (L.col = R.col) between one column of each side, an equijoin condition that is never TRUE on null-extended rows
 public record FullToLeftAndRightJoin() implements RRule {
     static final RelRN left = RelRN.scan("L", "V");
     static final RelRN right = RelRN.scan("R", "V");

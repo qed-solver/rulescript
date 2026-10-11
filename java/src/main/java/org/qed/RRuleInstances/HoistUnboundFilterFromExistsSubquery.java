@@ -1,4 +1,3 @@
-// SCOPE: PARTIAL — the outer-bound condition is modeled as a global (0-ary) boolean symbol rather than a genuinely correlated reference into the outer row (RuleScript has no correlated-subquery-inside-EXISTS construct), which is a faithful narrower instance since the identity EXISTS(sigma_{c AND phi}(R)) = c AND EXISTS(sigma_phi(R)) holds for any c not depending on R's rows, regardless of what c itself depends on
 package org.qed.RRuleInstances;
 
 import kala.collection.Seq;
@@ -10,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — the outer-bound condition is modeled as a global (0-ary) boolean symbol rather than a genuinely correlated reference into the outer row (RuleScript has no correlated-subquery-inside-EXISTS construct), which is a faithful narrower instance since the identity EXISTS(sigma_{c AND phi}(R)) = c AND EXISTS(sigma_phi(R)) holds for any c not depending on R's rows, regardless of what c itself depends on
 public record HoistUnboundFilterFromExistsSubquery() implements RRule {
     record Exists(RelRN input) implements RexRN {
         @Override

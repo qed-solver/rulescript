@@ -1,4 +1,3 @@
-// SCOPE: FULL
 package org.qed.RRuleInstances;
 
 import kala.collection.Seq;
@@ -7,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 
 // ORIGIN: CockroachDB
+// SCOPE: FULL
 public record NegateAnd() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");
     static final RexRN left = source.pred("left");

@@ -10,6 +10,7 @@ import org.qed.RelType;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — inner join over single-column sides, where the join condition and the top projection are expressed via shared uninterpreted per-side expressions (the decomposition the rule itself performs)
 public record ProjectJoinTranspose() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");
     static final RelRN right = RelRN.scan("R", "R_Type");

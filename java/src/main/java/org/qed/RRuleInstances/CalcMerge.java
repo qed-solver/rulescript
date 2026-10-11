@@ -9,6 +9,7 @@ import org.qed.RelType;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — fixed shape: 2-column input; each Calc has one uninterpreted filter predicate over both input columns and exactly two uninterpreted projection expressions, each over both columns
 public record CalcMerge() implements RRule {
     static final RelRN source = RelRN.scanMany("S", Seq.of(
             RexRN.varType("X_Type", true),

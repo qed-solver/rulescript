@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the left subquery is assumed to be the array column plus exactly one extra unused column, and the unnested element relation is single-column
 public record UnnestDecorrelate() implements RRule {
     static final RelRN left = RelRN.scanMany("L", Seq.of(
             RexRN.varType("L_Array_Type", true),

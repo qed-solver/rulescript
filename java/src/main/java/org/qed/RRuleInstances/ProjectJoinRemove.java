@@ -10,6 +10,7 @@ import org.qed.RexRN;
 import org.qed.RexRN.Pred;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the LEFT-join variant only, on a self-join of the same unique single non-nullable-column scan on equality of that column, with the project using only the preserved left column
 public record ProjectJoinRemove() implements RRule {
     static final RelType.VarType V = new RelType.VarType("V", false);
     static final RelRN t = RelRN.scan("T", V, true);

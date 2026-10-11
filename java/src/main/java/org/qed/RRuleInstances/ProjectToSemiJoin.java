@@ -9,6 +9,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — INNER join only, single-column equi key that is exactly the right aggregate's sole group key (a pure GROUP BY with no aggregate calls), with a left-field-only top project; the LEFT variant (full join elimination) and multi-key / aggregate-call cases are not modeled.
 public record ProjectToSemiJoin() implements RRule {
     static final RelType.VarType T = RexRN.varType("T", true);
     static final RelRN left = RelRN.scanMany("L", Seq.of(T, T));

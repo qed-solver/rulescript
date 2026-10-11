@@ -1,4 +1,3 @@
-// SCOPE: PARTIAL — the zero-rows precondition is encoded as a literal .empty() relation (a statically known-empty shape), matching the source rule's HasZeroRows guard
 package org.qed.RRuleInstances;
 
 import org.apache.calcite.rex.RexNode;
@@ -8,6 +7,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — the zero-rows precondition is encoded as a literal .empty() relation (a statically known-empty shape), matching the source rule's HasZeroRows guard
 public record EliminateExistsZeroRows() implements RRule {
     record Exists(RelRN input) implements RexRN {
         @Override

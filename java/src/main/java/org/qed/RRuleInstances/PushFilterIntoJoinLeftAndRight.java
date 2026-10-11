@@ -1,4 +1,3 @@
-// SCOPE: PARTIAL — INNER only, two-column inputs, no outer columns, one mappable cross equality plus two supporting cross equalities
 package org.qed.RRuleInstances;
 import kala.collection.Seq;
 import org.apache.calcite.rel.core.JoinRelType;
@@ -8,6 +7,7 @@ import org.qed.RelType;
 import org.qed.RRule;
 import org.qed.RexRN;
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — INNER only, two-column inputs, no outer columns, one mappable cross equality plus two supporting cross equalities
 public record PushFilterIntoJoinLeftAndRight() implements RRule {
     static final RelType.VarType kT = RexRN.varType("Key_Type", false);
     static final RelRN left = RelRN.scanMany("L", Seq.of(kT, kT));

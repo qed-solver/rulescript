@@ -1,4 +1,3 @@
-// SCOPE: PARTIAL — fixed-shape pattern: 2-column zero-row input with 2 passthrough columns and 1 uninterpreted projection, versus the original rule's arbitrary passthrough/projection lists.
 package org.qed.RRuleInstances;
 
 import kala.collection.Seq;
@@ -7,6 +6,7 @@ import org.qed.RelType;
 import org.qed.RRule;
 
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — fixed-shape pattern: 2-column zero-row input with 2 passthrough columns and 1 uninterpreted projection, versus the original rule's arbitrary passthrough/projection lists.
 public record EliminateZeroCardProject() implements RRule {
     static final RelType.VarType t0 = new RelType.VarType("Input_Type0", true);
     static final RelType.VarType t1 = new RelType.VarType("Input_Type1", true);

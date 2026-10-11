@@ -8,8 +8,8 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
-
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — single-column table inputs, and both join conditions are a fixed representative conjunction of uninterpreted conjuncts (SA, SB, ST, TC) split by B-reference, not an arbitrary condition decomposition
 public record JoinPushThroughJoin() implements RRule {
     static final RelRN A = RelRN.scan("A", "A_Type");
     static final RelRN B = RelRN.scan("B", "B_Type");

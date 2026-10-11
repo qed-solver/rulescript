@@ -7,6 +7,7 @@ import org.qed.RelType;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the aggregate is a group-by-all with no aggregate calls (dedup / DISTINCT) and the UNION ALL has exactly two inputs sharing the same two-column row type.
 public record AggregateUnionTranspose() implements RRule {
     static final Seq<RelType.VarType> rowType = Seq.of(
             RexRN.varType("T0", true),

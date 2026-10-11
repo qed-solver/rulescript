@@ -8,6 +8,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — INNER join only (not the rule's LEFT case), with both aggregates pure GROUP BY (zero aggregate calls) on single equi keys.
 public record AggregateToSemiJoin() implements RRule {
     static final RelRN left = RelRN.scan("L", RexRN.varType("Lk_Type", true), false);
     static final RelRN right = RelRN.scan("R", RexRN.varType("R_Type", true), false);

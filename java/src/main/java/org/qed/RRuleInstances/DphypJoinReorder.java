@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — a single concrete DpHyp-style reordering of a fully-connected 3-way inner-join tree (left-deep (A⋈B)⋈C to right-deep A⋈(B⋈C)) with single-column inputs and uninterpreted conjunctive join conditions, rather than an arbitrary cost-driven reordering of an arbitrary join tree
 public record DphypJoinReorder() implements RRule {
     static final RelRN A = RelRN.scan("A", "A_Type");
     static final RelRN B = RelRN.scan("B", "B_Type");

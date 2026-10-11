@@ -6,6 +6,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the constant column is a boolean literal materialized by an explicit projection below the union-all, rather than a generic constant deduced from table guarantees.
 public record UnionPullUpConstants() implements RRule {
     static final RexRN lit = RexRN.trueLiteral();
 

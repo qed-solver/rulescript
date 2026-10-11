@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — inner join only, with the right input a single-row Values holding one constant column (a Boolean literal)
 public record PruneSingleValue() implements RRule {
 
     static final RelNode valsNode =

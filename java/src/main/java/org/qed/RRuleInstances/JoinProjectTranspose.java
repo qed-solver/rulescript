@@ -10,6 +10,7 @@ import org.qed.RelType;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the rule's default non-outer config: an inner join whose two inputs are projects, each per-side projection a single uninterpreted expression, with the join condition an uninterpreted predicate over the projected row
 public record JoinProjectTranspose() implements RRule {
     static final RelRN left = RelRN.scanMany("L", Seq.of(
             new RelType.VarType("L0_Type", true),

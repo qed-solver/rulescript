@@ -240,7 +240,7 @@ func (x *Rex) check() error {
 	return fmt.Errorf("unsupported expression %q", x.Op)
 }
 
-func (r *Rule) growsOwnPattern() bool {
+func (r *Rule) GrowsOwnPattern() bool {
 	return r.From.Op != "scan" && r.To.size() > r.From.size() && r.To.contains(r.From)
 }
 

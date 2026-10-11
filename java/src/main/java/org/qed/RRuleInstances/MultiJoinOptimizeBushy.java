@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — fixed 4-way inner multi-join with a single shared filter, rewritten from the left-deep tree (((A⋈B)⋈C)⋈_F D) to the genuinely bushy tree (A⋈B)⋈_F (C⋈D), with the filter kept as one uninterpreted predicate over the full concatenated row rather than the heuristic's cost-driven tree choice and per-conjunct condition distribution
 public record MultiJoinOptimizeBushy() implements RRule {
     static final RelRN A = RelRN.scan("A", "A_Type");
     static final RelRN B = RelRN.scan("B", "B_Type");

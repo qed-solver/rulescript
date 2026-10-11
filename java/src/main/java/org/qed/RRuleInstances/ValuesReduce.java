@@ -7,6 +7,7 @@ import org.qed.RelRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the project over the concrete non-empty Values is an input-reference-only column selection/reorder (no operator expressions), which the rule folds into a smaller concrete Values
 public record ValuesReduce() implements RRule {
 
     @Override

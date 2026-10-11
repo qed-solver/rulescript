@@ -6,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — encodes only the unused-aggregate-call-removal half (single group key, project expressions as plain field references that keep every group key and drop one of three aggregate calls); the COALESCE(SUM(x), 0) to SUM0(x) conversion is not modeled because QED treats the two aggregate calls as distinct uninterpreted group-bag functions with no null-handling identity between them.
 public record ProjectAggregateMerge() implements RRule {
     static final RelRN source = RelRN.scan("S", "S_Type");
     static final RexRN g = source.groupBy("g");

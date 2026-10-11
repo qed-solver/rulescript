@@ -7,6 +7,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the window is modeled as a group-by/aggregate with a single partition key and a single aggregate call, the input is an arbitrary two-column relation, and the filter is a conjunction of one conjunct over the partition key only (the pushed one) and one conjunct over the window output row (the remaining one)
 public record FilterWindowTranspose() implements RRule {
     static final RelRN base = RelRN.scanMany("B", Seq.of(
             RexRN.varType("K_Type", true),

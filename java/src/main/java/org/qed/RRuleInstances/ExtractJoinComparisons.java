@@ -1,4 +1,3 @@
-// SCOPE: PARTIAL — inner join only, one input column per side, exactly one comparison between a projection over the left column and a projection over the right column
 package org.qed.RRuleInstances;
 
 import kala.collection.Seq;
@@ -25,6 +24,7 @@ import org.qed.RuleBuilder;
 // sides denote the bag of (x, y) pairs satisfying L(x) ∧ R(y) ∧
 // cmp(f(x), g(y)).
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — inner join only, one input column per side, exactly one comparison between a projection over the left column and a projection over the right column
 public record ExtractJoinComparisons() implements RRule {
     static final RelRN left  = RelRN.scan("L", "L_Type");
     static final RelRN right = RelRN.scan("R", "R_Type");

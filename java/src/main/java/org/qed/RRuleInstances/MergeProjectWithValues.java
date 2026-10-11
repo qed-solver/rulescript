@@ -1,11 +1,5 @@
 package org.qed.RRuleInstances;
 
-// SCOPE: PARTIAL — modeled with a representative 2-column, single-row Values
-// relation with one passthrough column and one input-independent synthesized
-// (literal) column; generalizes to any row width by the same reduction, but
-// this instance fixes concrete arity/content rather than being universally
-// quantified over it.
-
 import kala.collection.Seq;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rex.RexNode;
@@ -15,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — modeled with a representative 2-column, single-row Values relation with one passthrough column and one input-independent synthesized (literal) column; generalizes to any row width by the same reduction, but this instance fixes concrete arity/content rather than being universally quantified over it.
 public record MergeProjectWithValues() implements RRule {
     record LiteralValues(Object[] rowValues) implements RelRN {
         @Override

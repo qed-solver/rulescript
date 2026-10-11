@@ -8,18 +8,8 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
-// SCOPE: PARTIAL — INNER join only, single-column L/R, generic uninterpreted
-// ON and right-side-filter predicates. The source rule's guard requires
-// $right to have outer columns (i.e. it fires only inside correlated/Apply
-// subtrees), but that guard is a scope-limiting heuristic for when the
-// optimizer chooses to fire the rule, not a soundness precondition: the
-// identity Join(L, Select(R, pred), on) = Join(L, R, on AND pred) holds for
-// any right-side predicate regardless of whether it references outer
-// columns, because "pred" is evaluated per-row of R either way (as a
-// pre-filter, or folded into the join's row-level ON test) and the set of R
-// rows that survive to be matched against a given L row is identical in
-// both formulations.
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — INNER join only, single-column L/R, generic uninterpreted ON and right-side-filter predicates. The source rule's guard requires $right to have outer columns (i.e. it fires only inside correlated/Apply subtrees), but that guard is a scope-limiting heuristic for when the optimizer chooses to fire the rule, not a soundness precondition: the identity Join(L, Select(R, pred), on) = Join(L, R, on AND pred) holds for any right-side predicate regardless of whether it references outer columns, because "pred" is evaluated per-row of R either way (as a pre-filter, or folded into the join's row-level ON test) and the set of R rows that survive to be matched against a given L row is identical in both formulations.
 public record TryDecorrelateSelect() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");
     static final RelRN right = RelRN.scan("R", "R_Type");

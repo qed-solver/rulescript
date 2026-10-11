@@ -1,4 +1,3 @@
-// SCOPE: PARTIAL — assumes the two OR operands are each a binary conjunction sharing exactly one common conjunct, i.e. the (A AND B) OR (A AND C) => A AND (B OR C) instance
 package org.qed.RRuleInstances;
 
 import org.qed.RRule;
@@ -7,6 +6,7 @@ import org.qed.RexRN;
 import kala.collection.Seq;
 
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — assumes the two OR operands are each a binary conjunction sharing exactly one common conjunct, i.e. the (A AND B) OR (A AND C) => A AND (B OR C) instance
 public record ExtractRedundantConjunct() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");
     static final RexRN a = source.pred("a");

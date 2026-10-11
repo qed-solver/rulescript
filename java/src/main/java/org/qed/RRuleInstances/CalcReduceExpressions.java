@@ -9,6 +9,7 @@ import org.qed.RelType;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the Calc's condition is the constant FALSE literal (the branch where constant reduction of the condition yields a constant false, so the whole Calc is replaced by an empty relation with the Calc's output row type); general constant folding of projections/conditions is not modelable with uninterpreted symbols
 public record CalcReduceExpressions() implements RRule {
     static final RelRN source = RelRN.scanMany("S", Seq.of(
             RexRN.varType("X_Type", true),

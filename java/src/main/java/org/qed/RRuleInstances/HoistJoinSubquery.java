@@ -10,11 +10,8 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
-// SCOPE: PARTIAL — INNER join only; the hoisted subquery is an uncorrelated
-// EXISTS referencing only its own input table (S), so it can be moved from the
-// join's ON condition into a filter on the right input (E is a fixed Boolean
-// per row pair and its value is independent of the left row).
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — INNER join only; the hoisted subquery is an uncorrelated EXISTS referencing only its own input table (S), so it can be moved from the join's ON condition into a filter on the right input (E is a fixed Boolean per row pair and its value is independent of the left row).
 public record HoistJoinSubquery() implements RRule {
     // A bare EXISTS subquery over an arbitrary (self-contained) relation.
     record ExistsSub(RelRN body) implements RexRN {

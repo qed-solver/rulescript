@@ -7,8 +7,8 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
-
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — INNER join, UNION ALL on the left side, single-column scans, and a single shared join-condition symbol C
 public record JoinUnionTranspose() implements RRule {
     static final RelRN X = RelRN.scan("X", "T");
     static final RelRN Y = RelRN.scan("Y", "T");

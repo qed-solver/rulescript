@@ -10,6 +10,7 @@ import org.qed.RexRN;
 import org.qed.RexRN.Pred;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — LEFT/LEFT join chain only, a self-join of the same unique single non-nullable-column scan on equality of that column for the bottom join (as in the proven ProjectJoinRemove precedent — every row matches itself, so the null-extension term never fires and no duplicates are introduced), plus a top join to a second single non-nullable-column scan C on that same column, with the outer project keeping only the preserved left column and C's column (never the eliminated join's right column).
 public record ProjectJoinJoinRemove() implements RRule {
     static final RelType.VarType V = new RelType.VarType("V", false);
     static final RelRN t = RelRN.scan("T", V, true);

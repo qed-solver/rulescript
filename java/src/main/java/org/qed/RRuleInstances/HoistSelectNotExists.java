@@ -1,4 +1,3 @@
-// SCOPE: PARTIAL — the hoisted NOT EXISTS subquery is uncorrelated (references only its own input S), so the empty AntiJoinApply condition is an ANTI join under a constant-true predicate.
 package org.qed.RRuleInstances;
 
 import org.qed.RRule;
@@ -11,6 +10,7 @@ import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.sql.SqlOperator;
 
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — the hoisted NOT EXISTS subquery is uncorrelated (references only its own input S), so the empty AntiJoinApply condition is an ANTI join under a constant-true predicate.
 public record HoistSelectNotExists() implements RRule {
     record ExistsSub(RelRN body) implements RexRN {
         @Override

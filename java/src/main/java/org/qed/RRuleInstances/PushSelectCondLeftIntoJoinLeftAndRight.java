@@ -1,4 +1,3 @@
-// SCOPE: PARTIAL — LEFT JOIN only (the rule's documented case); one-column inputs joined on the single equality L.0=R.0; pushed filter is a single unary predicate on the left key column, mapped to the right key column
 package org.qed.RRuleInstances;
 
 import kala.collection.Seq;
@@ -13,6 +12,7 @@ import org.qed.RexRN.Pred;
 import org.qed.RuleBuilder;
 
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — LEFT JOIN only (the rule's documented case); one-column inputs joined on the single equality L.0=R.0; pushed filter is a single unary predicate on the left key column, mapped to the right key column
 public record PushSelectCondLeftIntoJoinLeftAndRight() implements RRule {
     static final RelType.VarType keyTy = RexRN.varType("Key_Type", false);
     static final RelRN left = RelRN.scan("L", keyTy, false);

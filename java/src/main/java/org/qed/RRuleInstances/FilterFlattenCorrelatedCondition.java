@@ -11,6 +11,7 @@ import org.qed.RuleBuilder;
 import kala.collection.Seq;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — a single (uninterpreted) comparison between a correlated outer column and one uncorrelated computed expression over inner columns; the correlation context is modeled as an INNER cross-join of the outer scan and the inner scan, and the hoisted expression may not reference the outer columns
 public record FilterFlattenCorrelatedCondition() implements RRule {
     static final RelRN outer = RelRN.scan("Outer", "T");
     static final RelRN inner = RelRN.scan("Inner", "T2");

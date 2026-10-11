@@ -9,16 +9,8 @@ import org.qed.RelType;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
-// SCOPE: PARTIAL -- the "left already has a strict key" branch (EnsureKey is a
-// no-op), uncorrelated Input (the HasOuterCols guard is a firing heuristic,
-// same precedent as TryDecorrelateSelect/TryDecorrelateGroupBy), Window
-// modeled via the join-back-on-partition-key idiom used by
-// PushSelectIntoWindow (no frame/ordering semantics, an uninterpreted
-// aggregate standing in for the window function), starting with EMPTY
-// pre-existing partition columns (partcols=[]) so AddColsToPartition adds
-// exactly L's own key as the sole partition column, single aggregate call,
-// ON references only the input's value column.
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL -- the "left already has a strict key" branch (EnsureKey is a no-op), uncorrelated Input (the HasOuterCols guard is a firing heuristic, same precedent as TryDecorrelateSelect/TryDecorrelateGroupBy), Window modeled via the join-back-on-partition-key idiom used by PushSelectIntoWindow (no frame/ordering semantics, an uninterpreted aggregate standing in for the window function), starting with EMPTY pre-existing partition columns (partcols=[]) so AddColsToPartition adds exactly L's own key as the sole partition column, single aggregate call, ON references only the input's value column.
 public record TryDecorrelateWindow() implements RRule {
     static final RelType.VarType vType = new RelType.VarType("V", false);
     static final RelRN input = RelRN.scan("Input", vType, false);

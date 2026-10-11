@@ -7,6 +7,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the join is a LEFT join of two one-column scans, and the aggregate over it has exactly one group key referencing the left (preserved) input's column and no aggregate calls.
 public record AggregateJoinRemove() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");
     static final RelRN right = RelRN.scan("R", "R_Type");

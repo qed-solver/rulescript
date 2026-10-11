@@ -8,6 +8,7 @@ import org.qed.RuleBuilder;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — all distinct aggregate calls share the same single argument, no non-distinct calls, no FILTER/GROUPING SETS/WITHIN GROUP
 public record AggregateExpandDistinctAggregates() implements RRule {
     static final RelRN source = RelRN.scan("S", "S_Type");
     static final RexRN k = source.groupBy("k");

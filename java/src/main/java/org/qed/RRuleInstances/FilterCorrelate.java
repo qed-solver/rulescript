@@ -10,6 +10,7 @@ import org.qed.RuleBuilder;
 import kala.collection.Seq;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — INNER correlate only, modeled as an inner join on a true condition; non-correlated predicates are split into left-only (pushed to left), right-only (pushed to right), and both-sides (kept above)
 public record FilterCorrelate() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");
     static final RelRN right = RelRN.scan("R", "R_Type");

@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the top aggregate has no aggregate calls, the bottom aggregate has exactly one aggregate call (which the merged aggregate drops), the top's single group key is exactly the bottom's first group key, the bottom has exactly two group keys, and the input is a one-column scan.
 public record AggregateMerge() implements RRule {
     static final RelRN source = RelRN.scan("S", "S_Type");
 

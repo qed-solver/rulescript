@@ -9,8 +9,8 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
-
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the join condition is restricted to a conjunction containing an equality conjunct between a left column and a right column (plus arbitrary other conjuncts over those same two columns); the original rule derives IS NOT NULL filters from any condition for which per-column non-null inference succeeds
 public record JoinDeriveIsNotNullFilter() implements RRule {
     static final RelRN left = RelRN.scan("L", "Key_Type");
     static final RelRN right = RelRN.scan("R", "Key_Type");

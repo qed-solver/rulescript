@@ -1,7 +1,5 @@
 package org.qed.RRuleInstances;
 
-// SCOPE: PARTIAL — modeled with a representative 1-column left input, a single-row 2-column Values (1, 2), and an uninterpreted on-predicate over all join columns; the correlated InnerJoinApply variant is not modeled.
-
 import kala.collection.Seq;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
@@ -12,6 +10,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — modeled with a representative 1-column left input, a single-row 2-column Values (1, 2), and an uninterpreted on-predicate over all join columns; the correlated InnerJoinApply variant is not modeled.
 public record ProjectInnerJoinValues() implements RRule {
     // $right:(Values) & (HasOneRow $right): a one-row, 2-column Values relation.
     record LiteralValues(Object[] rowValues) implements RelRN {

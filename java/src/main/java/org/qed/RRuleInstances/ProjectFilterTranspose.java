@@ -9,6 +9,7 @@ import org.qed.RelType;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — fixed-shape whole-expressions mode: 2-column input, projection (E(x,y), F(x)) pushed through filter P(E(x,y), y) by hoisting E and F into an intermediate projection
 public record ProjectFilterTranspose() implements RRule {
     static final RelRN input = RelRN.scanMany("S", Seq.of(
             RexRN.varType("X_Type", true),

@@ -7,6 +7,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — Case 1 of the rule (Group.SIMPLE, filter columns all in the group set): the aggregate has exactly one group key which is a plain field of a two-column input, one non-distinct aggregate call over the other field, and the filter predicate depends only on the group key.
 public record AggregateFilterTranspose() implements RRule {
     static final RelRN scanA = RelRN.scan("A", "A_Type");
     static final RelRN scanB = RelRN.scan("B", "B_Type");

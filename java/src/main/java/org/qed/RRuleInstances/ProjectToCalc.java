@@ -9,6 +9,7 @@ import org.qed.RelType;
 import org.qed.RuleBuilder;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the input is fixed at 2 columns and the project list is exactly two uninterpreted expressions over them (the original rule applies to any input arity and any expression list); the Calc's absent condition is represented by the constant-TRUE filter, per this DSL's Calc convention
 public record ProjectToCalc() implements RRule {
     static final RelRN source = RelRN.scanMany("S", Seq.of(
             RexRN.varType("X_Type", true),

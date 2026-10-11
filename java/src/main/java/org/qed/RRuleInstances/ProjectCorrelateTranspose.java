@@ -7,6 +7,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — uncorrelated INNER correlate modeled as a true-condition inner (cross) join, projections restricted to bare field references (fixed 2-column-per-side shape with one column pruned per side)
 public record ProjectCorrelateTranspose() implements RRule {
     static final RelRN left = RelRN.scanMany("L", Seq.of(
             RexRN.varType("L0_Type", true),

@@ -1,4 +1,3 @@
-// SCOPE: PARTIAL — INNER join only, the outer-bound condition is modeled as a global (0-ary) boolean symbol rather than a genuinely correlated reference into the outer row (RuleScript has no correlated-subquery-inside-EXISTS construct), which is a faithful narrower instance of the same identity as HoistUnboundFilterFromExistsSubquery, applied to a join's filter list instead of a plain Select's
 package org.qed.RRuleInstances;
 
 import kala.collection.Seq;
@@ -11,6 +10,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 // ORIGIN: CockroachDB
+// SCOPE: PARTIAL — INNER join only, the outer-bound condition is modeled as a global (0-ary) boolean symbol rather than a genuinely correlated reference into the outer row (RuleScript has no correlated-subquery-inside-EXISTS construct), which is a faithful narrower instance of the same identity as HoistUnboundFilterFromExistsSubquery, applied to a join's filter list instead of a plain Select's
 public record HoistUnboundJoinFilterFromExistsSubquery() implements RRule {
     record Exists(RelRN input) implements RexRN {
         @Override

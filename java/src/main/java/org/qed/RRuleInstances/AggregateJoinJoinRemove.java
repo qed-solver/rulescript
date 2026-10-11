@@ -9,6 +9,7 @@ import org.qed.RuleBuilder;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — one-column scans A, B, C with both joins LEFT; the top join condition is a single uninterpreted predicate over (A's column, C's column), identically instantiated on both sides (index-shifted from fields (0,2) to (0,1) when the bottom join is removed); the bottom join condition is uninterpreted over (A, B); the aggregate is a pure DISTINCT group-by on (A's column, C's column) with no aggregate calls, mirroring the rule's "select distinct s.product_id, pc.product_id" example.
 public record AggregateJoinJoinRemove() implements RRule {
     static final RelRN a = RelRN.scan("A", "A_Type");
     static final RelRN b = RelRN.scan("B", "B_Type");

@@ -10,6 +10,7 @@ import org.qed.RuleBuilder;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — INNER single-key equi-join, one uninterpreted right-input key predicate pushed to the equal left-input key only
 public record JoinPushTransitivePredicates() implements RRule {
     static final SqlOperator eq = SqlStdOperatorTable.EQUALS;
 

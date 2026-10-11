@@ -9,6 +9,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — 1-column-per-side equi-join on R's unique key column, INNER variant only, with a parent project that uses only the left column
 public record JoinOnUniqueToSemiJoin() implements RRule {
     static final RelType.VarType T = RexRN.varType("T", true);
     static final RelRN left = RelRN.scan("L", T, false);

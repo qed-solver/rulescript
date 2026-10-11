@@ -7,6 +7,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the aggregate's input is a three-column relation (three one-column scans inner-joined with true conditions), it has one plain-field group key and one plain non-distinct aggregate call over a second plain field, and a third column is unused (neither a group key nor an aggregate argument) so the extracted projection drops it.
 public record AggregateExtractProject() implements RRule {
     static final RelRN scanA = RelRN.scan("A", "A_Type");
     static final RelRN scanB = RelRN.scan("B", "B_Type");

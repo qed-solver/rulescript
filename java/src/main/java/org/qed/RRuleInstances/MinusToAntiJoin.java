@@ -8,6 +8,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 
 // ORIGIN: Calcite
+// SCOPE: PARTIAL — the 2-input, single-column instance in which both inputs share one row type, so the rule's type-unification casts are identity (the general n-way rule is obtained by repeated application of this binary step).
 public record MinusToAntiJoin() implements RRule {
     static final RelRN a = RelRN.scan("A", "T");
     static final RelRN b = RelRN.scan("B", "T");
