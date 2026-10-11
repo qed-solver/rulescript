@@ -28,3 +28,9 @@ func TestPushLeakproofProjectionsIntoPermeableBarrier(t *testing.T) {
 	e.expectNoMatch(rule, e.f.ConstructProject(barrier, item(), opt.ColSet{}))
 	e.expectNoMatch(rule, barrier)
 }
+
+func TestSQLPushLeakproofProjectionsIntoPermeableBarrier(t *testing.T) {
+	expectSQLFiresWith(t, "PushLeakproofProjectionsIntoPermeableBarrier",
+		"SELECT x + 1, x FROM (SELECT x FROM u)",
+		sqlHelpers{names: []string{"PruneScanCols"}})
+}

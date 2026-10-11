@@ -25,3 +25,7 @@ func TestFoldNullInNonEmpty(t *testing.T) {
 		e.f.ConstructEq(nullInt, e.v(mixedInt)),
 		e.f.ConstructEq(nullBool, e.v(mixedBool))))))
 }
+
+func TestSQLFoldNullInNonEmpty(t *testing.T) {
+	expectSQLFires(t, "FoldNullInNonEmpty", "SELECT * FROM (SELECT x, y FROM u) q WHERE NULL::INT = q.x OR NULL::INT = q.y")
+}

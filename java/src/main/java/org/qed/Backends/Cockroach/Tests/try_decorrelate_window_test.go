@@ -51,3 +51,9 @@ func TestTryDecorrelateWindow(t *testing.T) {
 		e.f.ConstructInnerJoin(i1, groupedInput, nil, &memo.JoinPrivate{}),
 		e.filters(e.f.ConstructGt(e.v(lc[0]), e.v(ic[0]))), &memo.JoinPrivate{}))
 }
+
+func TestSQLTryDecorrelateWindow(t *testing.T) {
+	expectSQLFiresWith(t, "TryDecorrelateWindow",
+		"SELECT * FROM (SELECT x FROM u) l JOIN (SELECT n.a, g.w FROM (SELECT a FROM nn) n CROSS JOIN (SELECT max(a) AS w FROM nn) g) q ON l.x = q.a",
+		sqlHelpers{names: []string{"PruneScanCols", "EliminateProject"}})
+}

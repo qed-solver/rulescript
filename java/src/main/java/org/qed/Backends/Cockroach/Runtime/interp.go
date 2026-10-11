@@ -264,6 +264,15 @@ func (r *Rel) setOperator() opt.Operator {
 	}
 }
 
+func (s *state) reorderEmpty(side *Rel, cols []opt.ColumnID) {
+	if side.Op != "empty" {
+		return
+	}
+	if bound, ok := s.cols[side.ID]; ok && opt.MakeColSet(bound...).Equals(opt.MakeColSet(cols...)) {
+		s.cols[side.ID] = append([]opt.ColumnID{}, cols...)
+	}
+}
+
 func sameColumns(a, b []opt.ColumnID) bool {
 	if len(a) != len(b) {
 		return false
@@ -586,6 +595,8 @@ func (s *state) matchRel(p *Rel, e memo.RelExpr) bool {
 			return false
 		}
 		private := e.Private().(*memo.SetPrivate)
+		s.reorderEmpty(p.Left, private.LeftCols)
+		s.reorderEmpty(p.Right, private.RightCols)
 		if !private.Ordering.Any() || !sameColumns(private.LeftCols, s.cols[p.Left.ID]) ||
 			!sameColumns(private.RightCols, s.cols[p.Right.ID]) {
 			return false

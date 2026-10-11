@@ -32,3 +32,9 @@ func TestPruneWindowInputCols(t *testing.T) {
 		e.f.ConstructPlus(e.f.ConstructPlus(e.v(lc[0]), e.v(lc[2])), e.v(wcol)), top)}
 	e.expectNoMatch(rule, e.f.ConstructProject(join, badItems, opt.ColSet{}))
 }
+
+func TestSQLPruneWindowInputCols(t *testing.T) {
+	expectSQLFiresWith(t, "PruneWindowInputCols",
+		"SELECT n.a + n.b + g.w FROM (SELECT a, b, c FROM nn3) n JOIN (SELECT a, max(b) AS w FROM (SELECT a, b, c FROM nn3) GROUP BY a) g ON n.a = g.a",
+		sqlHelpers{limits: map[string]int{"PruneScanCols": 2}, names: []string{"EliminateProject"}})
+}

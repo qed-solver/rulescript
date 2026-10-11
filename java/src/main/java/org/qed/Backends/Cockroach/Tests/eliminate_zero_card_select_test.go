@@ -26,3 +26,9 @@ func TestEliminateZeroCardSelect(t *testing.T) {
 		e.f.ConstructSelect(two, e.filters(e.f.ConstructGt(e.v(c), e.num(0)))),
 		e.filters(e.f.ConstructLt(e.v(c), e.num(10)))))
 }
+
+func TestSQLEliminateZeroCardSelect(t *testing.T) {
+	expectSQLFiresWith(t, "EliminateZeroCardSelect",
+		"SELECT * FROM (SELECT * FROM (SELECT x FROM u WHERE false) WHERE x > 0) WHERE x < 10",
+		sqlHelpers{limits: map[string]int{"SimplifyZeroCardinalityGroup": 1}, names: []string{"EliminateProject", "PruneValuesCols", "PruneScanCols"}})
+}

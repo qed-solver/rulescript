@@ -29,3 +29,9 @@ func TestPushSelectIntoWindow(t *testing.T) {
 	e.expectNoMatch(rule, e.f.ConstructSelect(join, e.filters(q, p)))
 	e.expectNoMatch(rule, e.f.ConstructSelect(e.f.ConstructLeftJoin(l, window, on, &memo.JoinPrivate{}), e.filters(p, q)))
 }
+
+func TestSQLPushSelectIntoWindow(t *testing.T) {
+	expectSQLFiresWith(t, "PushSelectIntoWindow",
+		"SELECT * FROM nn n JOIN (SELECT a, max(b) AS w FROM nn GROUP BY a) g ON n.a = g.a WHERE n.a > 0 AND n.b + g.w > 5",
+		sqlHelpers{names: []string{"EliminateProject", "Prune*"}})
+}

@@ -19,3 +19,9 @@ func TestEliminateExistsZeroRows(t *testing.T) {
 	e.expectNoMatch(rule, e.f.ConstructSelect(outer, e.filters(e.exists(inner))))
 	e.expectNoMatch(rule, e.f.ConstructSelect(outer, e.filters(e.f.ConstructNot(e.exists(empty)))))
 }
+
+func TestSQLEliminateExistsZeroRows(t *testing.T) {
+	expectSQLFiresWith(t, "EliminateExistsZeroRows",
+		"SELECT * FROM t WHERE EXISTS (SELECT 1 FROM u WHERE false)",
+		sqlHelpers{names: []string{"SimplifyZeroCardinalityGroup", "EliminateProject", "Prune*"}})
+}

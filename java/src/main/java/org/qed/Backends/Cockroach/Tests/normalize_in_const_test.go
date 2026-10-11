@@ -25,3 +25,7 @@ func TestNormalizeInConstSQL(t *testing.T) {
 		t.Fatalf("NormalizeInConst did not fire on %s\n%s", sql, plan)
 	}
 }
+
+func TestSQLNormalizeInConst(t *testing.T) {
+	expectSQLFires(t, "NormalizeInConst", "SELECT * FROM (SELECT a, b, c FROM t) q WHERE a = b OR a = c OR a = b OR a = c")
+}

@@ -24,3 +24,9 @@ func TestPruneSemiAntiJoinRightCols(t *testing.T) {
 	r1, _ := e.scan("u", 1)
 	e.expectNoMatch(rule, e.f.ConstructAntiJoin(l, r1, nil, &memo.JoinPrivate{}))
 }
+
+func TestSQLPruneSemiAntiJoinRightCols(t *testing.T) {
+	expectSQLFiresWith(t, "PruneSemiAntiJoinRightCols",
+		"SELECT * FROM (SELECT a FROM t) q WHERE NOT EXISTS (SELECT x, y FROM u WHERE u.x = q.a)",
+		sqlHelpers{names: []string{"HoistSelectNotExists", "TryDecorrelateSelect", "DecorrelateJoin", "PruneSelectCols", "PruneScanCols", "EliminateProject"}})
+}

@@ -24,3 +24,9 @@ func TestTryDecorrelateSemiJoin(t *testing.T) {
 	e.expectNoMatch(rule, e.f.ConstructSemiJoinApply(nonunique, r,
 		e.filters(e.f.ConstructEq(e.v(nonuniqueCol), e.v(rc[0]))), &memo.JoinPrivate{}))
 }
+
+func TestSQLTryDecorrelateSemiJoin(t *testing.T) {
+	expectSQLFiresWith(t, "TryDecorrelateSemiJoin",
+		"SELECT * FROM (SELECT x FROM u) q WHERE q.x IN (SELECT a FROM nn)",
+		sqlHelpers{names: []string{"NormalizeSelectAnyFilter", "HoistSelectExists", "TryDecorrelateSelect", "TryDecorrelateProject", "TryDecorrelateProjectSelect", "PruneScanCols", "EliminateProject"}})
+}

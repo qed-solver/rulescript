@@ -17,3 +17,7 @@ func TestFoldNullComparisonLeft(t *testing.T) {
 	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructEq(e.v(cols[0]), nullInt))))
 	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructEq(e.num(1), e.v(cols[0])))))
 }
+
+func TestSQLFoldNullComparisonLeft(t *testing.T) {
+	expectSQLFires(t, "FoldNullComparisonLeft", "SELECT * FROM t WHERE NULL::INT = a")
+}

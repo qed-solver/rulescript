@@ -20,3 +20,9 @@ func TestRemoveZeroCardLock(t *testing.T) {
 	c2 := e.f.Metadata().AddColumn("c2", types.Int)
 	e.expectNoMatch(rule, e.f.ConstructSelect(e.empty(c, c2), e.filters(e.f.ConstructGt(e.v(c), e.num(0)))))
 }
+
+func TestSQLRemoveZeroCardLock(t *testing.T) {
+	expectSQLFiresWith(t, "RemoveZeroCardLock",
+		"SELECT * FROM (SELECT x FROM u WHERE false) WHERE x > 0",
+		sqlHelpers{limits: map[string]int{"SimplifyZeroCardinalityGroup": 1}, names: []string{"EliminateProject", "PruneValuesCols", "PruneScanCols"}})
+}

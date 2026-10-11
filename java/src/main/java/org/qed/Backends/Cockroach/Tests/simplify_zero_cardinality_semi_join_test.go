@@ -24,3 +24,9 @@ func TestSimplifyZeroCardinalitySemiJoin(t *testing.T) {
 	rc2 := e.f.Metadata().AddColumn("extra", types.Int)
 	e.expectNoMatch(rule, e.f.ConstructSemiJoin(l, e.empty(rc, rc2), on, &memo.JoinPrivate{}))
 }
+
+func TestSQLSimplifyZeroCardinalitySemiJoin(t *testing.T) {
+	expectSQLFiresWith(t, "SimplifyZeroCardinalitySemiJoin",
+		"SELECT * FROM (SELECT a FROM t) q WHERE q.a IN (SELECT x FROM u WHERE false)",
+		sqlHelpers{limits: map[string]int{"SimplifyZeroCardinalityGroup": 1}, names: []string{"NormalizeSelectAnyFilter", "HoistSelectExists", "TryDecorrelateSelect", "TryDecorrelateProject", "TryDecorrelateProjectSelect", "DecorrelateJoin", "PruneValuesCols", "EliminateProject", "PruneScanCols"}})
+}

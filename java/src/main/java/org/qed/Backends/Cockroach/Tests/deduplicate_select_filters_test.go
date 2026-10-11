@@ -25,3 +25,9 @@ func TestDeduplicateSelectFiltersSQL(t *testing.T) {
 		t.Fatalf("DeduplicateSelectFilters did not fire on %s\n%s", sql, plan)
 	}
 }
+
+func TestSQLDeduplicateSelectFilters(t *testing.T) {
+	expectSQLFiresWith(t, "DeduplicateSelectFilters",
+		"SELECT * FROM (SELECT * FROM (SELECT * FROM t WHERE a > 0) WHERE b > 0) WHERE a > 0",
+		sqlHelpers{names: []string{"EliminateProject", "Prune*"}})
+}

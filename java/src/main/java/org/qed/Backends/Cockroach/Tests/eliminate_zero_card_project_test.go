@@ -30,3 +30,9 @@ func TestEliminateZeroCardProject(t *testing.T) {
 	}, opt.MakeColSet(c0)))
 	e.expectNoMatch(rule, input)
 }
+
+func TestSQLEliminateZeroCardProject(t *testing.T) {
+	expectSQLFiresWith(t, "EliminateZeroCardProject",
+		"SELECT x, y, x + 1 FROM u WHERE false",
+		sqlHelpers{names: []string{"SimplifyZeroCardinalityGroup", "PruneValuesCols", "PruneScanCols"}})
+}

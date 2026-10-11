@@ -16,3 +16,9 @@ func TestSimplifyIsCondition(t *testing.T) {
 	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructIs(e.v(cols[0]), e.v(cols[1])))))
 	e.expectNoMatch(rule, e.f.ConstructSelect(inner, e.filters(e.f.ConstructEq(e.v(cols[0]), e.v(cols[1])))))
 }
+
+func TestSQLSimplifyIsCondition(t *testing.T) {
+	expectSQLFiresWith(t, "SimplifyIsCondition",
+		"SELECT * FROM (SELECT * FROM u WHERE x > 0) WHERE x IS NOT DISTINCT FROM y",
+		sqlHelpers{names: []string{"EliminateProject", "Prune*"}})
+}

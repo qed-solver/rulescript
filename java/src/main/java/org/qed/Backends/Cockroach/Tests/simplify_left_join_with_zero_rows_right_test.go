@@ -27,3 +27,9 @@ func TestSimplifyLeftJoinWithZeroRowsRight(t *testing.T) {
 	e.expectNoMatch(rule, e.f.ConstructLeftJoin(left, other,
 		e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(oc[0]))), &memo.JoinPrivate{}))
 }
+
+func TestSQLSimplifyLeftJoinWithZeroRowsRight(t *testing.T) {
+	expectSQLFiresWith(t, "SimplifyLeftJoinWithZeroRowsRight",
+		"SELECT l.x, l.y, r.x, r.y FROM (SELECT x, y FROM u) l LEFT JOIN (SELECT x, y FROM u WHERE false) r ON l.x = r.x",
+		sqlHelpers{names: []string{"SimplifyZeroCardinalityGroup", "PruneScanCols", "EliminateProject"}})
+}

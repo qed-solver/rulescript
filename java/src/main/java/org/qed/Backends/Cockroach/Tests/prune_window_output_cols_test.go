@@ -31,3 +31,9 @@ func TestPruneWindowOutputCols(t *testing.T) {
 	e.expectNoMatch(rule, e.f.ConstructProject(e.f.ConstructLeftJoin(l, window, on, &memo.JoinPrivate{}), nil,
 		opt.MakeColSet(lc[0], lc[1], w1)))
 }
+
+func TestSQLPruneWindowOutputCols(t *testing.T) {
+	expectSQLFiresWith(t, "PruneWindowOutputCols",
+		"SELECT n.a, n.b, g.w1 FROM nn n JOIN (SELECT a, max(b) AS w1, min(b) AS w2 FROM nn GROUP BY a) g ON n.a = g.a",
+		sqlHelpers{names: []string{"PruneJoinLeftCols", "PruneScanCols", "EliminateProject"}})
+}

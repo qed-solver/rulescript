@@ -914,3 +914,34 @@ func expectSQLRepeatedScan(t *testing.T, rule, sql, beforeOp, afterOp string, fi
 		t.Fatalf("%s unexpectedly matched a different SQL shape: %v:\n%s", rule, fired, after)
 	}
 }
+
+type sqlHelpers struct {
+	limits map[string]int
+	names  []string
+}
+
+func (h sqlHelpers) predicate() func(opt.RuleName) bool {
+	counts := make(map[string]int)
+	return func(r opt.RuleName) bool {
+		name := r.String()
+		if limit, ok := h.limits[name]; ok {
+			counts[name]++
+			return counts[name] <= limit
+		}
+		for _, want := range h.names {
+			if want == name || (strings.HasSuffix(want, "*") && strings.HasPrefix(name, strings.TrimSuffix(want, "*"))) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+func expectSQLFiresWith(t *testing.T, rule, sql string, h sqlHelpers) {
+	t.Helper()
+	before, _ := planFor(t, sql, h.predicate())
+	got, fired := planFor(t, sql, h.predicate(), rule)
+	if strings.Join(fired, ",") != rule || got == before {
+		t.Fatalf("expected %s to change the SQL plan, got %v:\n%s", rule, fired, got)
+	}
+}

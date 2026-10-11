@@ -20,3 +20,9 @@ func TestPushLeakproofFiltersIntoPermeableBarrier(t *testing.T) {
 	e.expectNoMatch(rule, e.f.ConstructSelect(project, e.filters(leakproof)))
 	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(leakproof, remaining)))
 }
+
+func TestSQLPushLeakproofFiltersIntoPermeableBarrier(t *testing.T) {
+	expectSQLFiresWith(t, "PushLeakproofFiltersIntoPermeableBarrier",
+		"SELECT x FROM (SELECT x FROM u) WHERE x > 0 AND x < 10",
+		sqlHelpers{names: []string{"PruneScanCols"}})
+}
