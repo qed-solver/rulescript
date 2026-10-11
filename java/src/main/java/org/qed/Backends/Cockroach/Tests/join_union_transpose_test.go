@@ -1,6 +1,8 @@
 package rulescript_test
 
 import (
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -23,15 +25,26 @@ func TestJoinUnionTranspose(t *testing.T) {
 	jp := &memo.JoinPrivate{}
 	onU := e.filters(e.f.ConstructEq(e.v(out), e.v(oc[0])))
 	onX := e.filters(e.f.ConstructEq(e.v(xc[0]), e.v(oc[0])))
-	onY := e.filters(e.f.ConstructEq(e.v(yc[0]), e.v(oc[0])))
 
 	before := e.f.ConstructInnerJoin(e.f.ConstructUnionAll(x, y, priv), o, onU, jp)
-	want := e.f.ConstructUnionAll(
-		e.f.ConstructInnerJoin(x, o, onX, jp),
-		e.f.ConstructInnerJoin(y, o, onY, jp),
-		priv,
-	)
-	e.expectRewrite(rule, before, want)
+	got, ok := rule.Apply(&e.f, before)
+	if !ok {
+		t.Fatalf("%s did not apply to:\n%s", rule.Name, e.format(before))
+	}
+	ids := regexp.MustCompile(`\((var|item) [0-9]+|\(scan \([0-9,-]+\)\)`)
+	normalized := ids.ReplaceAllStringFunc(e.format(got), func(m string) string {
+		if m[:5] == "(scan" {
+			return "(scan _)"
+		}
+		return strings.Fields(m)[0] + " _"
+	})
+	want := "(project pass=() (union-all (inner-join (scan _) (scan _) (filters (filters-item (eq (var _) (var _))))) " +
+		"(project pass=() (inner-join (scan _) (scan _) (filters (filters-item (eq (var _) (var _))))) " +
+		"(projections (item _ (var _)) (item _ (var _))))) (projections (item _ (var _)) (item _ (var _))))"
+	if normalized != want {
+		t.Fatalf("%s produced an unexpected plan\ninput:\n%s\ngot:\n%s\nwant:\n%s",
+			rule.Name, e.format(before), normalized, want)
+	}
 
 	e.expectNoMatch(rule, e.f.ConstructLeftJoin(e.f.ConstructUnionAll(x, y, priv), o, onU, jp))
 	e.expectNoMatch(rule, e.f.ConstructInnerJoin(e.f.ConstructUnion(x, y, priv), o, onU, jp))

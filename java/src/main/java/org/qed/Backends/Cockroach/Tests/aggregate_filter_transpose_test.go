@@ -11,11 +11,11 @@ import (
 func TestAggregateFilterTranspose(t *testing.T) {
 	rule := loadRule(t, "AggregateFilterTranspose")
 	e := newEnv(t)
-	a, ac := e.scan("t", 3)
-	b, _ := e.scan("u", 2)
+	a, ac := e.scan("t", 1)
+	b, bc := e.scan("u", 1)
 	base := e.f.ConstructInnerJoin(a, b, nil, &memo.JoinPrivate{})
 	fcol := e.f.Metadata().AddColumn("f", types.Int)
-	aggs := memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(ac[1])), fcol)}
+	aggs := memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(bc[0])), fcol)}
 	private := &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(ac[0])}
 	p := e.f.ConstructGt(e.v(ac[0]), e.num(1))
 	before := e.f.ConstructGroupBy(e.f.ConstructSelect(base, e.filters(p)), aggs, private)
@@ -23,7 +23,7 @@ func TestAggregateFilterTranspose(t *testing.T) {
 	e.expectRewrite(rule, before, want)
 
 	e.expectNoMatch(rule, e.f.ConstructGroupBy(
-		e.f.ConstructSelect(base, e.filters(e.f.ConstructGt(e.v(ac[1]), e.num(1)))), aggs, private))
+		e.f.ConstructSelect(base, e.filters(e.f.ConstructGt(e.v(bc[0]), e.num(1)))), aggs, private))
 	e.expectNoMatch(rule, e.f.ConstructGroupBy(base, aggs, private))
 	e.expectNoMatch(rule, want)
 

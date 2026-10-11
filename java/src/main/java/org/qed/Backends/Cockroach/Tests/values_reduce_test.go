@@ -17,11 +17,8 @@ func TestValuesReduce(t *testing.T) {
 	x := e.f.Metadata().AddColumn("x", types.Int)
 	y := e.f.Metadata().AddColumn("y", types.Int)
 	values := e.intValues([]opt.ColumnID{a, b, c}, []int{1, 2, 3}, []int{4, 5, 6})
-	before := e.f.ConstructProject(values, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.v(c), x),
-		e.f.ConstructProjectionsItem(e.v(a), y),
-	}, opt.MakeColSet())
-	want := e.intValues([]opt.ColumnID{x, y}, []int{3, 1}, []int{6, 4})
+	before := e.f.ConstructProject(values, nil, opt.MakeColSet(c, a))
+	want := e.intValues([]opt.ColumnID{c, a}, []int{3, 1}, []int{6, 4})
 	e.expectRewrite(rule, before, want)
 
 	s, sc := e.scan("t", 3)

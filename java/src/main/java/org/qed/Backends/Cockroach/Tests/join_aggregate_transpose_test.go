@@ -35,6 +35,8 @@ func TestJoinAggregateTranspose(t *testing.T) {
 	e.expectNoMatch(rule, e.f.ConstructInnerJoin(agg, right,
 		e.filters(e.f.ConstructEq(e.v(sum), e.v(rc[0]))), &memo.JoinPrivate{}))
 
+	nonKey, nkc := e.scan("t", 3)
 	e.expectNoMatch(rule, e.f.ConstructInnerJoin(agg,
-		e.f.ConstructProject(right, nil, opt.MakeColSet(rc[0])), on, &memo.JoinPrivate{}))
+		e.f.ConstructProject(nonKey, nil, opt.MakeColSet(nkc[1])),
+		e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(nkc[1]))), &memo.JoinPrivate{}))
 }

@@ -38,7 +38,8 @@ func TestCalcMerge(t *testing.T) {
 	)
 	want := e.f.ConstructProject(
 		e.f.ConstructSelect(s, e.filters(
-			e.f.ConstructAnd(bCond(), e.f.ConstructLt(b1Expr(), b2Expr())),
+			bCond(),
+			e.f.ConstructLt(b1Expr(), b2Expr()),
 		)),
 		memo.ProjectionsExpr{
 			e.f.ConstructProjectionsItem(e.f.ConstructPlus(b1Expr(), b2Expr()), t1),

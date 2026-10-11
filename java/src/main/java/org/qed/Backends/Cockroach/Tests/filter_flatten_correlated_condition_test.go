@@ -5,7 +5,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestFilterFlattenCorrelatedCondition(t *testing.T) {
@@ -15,11 +14,14 @@ func TestFilterFlattenCorrelatedCondition(t *testing.T) {
 	inner, ic := e.scan("u", 1)
 	join := e.f.ConstructInnerJoin(outer, inner, nil, &memo.JoinPrivate{})
 
-	fcol := e.f.Metadata().AddColumn("expr", types.Int)
+	before := e.f.ConstructSelect(join, e.filters(e.f.ConstructGt(e.v(oc[0]), e.v(ic[0]))))
+	got, ok := rule.Apply(&e.f, before)
+	if !ok {
+		t.Fatalf("%s did not apply to:\n%s", rule.Name, e.format(before))
+	}
+	fcol := opt.ColumnID(e.f.Metadata().NumColumns())
 	items := memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.v(ic[0]), fcol)}
 	passthrough := opt.MakeColSet(oc[0], ic[0])
-
-	before := e.f.ConstructSelect(join, e.filters(e.f.ConstructGt(e.v(oc[0]), e.v(ic[0]))))
 	want := e.f.ConstructProject(
 		e.f.ConstructSelect(
 			e.f.ConstructProject(join, items, passthrough),
@@ -27,7 +29,10 @@ func TestFilterFlattenCorrelatedCondition(t *testing.T) {
 		),
 		nil, passthrough,
 	)
-	e.expectRewrite(rule, before, want)
+	if g, w := e.format(got), e.format(want); g != w {
+		t.Fatalf("%s produced an unexpected plan\ninput:\n%s\ngot:\n%s\nwant:\n%s",
+			rule.Name, e.format(before), g, w)
+	}
 
 	leftJoin := e.f.ConstructLeftJoin(outer, inner, nil, &memo.JoinPrivate{})
 	e.expectNoMatch(rule, e.f.ConstructSelect(leftJoin, e.filters(e.f.ConstructGt(e.v(oc[0]), e.v(ic[0])))))

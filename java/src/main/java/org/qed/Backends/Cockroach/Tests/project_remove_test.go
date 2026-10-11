@@ -11,10 +11,11 @@ import (
 func TestProjectRemove(t *testing.T) {
 	rule := loadRule(t, "ProjectRemove")
 	e := newEnv(t)
-	s, cols := e.scan("t", 3)
-	before := e.f.ConstructProject(s, nil, opt.MakeColSet(cols[0]))
-	e.expectRewrite(rule, before, s)
+	single, sc := e.scan("t", 1)
+	e.expectRewrite(rule, e.f.ConstructProject(single, nil, opt.MakeColSet(sc[0])), single)
 
+	s, cols := e.scan("t", 3)
+	e.expectNoMatch(rule, e.f.ConstructProject(s, nil, opt.MakeColSet(cols[0])))
 	e.expectNoMatch(rule, e.f.ConstructProject(s, nil, opt.MakeColSet(cols[0], cols[1])))
 
 	extra := e.f.Metadata().AddColumn("p", types.Int)

@@ -15,7 +15,7 @@ func TestFilterJoin(t *testing.T) {
 	above := e.f.ConstructGt(e.v(rc[0]), e.num(1))
 	join := e.f.ConstructInnerJoin(l, r, e.filters(on), &memo.JoinPrivate{})
 	before := e.f.ConstructSelect(join, e.filters(above))
-	want := e.f.ConstructInnerJoin(l, r, e.filters(e.f.ConstructAnd(on, above)), &memo.JoinPrivate{})
+	want := e.f.ConstructInnerJoin(l, r, e.filters(on, above), &memo.JoinPrivate{})
 	e.expectRewrite(rule, before, want)
 
 	left := e.f.ConstructLeftJoin(l, r, e.filters(on), &memo.JoinPrivate{})

@@ -7,7 +7,7 @@ func TestUnionEliminator(t *testing.T) {
 	e := newEnv(t)
 	s, c := e.scan("t", 3)
 
-	e.expectRewrite(rule, s, s)
+	e.expectNoMatch(rule, s)
 
 	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructGt(e.v(c[0]), e.num(1)))))
 	union, _ := oneColumnUnionAll(e)

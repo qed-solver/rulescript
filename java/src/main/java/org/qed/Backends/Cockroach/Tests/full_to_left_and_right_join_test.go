@@ -5,7 +5,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestFullToLeftAndRightJoin(t *testing.T) {
@@ -17,10 +16,6 @@ func TestFullToLeftAndRightJoin(t *testing.T) {
 	on := e.filters(eq)
 	before := e.f.ConstructFullJoin(l, r, on, &memo.JoinPrivate{})
 
-	outCols := opt.ColList{
-		e.f.Metadata().AddColumn("o0", types.Int),
-		e.f.Metadata().AddColumn("o1", types.Int),
-	}
 	base := e.f.Metadata().MaxColumn()
 	fresh := opt.ColList{base + 1, base + 2}
 
@@ -31,10 +26,27 @@ func TestFullToLeftAndRightJoin(t *testing.T) {
 		e.f.ConstructProjectionsItem(e.v(lc[0]), fresh[0]),
 		e.f.ConstructProjectionsItem(e.v(rc[0]), fresh[1]),
 	}, opt.ColSet{})
-	want := e.f.ConstructUnionAll(leftJoin, renamed, &memo.SetPrivate{
-		LeftCols: opt.ColList{lc[0], rc[0]}, RightCols: fresh, OutCols: outCols,
+
+	got, ok := rule.Apply(&e.f, before)
+	if !ok {
+		t.Fatal("FullToLeftAndRightJoin did not apply")
+	}
+	top, ok := got.(*memo.ProjectExpr)
+	if !ok {
+		t.Fatalf("expected a project over the union, got %s", e.format(got))
+	}
+	unionOut := top.Input.Private().(*memo.SetPrivate).OutCols
+	union := e.f.ConstructUnionAll(leftJoin, renamed, &memo.SetPrivate{
+		LeftCols: opt.ColList{lc[0], rc[0]}, RightCols: fresh, OutCols: unionOut,
 	})
-	e.expectRewrite(rule, before, want)
+	want := e.f.ConstructProject(union, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.v(unionOut[0]), lc[0]),
+		e.f.ConstructProjectionsItem(e.v(unionOut[1]), rc[0]),
+	}, opt.ColSet{})
+	if g, w := e.format(got), e.format(want); g != w {
+		t.Fatalf("FullToLeftAndRightJoin produced an unexpected plan\ninput:\n%s\ngot:\n%s\nwant:\n%s",
+			e.format(before), g, w)
+	}
 
 	e.expectNoMatch(rule, e.f.ConstructLeftJoin(l, r, on, &memo.JoinPrivate{}))
 	e.expectNoMatch(rule, e.f.ConstructInnerJoin(l, r, on, &memo.JoinPrivate{}))

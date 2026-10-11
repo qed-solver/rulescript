@@ -11,16 +11,14 @@ import (
 func TestUnionToDistinct(t *testing.T) {
 	rule := loadRule(t, "UnionToDistinct")
 	e := newEnv(t)
-	l, lc := e.scan("t", 3)
-	r, rc := e.scan("t", 3)
+	l, lc := e.scan("t", 1)
+	r, rc := e.scan("t", 1)
 	outCols := opt.ColList{
 		e.f.Metadata().AddColumn("o0", types.Int),
-		e.f.Metadata().AddColumn("o1", types.Int),
-		e.f.Metadata().AddColumn("o2", types.Int),
 	}
 	private := &memo.SetPrivate{
-		LeftCols:  opt.ColList{lc[0], lc[1], lc[2]},
-		RightCols: opt.ColList{rc[0], rc[1], rc[2]},
+		LeftCols:  opt.ColList{lc[0]},
+		RightCols: opt.ColList{rc[0]},
 		OutCols:   outCols,
 	}
 

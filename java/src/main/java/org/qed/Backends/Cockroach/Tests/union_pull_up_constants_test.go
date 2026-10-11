@@ -30,15 +30,14 @@ func TestUnionPullUpConstants(t *testing.T) {
 	}
 	before := e.f.ConstructUnionAll(lProj, rProj, priv)
 
-	innerOut := e.f.Metadata().MaxColumn() + 1
 	innerL := e.f.ConstructProject(a, nil, opt.MakeColSet(ac[1]))
 	innerR := e.f.ConstructProject(b, nil, opt.MakeColSet(bc[1]))
 	inner := e.f.ConstructUnionAll(innerL, innerR, &memo.SetPrivate{
 		LeftCols:  opt.ColList{ac[1]},
 		RightCols: opt.ColList{bc[1]},
-		OutCols:   opt.ColList{innerOut},
+		OutCols:   opt.ColList{out1},
 	})
-	want := e.f.ConstructProject(inner, trueItem(out0), opt.MakeColSet(innerOut))
+	want := e.f.ConstructProject(inner, trueItem(out0), opt.MakeColSet(out1))
 	e.expectRewrite(rule, before, want)
 
 	e.expectNoMatch(rule, e.f.ConstructUnion(lProj, rProj, priv))

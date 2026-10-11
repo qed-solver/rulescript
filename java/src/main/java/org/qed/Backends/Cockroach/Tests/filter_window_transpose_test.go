@@ -11,7 +11,7 @@ import (
 func TestFilterWindowTranspose(t *testing.T) {
 	rule := loadRule(t, "FilterWindowTranspose")
 	e := newEnv(t)
-	s, ac := e.scan("t", 3)
+	s, ac := e.scan("t", 2)
 	fcol := e.f.Metadata().AddColumn("f", types.Int)
 	aggs := memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(ac[1])), fcol)}
 	private := &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(ac[0])}

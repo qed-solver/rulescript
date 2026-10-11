@@ -26,9 +26,18 @@ func TestSemiJoinProjectTranspose(t *testing.T) {
 	e.expectNoMatch(rule, e.f.ConstructInnerJoin(project, r,
 		e.filters(e.f.ConstructLt(e.v(p0), e.v(yc[0]))), &memo.JoinPrivate{}))
 
-	e.expectNoMatch(rule, e.f.ConstructSemiJoin(project, r,
+	e.expectRewrite(rule, e.f.ConstructSemiJoin(project, r,
 		e.filters(
 			e.f.ConstructLt(e.v(p0), e.v(yc[0])),
 			e.f.ConstructLt(e.v(p1), e.v(yc[1])),
-		), &memo.JoinPrivate{}))
+		), &memo.JoinPrivate{}),
+		e.f.ConstructProject(e.f.ConstructSemiJoin(s, r,
+			e.filters(
+				e.f.ConstructLt(e.f.ConstructPlus(e.v(xc[0]), e.v(xc[1])), e.v(yc[0])),
+				e.f.ConstructLt(e.f.ConstructMult(e.v(xc[0]), e.v(xc[1])), e.v(yc[1])),
+			), &memo.JoinPrivate{}),
+			memo.ProjectionsExpr{
+				e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(xc[0]), e.v(xc[1])), p0),
+				e.f.ConstructProjectionsItem(e.f.ConstructMult(e.v(xc[0]), e.v(xc[1])), p1),
+			}, opt.ColSet{}))
 }

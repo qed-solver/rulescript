@@ -9,14 +9,14 @@ import (
 func TestExpandDisjunctionForTable(t *testing.T) {
 	rule := loadRule(t, "ExpandDisjunctionForTable")
 	e := newEnv(t)
-	left, lc := e.scan("t", 3)
-	right, rc := e.scan("u", 2)
+	left, lc := e.scan("t", 1)
+	right, rc := e.scan("u", 1)
 
 	pL1 := e.f.ConstructGt(e.v(lc[0]), e.num(1))
-	pR1 := e.f.ConstructLt(e.v(lc[1]), e.num(5))
+	pR1 := e.f.ConstructLt(e.v(rc[0]), e.num(5))
 	pL2 := e.f.ConstructEq(e.v(lc[0]), e.num(7))
-	pR2 := e.f.ConstructNe(e.v(lc[1]), e.num(3))
-	pJ := e.f.ConstructEq(e.v(lc[2]), e.v(rc[0]))
+	pR2 := e.f.ConstructNe(e.v(rc[0]), e.num(3))
+	pJ := e.f.ConstructEq(e.v(lc[0]), e.v(rc[0]))
 	core := e.f.ConstructOr(e.f.ConstructAnd(pL1, pR1), e.f.ConstructAnd(pL2, pR2))
 
 	before := e.f.ConstructInnerJoin(left, right, e.filters(pJ, core), &memo.JoinPrivate{})
@@ -32,7 +32,7 @@ func TestExpandDisjunctionForTable(t *testing.T) {
 
 	nearCore := e.f.ConstructOr(
 		e.f.ConstructAnd(pL1, pR1),
-		e.f.ConstructAnd(e.f.ConstructEq(e.v(lc[2]), e.num(7)), pR2),
+		e.f.ConstructAnd(e.f.ConstructEq(e.v(rc[0]), e.num(7)), pR2),
 	)
 	e.expectNoMatch(rule, e.f.ConstructInnerJoin(left, right, e.filters(pJ, nearCore), &memo.JoinPrivate{}))
 	e.expectNoMatch(rule, e.f.ConstructInnerJoin(left, right, e.filters(core), &memo.JoinPrivate{}))

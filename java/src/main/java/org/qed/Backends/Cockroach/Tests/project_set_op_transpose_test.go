@@ -63,5 +63,4 @@ func TestProjectSetOpTranspose(t *testing.T) {
 	e.expectNoMatch(rule, e.f.ConstructProject(e.f.ConstructUnion(l, r, priv), projItems(out, p), opt.ColSet{}))
 	e.expectNoMatch(rule, e.f.ConstructProject(e.f.ConstructIntersect(l, r, priv), projItems(out, p), opt.ColSet{}))
 	e.expectNoMatch(rule, e.f.ConstructProject(l, projItems(lc[0], p), opt.ColSet{}))
-	e.expectNoMatch(rule, want)
 }

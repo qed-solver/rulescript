@@ -1383,7 +1383,23 @@ func (s *state) buildRel(p *Rel) memo.RelExpr {
 			panic(abort{})
 		}
 		private := memo.SetPrivate{}
-		if s.multiSet {
+		fresh := s.multiSet
+		if !fresh && s.set != nil {
+			for i, col := range leftCols {
+				matched := -1
+				for j, old := range s.set.LeftCols {
+					if old == col {
+						matched = j
+						break
+					}
+				}
+				if matched < 0 || s.set.RightCols[matched] != rightCols[i] {
+					fresh = true
+					break
+				}
+			}
+		}
+		if fresh {
 			if len(leftCols) != len(rightCols) {
 				panic(abort{})
 			}
@@ -1610,6 +1626,19 @@ func (s *state) buildScalar(p *Rex) opt.ScalarExpr {
 			bindings = s.scalarPreds
 		}
 		b, ok := bindings[p.Name]
+		if !ok && p.Op == "pred" {
+			if _, filter := s.preds[p.Name]; filter {
+				conds := s.buildCond(p)
+				if len(conds) == 0 {
+					return memo.TrueSingleton
+				}
+				out := conds[0].Condition
+				for _, c := range conds[1:] {
+					out = s.f.ConstructAnd(out, c.Condition)
+				}
+				return out
+			}
+		}
 		if !ok {
 			panic(abort{})
 		}

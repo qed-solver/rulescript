@@ -11,7 +11,7 @@ func TestFilterRemoveIsNotDistinctFrom(t *testing.T) {
 	e := newEnv(t)
 	l, lc := e.scan("u", 1)
 	r, rc := e.scan("t", 1)
-	join := e.f.ConstructInnerJoin(l, r, e.filters(e.f.ConstructTrue()), &memo.JoinPrivate{})
+	join := e.f.ConstructInnerJoin(l, r, e.filters(), &memo.JoinPrivate{})
 	before := e.f.ConstructSelect(join, e.filters(e.f.ConstructIs(e.v(lc[0]), e.v(rc[0]))))
 	want := e.f.ConstructSelect(join, e.filters(e.f.ConstructOr(
 		e.f.ConstructAnd(

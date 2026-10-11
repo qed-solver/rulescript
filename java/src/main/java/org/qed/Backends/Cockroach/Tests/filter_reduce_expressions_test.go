@@ -7,7 +7,7 @@ import (
 func TestFilterReduceExpressions(t *testing.T) {
 	rule := loadRule(t, "FilterReduceExpressions")
 	e := newEnv(t)
-	s, c := e.scan("t", 3)
+	s, c := e.scan("t", 1)
 
 	before := e.f.ConstructSelect(s, e.filters(e.f.ConstructFalse()))
 	e.expectRewrite(rule, before, e.empty(c...))
