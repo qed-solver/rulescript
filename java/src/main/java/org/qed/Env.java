@@ -13,7 +13,7 @@ record Env(int base, int delta, ImmutableMap<CorrelationId, Integer> globals, Mu
     }
 
     Env recorded(Set<CorrelationId> ids) {
-        return new Env(base, delta, Seq.from(ids).foldLeft(globals, (g, id) -> g.putted(id, base)), tables);
+        return new Env(base, delta, Seq.from(ids).foldLeft(globals, (g, id) -> g.updated(id, base)), tables);
     }
 
     Env advanced(int d) {

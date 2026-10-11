@@ -43,14 +43,11 @@ RuleScript supports two styles of backend integration:
 **Code-generation backends** translate `RRule` definitions into engine-specific artifacts. Run the corresponding generator to produce files under each backend's `Generated/` directory:
 
 ```sh
-./mvnw -q compile exec:java@cockroach-codegen    # CockroachDB
 ./mvnw -q compile exec:java@calcite-codegen-test # Apache Calcite
-./mvnw -q compile exec:java@mysql-tester         # MySQL
 ```
 
 For `FilterMerge` this produces:
 - `src/main/java/org/qed/Backends/Calcite/Generated/FilterMerge.java` — Apache Calcite rule
-- `src/main/java/org/qed/Backends/Cockroach/Generated/FilterMerge.opt` — CockroachDB optgen rule
 
 **Native runtime backend** — rules are defined and applied directly through backend integration. See the [Datafusion backend](../README.md) for details.
 

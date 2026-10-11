@@ -6,14 +6,18 @@ public interface CodeGenerator<E> {
         return "<--" + context + object.getClass().getName() + "-->";
     }
 
+    class UnsupportedConstructException extends RuntimeException {
+        public UnsupportedConstructException(String message) {
+            super(message);
+        }
+    }
+
     default E unimplementedOnMatch(E env, Object object) {
-        System.err.println(unimplemented("Unspecified onMatch codegen: ", object));
-        return env;
+        throw new UnsupportedConstructException(unimplemented("Unspecified onMatch codegen: ", object));
     }
 
     default E unimplementedTransform(E env, Object object) {
-        System.err.println(unimplemented("Unspecified transform codegen: ", object));
-        return env;
+        throw new UnsupportedConstructException(unimplemented("Unspecified transform codegen: ", object));
     }
 
     E preMatch(String rulename);
@@ -21,9 +25,13 @@ public interface CodeGenerator<E> {
     default E onMatch(E env, RelRN pattern) {
         return switch (pattern) {
             case RelRN.Scan scan -> onMatchScan(env, scan);
+            case RelRN.ScanMany scan -> onMatchScanMany(env, scan);
             case RelRN.Filter filter -> onMatchFilter(env, filter);
             case RelRN.Project project -> onMatchProject(env, project);
+            case RelRN.ProjectMany project -> onMatchProjectMany(env, project);
             case RelRN.Join join -> onMatchJoin(env, join);
+            case RelRN.JoinWithPushedConds join -> onMatchJoinWithPushedConds(env, join);
+            case RelRN.Correlate correlate -> onMatchCorrelate(env, correlate);
             case RelRN.JoinWithSeparateConds join -> onMatchJoinWithSeparateConds(env, join);
             case RelRN.Union union -> onMatchUnion(env, union);
             case RelRN.Intersect intersect -> onMatchIntersect(env, intersect);
@@ -40,6 +48,7 @@ public interface CodeGenerator<E> {
             case RexRN.JoinField joinField -> onMatchJoinField(env, joinField);
             case RexRN.Proj proj -> onMatchProj(env, proj);
             case RexRN.Pred pred -> onMatchPred(env, pred);
+            case RexRN.GroupBy groupBy -> onMatchGroupBy(env, groupBy);
             case RexRN.And and -> onMatchAnd(env, and);
             case RexRN.Or or -> onMatchOr(env, or);
             case RexRN.Not not -> onMatchNot(env, not);
@@ -60,9 +69,13 @@ public interface CodeGenerator<E> {
     default E transform(E env, RelRN target) {
         return switch (target) {
             case RelRN.Scan scan -> transformScan(env, scan);
+            case RelRN.ScanMany scan -> transformScanMany(env, scan);
             case RelRN.Filter filter -> transformFilter(env, filter);
             case RelRN.Project project -> transformProject(env, project);
+            case RelRN.ProjectMany project -> transformProjectMany(env, project);
             case RelRN.Join join -> transformJoin(env, join);
+            case RelRN.JoinWithSeparateConds join -> transformJoinWithSeparateConds(env, join);
+            case RelRN.Correlate correlate -> transformCorrelate(env, correlate);
             case RelRN.JoinWithPushedConds join -> transformJoinWithPushedConds(env, join);
             case RelRN.Union union -> transformUnion(env, union);
             case RelRN.Intersect intersect -> transformIntersect(env, intersect);
@@ -79,6 +92,7 @@ public interface CodeGenerator<E> {
             case RexRN.JoinField joinField -> transformJoinField(env, joinField);
             case RexRN.Pred pred -> transformPred(env, pred);
             case RexRN.Proj proj -> transformProj(env, proj);
+            case RexRN.GroupBy groupBy -> transformGroupBy(env, groupBy);
             case RexRN.And and -> transformAnd(env, and);
             case RexRN.Or or -> transformOr(env, or);
             case RexRN.Not not -> transformNot(env, not);
@@ -269,5 +283,45 @@ public interface CodeGenerator<E> {
 
     default E transformAggregate(E env, RelRN.Aggregate aggregate) {
         return unimplementedTransform(env, aggregate);
+    }
+
+    default E onMatchScanMany(E env, RelRN.ScanMany scan) {
+        return unimplementedOnMatch(env, scan);
+    }
+
+    default E onMatchProjectMany(E env, RelRN.ProjectMany project) {
+        return unimplementedOnMatch(env, project);
+    }
+
+    default E onMatchJoinWithPushedConds(E env, RelRN.JoinWithPushedConds join) {
+        return unimplementedOnMatch(env, join);
+    }
+
+    default E onMatchCorrelate(E env, RelRN.Correlate correlate) {
+        return unimplementedOnMatch(env, correlate);
+    }
+
+    default E onMatchGroupBy(E env, RexRN.GroupBy groupBy) {
+        return unimplementedOnMatch(env, groupBy);
+    }
+
+    default E transformScanMany(E env, RelRN.ScanMany scan) {
+        return unimplementedTransform(env, scan);
+    }
+
+    default E transformProjectMany(E env, RelRN.ProjectMany project) {
+        return unimplementedTransform(env, project);
+    }
+
+    default E transformJoinWithSeparateConds(E env, RelRN.JoinWithSeparateConds join) {
+        return unimplementedTransform(env, join);
+    }
+
+    default E transformCorrelate(E env, RelRN.Correlate correlate) {
+        return unimplementedTransform(env, correlate);
+    }
+
+    default E transformGroupBy(E env, RexRN.GroupBy groupBy) {
+        return unimplementedTransform(env, groupBy);
     }
 }

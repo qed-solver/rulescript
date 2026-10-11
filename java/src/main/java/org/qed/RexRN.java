@@ -66,7 +66,7 @@ public interface RexRN {
             Seq.of(this)
         );
     }
-    
+
 
     record Field(int ordinal, RelRN source) implements RexRN {
 
@@ -91,7 +91,6 @@ public interface RexRN {
         @Override
         public RexNode semantics() {
             var builder = RuleBuilder.create();
-            // builder.genericPredicateOp(name, nullable)
             return builder.call(operator, sources.map(RexRN::semantics));
         }
     }
@@ -101,13 +100,12 @@ public interface RexRN {
         @Override
         public RexNode semantics() {
             var builder = RuleBuilder.create();
-            // builder.genericProjectionOp(name, varType(type_name, nullable))
             return builder.call(operator, sources.map(RexRN::semantics));
         }
     }
 
     record GroupBy(SqlOperator operator, Seq<RexRN> sources) implements RexRN {
-        
+
         @Override
         public RexNode semantics() {
             var builder = RuleBuilder.create();

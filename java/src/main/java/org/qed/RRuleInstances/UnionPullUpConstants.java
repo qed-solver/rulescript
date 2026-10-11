@@ -1,150 +1,30 @@
 package org.qed.RRuleInstances;
 
-import org.apache.calcite.rel.RelNode;
+import kala.collection.Seq;
 import org.qed.RelRN;
 import org.qed.RRule;
-import org.qed.RuleBuilder;
-import org.qed.RelType;
-import kala.collection.Seq;
-import kala.tuple.Tuple;
+import org.qed.RexRN;
 
 public record UnionPullUpConstants() implements RRule {
+    static final RexRN lit = RexRN.trueLiteral();
 
-    static final RelRN left = new SourceTable();
-    static final RelRN right = new SourceTable();
-    
+    static final RelRN a = RelRN.scanMany("A", Seq.of(RexRN.varType("A_Type", true), RexRN.varType("C_Type", true)));
+    static final RelRN b = RelRN.scanMany("B", Seq.of(RexRN.varType("B_Type", true), RexRN.varType("C_Type", true)));
+
+    static final RelRN aProj = a.project(Seq.of(lit, a.field(1)));
+    static final RelRN bProj = b.project(Seq.of(lit, b.field(1)));
+
+    static final RelRN aInner = a.project(Seq.of(a.field(1)));
+    static final RelRN bInner = b.project(Seq.of(b.field(1)));
+
     @Override
     public RelRN before() {
-        var leftProjection = new LeftProjectionWithConstants(left);
-        var rightProjection = new RightProjectionWithConstants(right);
-        return new UnionWithConstantColumns(leftProjection, rightProjection);
+        return aProj.union(true, bProj);
     }
-    
+
     @Override
     public RelRN after() {
-        var leftProjectionReduced = new LeftProjectionNonConstants(left);
-        var rightProjectionReduced = new RightProjectionNonConstants(right);
-        var reducedUnion = new UnionReducedColumns(leftProjectionReduced, rightProjectionReduced);
-        return new TopProjectionWithConstants(reducedUnion);
-    }
-
-    public static record SourceTable() implements RelRN {
-        @Override
-        public RelNode semantics() {
-            var builder = RuleBuilder.create();
-            
-            var table = builder.createQedTable(Seq.of(
-                Tuple.of(RelType.fromString("Source_Type", true), false),
-                Tuple.of(RelType.fromString("Source_Type", true), false),
-                Tuple.of(RelType.fromString("Source_Type", true), false)
-            ));
-            
-            builder.addTable(table);
-            return builder.scan(table.getName()).build();
-        }
-    }
-    public static record LeftProjectionWithConstants(RelRN input) implements RelRN {
-        @Override
-        public RelNode semantics() {
-            var builder = RuleBuilder.create();
-            builder.push(input.semantics());
-            
-            builder.project(
-                builder.field(0),
-                builder.alias(builder.literal("ACTIVE"), "status"),
-                builder.field(2)
-            );
-            
-            return builder.build();
-        }
-    }
-
-    public static record RightProjectionWithConstants(RelRN input) implements RelRN {
-        @Override
-        public RelNode semantics() {
-            var builder = RuleBuilder.create();
-            builder.push(input.semantics());
-            
-            builder.project(
-                builder.field(0),
-                builder.alias(builder.literal("ACTIVE"), "status"),
-                builder.field(2)
-            );
-            
-            return builder.build();
-        }
-    }
-
-    public static record UnionWithConstantColumns(RelRN left, RelRN right) implements RelRN {
-        @Override
-        public RelNode semantics() {
-            var builder = RuleBuilder.create();
-            
-            builder.push(left.semantics());
-            builder.push(right.semantics());
-            
-            builder.union(true, 2);  // UNION ALL
-            
-            return builder.build();
-        }
-    }
-
-    public static record LeftProjectionNonConstants(RelRN input) implements RelRN {
-        @Override
-        public RelNode semantics() {
-            var builder = RuleBuilder.create();
-            builder.push(input.semantics());
-
-            builder.project(
-                builder.field(0),
-                builder.field(2)
-            );
-            
-            return builder.build();
-        }
-    }
-
-    public static record RightProjectionNonConstants(RelRN input) implements RelRN {
-        @Override
-        public RelNode semantics() {
-            var builder = RuleBuilder.create();
-            builder.push(input.semantics());
-            builder.project(
-                builder.field(0),
-                builder.field(2)
-            );
-            
-            return builder.build();
-        }
-    }
-
-    public static record UnionReducedColumns(RelRN left, RelRN right) implements RelRN {
-        @Override
-        public RelNode semantics() {
-            var builder = RuleBuilder.create();
-            
-            builder.push(left.semantics());
-            builder.push(right.semantics());
-            
-            builder.union(true, 2);
-            
-            return builder.build();
-        }
-    }
-
-    public static record TopProjectionWithConstants(RelRN input) implements RelRN {
-        @Override
-        public RelNode semantics() {
-            var builder = RuleBuilder.create();
-            builder.push(input.semantics());
-
-            builder.project(
-                builder.field(0),
-                builder.alias(builder.literal("ACTIVE"), "status"),
-                builder.field(1)
-            );
-            
-            return builder.build();
-        }
+        RelRN u = aInner.union(true, bInner);
+        return u.project(Seq.of(lit, u.field(0)));
     }
 }

@@ -32,7 +32,7 @@ public class QedTable extends AbstractTable {
     public QedTable(String identifier, Map<String, RelDataType> columns, Set<Set<String>> eligibleKeys,
                     Set<RexNode> checkConstraints) {
         name = identifier;
-        columnNames = columns.keysView().toImmutableSeq().sorted();
+        columnNames = columns.keysView().toSeq().sorted();
         columnTypes = columnNames.map(columns::get);
         keys = Set.from(eligibleKeys.map(key -> ImmutableBitSet.of(key.map(columnNames::indexOf))));
         constraints = checkConstraints;
@@ -41,7 +41,7 @@ public class QedTable extends AbstractTable {
     public QedTable(String identifier, Map<String, RelDataType> columns, ImmutableSet<ImmutableBitSet> eligibleKeys,
                     Set<RexNode> checkConstraints) {
         name = identifier;
-        columnNames = columns.keysView().toImmutableSeq().sorted();
+        columnNames = columns.keysView().toSeq().sorted();
         columnTypes = columnNames.map(columns::get);
         keys = eligibleKeys;
         constraints = checkConstraints;
@@ -50,12 +50,12 @@ public class QedTable extends AbstractTable {
     @Override
     public RelDataType getRowType(RelDataTypeFactory typeFactory) {
         return typeFactory.createStructType(columnNames.zip(columnTypes).view()
-                .map(entry -> java.util.Map.entry(entry.component1(), entry.component2())).toImmutableSeq().asJava());
+                .map(entry -> java.util.Map.entry(entry.component1(), entry.component2())).toSeq().asJava());
     }
 
     @Override
     public Statistic getStatistic() {
-        return Statistics.of(0, keys.toImmutableSeq().asJava());
+        return Statistics.of(0, keys.toSeq().asJava());
     }
 
     public String getName() {

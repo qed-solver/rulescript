@@ -1,32 +1,31 @@
 package org.qed.Backends.Calcite.Tests;
 
-import kala.collection.Seq;
-import kala.tuple.Tuple;
-import org.qed.Backends.Calcite.CalciteTester;
-import org.qed.RelType;
+import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.RRuleInstances.UnionMerge;
 import org.qed.RuleBuilder;
 
 public class UnionMergeTest {
 
     public static void runTest() {
-        var tester = new CalciteTester();
+        var rule = new UnionMerge();
+        RuleChecks.rewritesPattern(rule);
+        RuleChecks.rewritesConcretePredicates(rule);
+        RuleChecks.rejectsNearMisses(rule);
+        ordinaryTables(rule);
+    }
+
+    private static void ordinaryTables(UnionMerge rule) {
         var builder = RuleBuilder.create();
-        var table = builder.createQedTable(Seq.of(
-            Tuple.of(RelType.fromString("INTEGER", true), false)
-        ));
-        builder.addTable(table);
-        
-        var scan1 = builder.scan(table.getName()).build();
-        var scan2 = builder.scan(table.getName()).build();
-        var scan3 = builder.scan(table.getName()).build();
-        
-        var firstUnion = builder.push(scan1).push(scan2).union(false).build();
-        var before = builder.push(firstUnion).push(scan3).union(false).build();
-        
-        var after = builder.push(scan1).push(scan2).push(scan3).union(false, 3).build();
-        
-        var runner = CalciteTester.loadRule(org.qed.Backends.Calcite.Generated.UnionMerge.Config.DEFAULT.toRule());
-        tester.verify(runner, before, after);
+        var t = new String[4];
+        for (var i = 0; i < t.length; i++) {
+            t[i] = RuleChecks.table(builder, 1, false);
+        }
+        var nestedSecond = builder.scan(t[0]).scan(t[1]).scan(t[2]).union(true, 2).scan(t[3]).union(true, 3).build();
+        var flat = builder.scan(t[0]).scan(t[1]).scan(t[2]).scan(t[3]).union(true, 4).build();
+        RuleChecks.rewrites(rule, nestedSecond, flat);
+        var nestedFirst = builder.scan(t[0]).scan(t[1]).union(true, 2).scan(t[2]).scan(t[3]).union(true, 3).build();
+        RuleChecks.doesNotApply(rule, nestedFirst);
     }
 
     public static void main(String[] args) {

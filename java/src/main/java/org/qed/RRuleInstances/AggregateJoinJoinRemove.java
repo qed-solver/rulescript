@@ -2,39 +2,45 @@ package org.qed.RRuleInstances;
 
 import kala.collection.Seq;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.qed.RRule;
+import org.apache.calcite.sql.SqlOperator;
 import org.qed.RelRN;
-import org.qed.RexRN;
+import org.qed.RRule;
 import org.qed.RuleBuilder;
+import org.qed.RexRN;
 
 public record AggregateJoinJoinRemove() implements RRule {
-    static final RelRN tblA = RelRN.scan("sourceA1", "typeA1")
-            .join(JoinRelType.INNER, RexRN.trueLiteral(), RelRN.scan("sourceA2", "typeA2"));
-    static final RelRN tblB = RelRN.scan("sourceB1", "typeB1")
-            .join(JoinRelType.INNER, RexRN.trueLiteral(), RelRN.scan("sourceB2", "typeB2"));
-    static final RelRN tblC = RelRN.scan("sourceC1", "typeC1")
-            .join(JoinRelType.INNER, RexRN.trueLiteral(), RelRN.scan("sourceC2", "typeC2"));
+    static final RelRN a = RelRN.scan("A", "A_Type");
+    static final RelRN b = RelRN.scan("B", "B_Type");
+    static final RelRN c = RelRN.scan("C", "C_Type");
 
-    static final RexRN bottomJoinCondition = new RexRN.Pred(
-            RuleBuilder.create().genericPredicateOp("=", true),
-            Seq.of(tblA.field(0), tblB.field(0))
-    );
+    static final RelRN bottom =
+            a.join(JoinRelType.LEFT, a.joinPred("bottom_cond", b), b);
 
-    static final RexRN topJoinCondition = new RexRN.Pred(
-            RuleBuilder.create().genericPredicateOp("=", true),
-            Seq.of(tblA.field(0), tblC.field(0))
-    );
+    static final SqlOperator topOp = RuleBuilder.create().genericPredicateOp("top_cond", true);
+    static final RexRN topCondBefore =
+            new RexRN.Pred(topOp, Seq.of(bottom.field(0), bottom.joinField(2, c)));
+    static final RexRN topCondAfter =
+            new RexRN.Pred(topOp, Seq.of(a.joinField(0, c), a.joinField(1, c)));
+
+    static final RelRN beforeJoin = bottom.join(JoinRelType.LEFT, topCondBefore, c);
+    static final RelRN beforeAgg = new RelRN.Aggregate(
+            beforeJoin,
+            Seq.of(beforeJoin.field(0), beforeJoin.field(2)),
+            Seq.empty());
+
+    static final RelRN afterJoin = a.join(JoinRelType.LEFT, topCondAfter, c);
+    static final RelRN afterAgg = new RelRN.Aggregate(
+            afterJoin,
+            Seq.of(afterJoin.field(0), afterJoin.field(1)),
+            Seq.empty());
 
     @Override
     public RelRN before() {
-        RelRN bottomJoin = tblA.join(JoinRelType.LEFT, bottomJoinCondition, tblB);
-        RelRN topJoin = bottomJoin.join(JoinRelType.LEFT, topJoinCondition, tblC);
-        return new RelRN.Aggregate(topJoin, Seq.of(topJoin.field(0), topJoin.field(4)), Seq.empty());
+        return beforeAgg;
     }
 
     @Override
     public RelRN after() {
-        RelRN newJoin = tblA.join(JoinRelType.LEFT, topJoinCondition, tblC);
-        return new RelRN.Aggregate(newJoin, Seq.of(newJoin.field(0), newJoin.field(2)), Seq.empty());
+        return afterAgg;
     }
 }

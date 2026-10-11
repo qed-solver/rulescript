@@ -1,44 +1,41 @@
 package org.qed.Backends.Calcite.Tests;
 
-import kala.collection.Seq;
-import kala.tuple.Tuple;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.qed.Backends.Calcite.CalciteTester;
-import org.qed.RelType;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.tools.RelBuilder;
+import org.qed.RRuleInstances.SemiJoinFilterTranspose;
 import org.qed.RuleBuilder;
+
+import java.util.List;
 
 public class SemiJoinFilterTransposeTest {
 
     public static void runTest() {
-        var tester = new CalciteTester();
-        var builder = RuleBuilder.create();
-        
-        var leftTable = builder.createQedTable(Seq.of(Tuple.of(RelType.fromString("INTEGER", true), false)));
-        var rightTable = builder.createQedTable(Seq.of(Tuple.of(RelType.fromString("INTEGER", true), false)));
-        builder.addTable(leftTable);
-        builder.addTable(rightTable);
-        
-        var leftScan = builder.scan(leftTable.getName()).build();
-        var rightScan = builder.scan(rightTable.getName()).build();
+        var rule = new SemiJoinFilterTranspose();
+        RuleChecks.rewritesPattern(rule);
+        RuleChecks.rewritesConcretePredicates(rule);
+        RuleChecks.rejectsNearMisses(rule);
+        ordinaryTables(rule);
+    }
 
-        builder.push(leftScan);
-        builder.push(rightScan);
-        var joinPredicate = builder.equals(builder.field(2, 0, 0), builder.field(2, 1, 0));
-        var semiJoin = builder.join(JoinRelType.SEMI, joinPredicate).build();
-        builder.push(semiJoin);
-        var filterPredicate = builder.call(builder.genericPredicateOp("filter", true), builder.field(0));
-        var before = builder.filter(filterPredicate).build();
+    private static void ordinaryTables(SemiJoinFilterTranspose rule) {
+        var base = RuleBuilder.create();
+        var x = RuleChecks.table(base, 2, false);
+        var y = RuleChecks.table(base, 2, false);
+        var b = RuleChecks.ruleBuilder(base);
+        var semi = (java.util.function.Function<JoinRelType, RelBuilder>) type -> {
+            b.scan(x).filter(RuleChecks.gt(b, b.field(0), 5)).scan(y);
+            return b.join(type, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)));
+        };
+        var before = semi.apply(JoinRelType.SEMI).build();
+        var after = b.scan(x).scan(y).join(JoinRelType.SEMI, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
+                .filter(RuleChecks.gt(b, b.field(0), 5)).build();
+        RuleChecks.rewrites(rule, before, after);
 
-        builder.push(leftScan);
-        var leftFilterPredicate = builder.call(builder.genericPredicateOp("filter", true), builder.field(0));
-        var filteredLeft = builder.filter(leftFilterPredicate).build();
-        builder.push(filteredLeft);
-        builder.push(rightScan);
-        var afterJoinPredicate = builder.equals(builder.field(2, 0, 0), builder.field(2, 1, 0));
-        var after = builder.join(JoinRelType.SEMI, afterJoinPredicate).build();
-        
-        var runner = CalciteTester.loadRule(org.qed.Backends.Calcite.Generated.SemiJoinFilterTranspose.Config.DEFAULT.toRule());
-        tester.verify(runner, before, after);
+        RuleChecks.doesNotApply(rule, semi.apply(JoinRelType.INNER).build());
+        RuleChecks.doesNotApply(rule, b.scan(x).scan(y)
+                .join(JoinRelType.SEMI, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0))).build());
     }
 
     public static void main(String[] args) {

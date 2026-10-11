@@ -321,7 +321,7 @@ public record JSONDeserializer() {
             var candicates = ops.filter(op -> op.getName().equals(finalName));
             if (candicates.isEmpty()) throw new Exception(String.format("Unknown operator name %s.", name));
             if (candicates.size() > 1) throw new Exception(String.format("Ambiguous operator name %s.", name));
-            return candicates.first();
+            return candicates.getFirst();
         }
 
         RelBuilder.AggCall agg(JsonNode node) throws Exception {

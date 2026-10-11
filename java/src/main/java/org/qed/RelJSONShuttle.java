@@ -83,7 +83,7 @@ public record RelJSONShuttle(Env env) {
                 "nullable", array(table.getColumnTypes().map(RelDataType::isNullable).map(RelJSONShuttle::bool)),
                 "key", array(Seq.from(table.getKeys().map(key -> array(Seq.from(key).map(IntNode::new))))),
                 "guaranteed", array(table.getConstraints()
-                        .map(check -> new RexJSONVisitor(shuttle.env.advanced(table.getColumnNames().size())).serialize(check)).toImmutableSeq())
+                        .map(check -> new RexJSONVisitor(shuttle.env.advanced(table.getColumnNames().size())).serialize(check)).toSeq())
         ))));
 
         var main = object(Map.of("schemas", schemas, "queries", queries, "help", helps));
@@ -333,7 +333,6 @@ public record RelJSONShuttle(Env env) {
 
         public Result<RexNode, String> deserialize(RuleBuilder builder, JsonNode jsonNode) {
             if (jsonNode.has("column") && jsonNode.get("column").isInt()) {
-                // WARNING: THIS IS WRONG! NO ENVIRONMENT CONSIDERED!
                 return Result.ok(builder.field(jsonNode.get("column").asInt()));
             } else if (jsonNode.has("operator") && jsonNode.get("operator").isTextual()) {
                 var op = jsonNode.get("operator").asText();

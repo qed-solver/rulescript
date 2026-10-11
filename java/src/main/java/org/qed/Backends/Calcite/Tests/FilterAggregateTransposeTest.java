@@ -1,54 +1,46 @@
 package org.qed.Backends.Calcite.Tests;
 
-import kala.collection.Seq;
-import kala.tuple.Tuple;
-import org.qed.Backends.Calcite.CalciteTester;
-import org.qed.RelType;
+import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.tools.RelBuilder;
+import org.qed.RRuleInstances.FilterAggregateTranspose;
 import org.qed.RuleBuilder;
+
+import java.util.List;
 
 public class FilterAggregateTransposeTest {
 
     public static void runTest() {
-        var tester = new CalciteTester();
-        var builder = RuleBuilder.create();
-        
-        var sourceTable = builder.createQedTable(Seq.of(
-            Tuple.of(RelType.fromString("INTEGER", true), false),
-            Tuple.of(RelType.fromString("VARCHAR", true), false),
-            Tuple.of(RelType.fromString("VARCHAR", true), false),
-            Tuple.of(RelType.fromString("DECIMAL", true), false)
-        ));
-        builder.addTable(sourceTable);
-        
-        var sourceScan = builder.scan(sourceTable.getName()).build();
+        var rule = new FilterAggregateTranspose();
+        RuleChecks.rewritesPattern(rule);
+        RuleChecks.rewritesConcretePredicates(rule);
+        RuleChecks.rejectsNearMisses(rule);
+        ordinaryTables(rule);
+    }
 
-        var before = builder
-            .push(sourceScan)
-            .aggregate(
-                builder.groupKey(builder.field(1), builder.field(2)),  
-                builder.sum(builder.field(3))         
-            )
-            .filter(builder.call(
-                builder.genericPredicateOp("pred", true),
-                builder.field(0), builder.field(1)
-            ))
-            .build();
-        var after = builder
-            .push(sourceScan)
-            .filter(builder.call(
-                builder.genericPredicateOp("pred", true),
-                builder.field(1), builder.field(2)
-            ))
-            .aggregate(
-                builder.groupKey(builder.field(1), builder.field(2)),  
-                builder.sum(builder.field(3))
-            )
-            .build();
-            
-        var runner = CalciteTester.loadRules(
-            org.qed.Backends.Calcite.Generated.FilterAggregateTranspose.Config.DEFAULT.toRule()
-        );
-        tester.verify(runner, before, after);
+    private static void ordinaryTables(FilterAggregateTranspose rule) {
+        var base = RuleBuilder.create();
+        var l = RuleChecks.table(base, 1, false);
+        var r = RuleChecks.table(base, 1, false);
+        var b = RuleChecks.ruleBuilder(base);
+        var grouped = (java.util.function.Supplier<RelBuilder>) () -> b.scan(l).scan(r)
+                .join(JoinRelType.INNER, b.literal(true))
+                .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.MAX, b.field(1)));
+        var before = grouped.get().filter(b.and(RuleChecks.gt(b, b.field(0), 5),
+                b.call(SqlStdOperatorTable.LESS_THAN, b.field(0), b.literal(100)), RuleChecks.gt(b, b.field(1), 0)))
+                .build();
+        var after = b.scan(l).scan(r).join(JoinRelType.INNER, b.literal(true)).filter(RuleChecks.gt(b, b.field(0), 5))
+                .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.MAX, b.field(1)))
+                .filter(b.and(b.call(SqlStdOperatorTable.LESS_THAN, b.field(0), b.literal(100)),
+                        RuleChecks.gt(b, b.field(1), 0))).build();
+        RuleChecks.rewrites(rule, before, after);
+
+        RuleChecks.doesNotApply(rule, grouped.get().filter(b.and(RuleChecks.gt(b, b.field(1), 5),
+                b.call(SqlStdOperatorTable.LESS_THAN, b.field(0), b.literal(100)), RuleChecks.gt(b, b.field(1), 0)))
+                .build());
+        RuleChecks.doesNotApply(rule, grouped.get().filter(b.and(RuleChecks.gt(b, b.field(0), 5),
+                RuleChecks.gt(b, b.field(1), 0))).build());
     }
 
     public static void main(String[] args) {

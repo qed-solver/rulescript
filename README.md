@@ -4,7 +4,7 @@ A Rust DSL for building database query rewrite rules with uninterpreted symbols.
 
 For details, see our [paper](https://arxiv.org/abs/2605.05536).
 
-For the engine-agnostic Java DSL implementation (Calcite, CockroachDB, MySQL, ProxySQL backends), see [`java/`](java/README.md).
+For the engine-agnostic Java DSL implementation (Calcite backend), see [`java/`](java/README.md).
 
 ## Build
 

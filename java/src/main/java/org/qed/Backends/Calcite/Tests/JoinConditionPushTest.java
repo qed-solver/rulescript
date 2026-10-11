@@ -1,77 +1,44 @@
 package org.qed.Backends.Calcite.Tests;
 
-import kala.collection.Seq;
-import kala.tuple.Tuple;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.qed.Backends.Calcite.CalciteTester;
-import org.qed.RelType;
+import org.apache.calcite.tools.RelBuilder;
+import org.qed.RRuleInstances.JoinConditionPush;
 import org.qed.RuleBuilder;
+
+import java.util.List;
 
 public class JoinConditionPushTest {
 
     public static void runTest() {
-        var tester = new CalciteTester();
-        var builder = RuleBuilder.create();
+        var rule = new JoinConditionPush();
+        RuleChecks.rewritesPattern(rule);
+        RuleChecks.rewritesConcretePredicates(rule);
+        RuleChecks.rejectsNearMisses(rule);
+        ordinaryTables(rule);
+    }
 
-        var empTable = builder.createQedTable(Seq.of(
-            Tuple.of(RelType.fromString("INTEGER", true), false),
-            Tuple.of(RelType.fromString("VARCHAR", true), false),
-            Tuple.of(RelType.fromString("INTEGER", true), false)
-        ));
-        builder.addTable(empTable);
+    private static void ordinaryTables(JoinConditionPush rule) {
+        var base = RuleBuilder.create();
+        var l = RuleChecks.table(base, 1, false);
+        var r = RuleChecks.table(base, 1, false);
+        var b = RuleChecks.ruleBuilder(base);
+        var join = (java.util.function.BiFunction<JoinRelType, Boolean, RelBuilder>) (type, withRightOnly) -> {
+            b.scan(l).scan(r);
+            return b.join(type, withRightOnly
+                    ? b.and(RuleChecks.gt(b, b.field(2, 0, 0), 5), RuleChecks.gt(b, b.field(2, 1, 0), 6),
+                            RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
+                    : b.and(RuleChecks.gt(b, b.field(2, 0, 0), 5), RuleChecks.eq(b, b.field(2, 0, 0),
+                            b.field(2, 1, 0))));
+        };
+        var before = join.apply(JoinRelType.INNER, true).build();
+        b.scan(l).filter(RuleChecks.gt(b, b.field(0), 5)).scan(r).filter(RuleChecks.gt(b, b.field(0), 6));
+        var after = b.join(JoinRelType.INNER, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0))).build();
+        RuleChecks.rewrites(rule, before, after);
 
-        var deptTable = builder.createQedTable(Seq.of(
-            Tuple.of(RelType.fromString("INTEGER", true), false),
-            Tuple.of(RelType.fromString("VARCHAR", true), false)
-        ));
-        builder.addTable(deptTable);
-        
-        var empScan = builder.scan(empTable.getName()).build();
-        var deptScan = builder.scan(deptTable.getName()).build();
-
-        var before = builder
-            .push(empScan)
-            .push(deptScan)
-            .join(JoinRelType.INNER, builder.call(SqlStdOperatorTable.AND,
-                builder.call(builder.genericPredicateOp("joinCond", true),
-                    builder.field(2, 0, 2),
-                    builder.field(2, 1, 0)
-                ),
-                builder.call(builder.genericPredicateOp("leftCond", true),
-                    builder.field(2, 0, 0)
-                ),
-                builder.call(builder.genericPredicateOp("rightCond", true),
-                    builder.field(2, 1, 0)
-                )
-            ))
-            .build();
-
-        var after = builder
-            .push(
-                builder.push(empScan)
-                    .filter(builder.call(builder.genericPredicateOp("leftCond", true),
-                        builder.field(0)
-                    ))
-                    .build()
-            )
-            .push(
-                builder.push(deptScan)
-                    .filter(builder.call(builder.genericPredicateOp("rightCond", true),
-                        builder.field(0)
-                    ))
-                    .build()
-            )
-            .join(JoinRelType.INNER,
-                builder.call(builder.genericPredicateOp("joinCond", true),
-                    builder.field(2, 0, 2),
-                    builder.field(2, 1, 0)
-                )
-            )
-            .build();
-            
-        var runner = CalciteTester.loadRule(org.qed.Backends.Calcite.Generated.JoinConditionPush.Config.DEFAULT.toRule(), 1);
-        tester.verify(runner, before, after);
+        RuleChecks.doesNotApply(rule, join.apply(JoinRelType.LEFT, true).build());
+        RuleChecks.doesNotApply(rule, join.apply(JoinRelType.INNER, false).build());
     }
 
     public static void main(String[] args) {

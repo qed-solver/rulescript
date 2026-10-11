@@ -1,32 +1,38 @@
 package org.qed.Backends.Calcite.Tests;
 
-import kala.collection.Seq;
-import kala.tuple.Tuple;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.qed.Backends.Calcite.CalciteTester;
-import org.qed.RelType;
+import org.qed.RRuleInstances.FilterMerge;
 import org.qed.RuleBuilder;
 
 public class FilterMergeTest {
 
     public static void runTest() {
-        var tester = new CalciteTester();
+        var rule = new FilterMerge();
+        RuleChecks.rewritesPattern(rule);
+        RuleChecks.rewritesConcretePredicates(rule);
+        RuleChecks.rejectsNearMisses(rule);
+        ordinaryTables(rule);
+    }
+
+    private static void ordinaryTables(FilterMerge rule) {
         var builder = RuleBuilder.create();
-        var table = builder.createQedTable(Seq.of(Tuple.of(RelType.fromString("INTEGER", true), false)));
-        builder.addTable(table);
-        
-        var before = builder.scan(table.getName())
-                .filter(builder.call(builder.genericPredicateOp("inner", true), builder.fields()))
-                .filter(builder.call(builder.genericPredicateOp("outer", true), builder.fields()))
+        var table = RuleChecks.table(builder, 1, false);
+        var five = builder.literal(5);
+        var ten = builder.literal(10);
+        var before = builder.scan(table)
+                .filter(builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), five))
+                .filter(builder.call(SqlStdOperatorTable.LESS_THAN, builder.field(0), ten))
                 .build();
-                
-        var after = builder.scan(table.getName()).filter(builder.call(SqlStdOperatorTable.AND,
-                        builder.call(builder.genericPredicateOp("inner", true), builder.fields()),
-                        builder.call(builder.genericPredicateOp("outer", true), builder.fields())))
+        var plain = RuleChecks.ruleBuilder(builder);
+        var after = plain.scan(table).filter(plain.and(
+                        plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(0), five),
+                        plain.call(SqlStdOperatorTable.LESS_THAN, plain.field(0), ten)))
                 .build();
-                
-        var runner = CalciteTester.loadRule(org.qed.Backends.Calcite.Generated.FilterMerge.Config.DEFAULT.toRule());
-        tester.verify(runner, before, after);
+        RuleChecks.rewrites(rule, before, after);
+
+        var single = builder.scan(table)
+                .filter(builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), five)).build();
+        RuleChecks.doesNotApply(rule, single);
     }
 
     public static void main(String[] args) {

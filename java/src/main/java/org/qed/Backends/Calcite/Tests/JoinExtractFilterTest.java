@@ -1,42 +1,38 @@
 package org.qed.Backends.Calcite.Tests;
 
-import kala.collection.Seq;
-import kala.tuple.Tuple;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.qed.Backends.Calcite.CalciteTester;
-import org.qed.RelType;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.tools.RelBuilder;
+import org.qed.RRuleInstances.JoinExtractFilter;
 import org.qed.RuleBuilder;
+
+import java.util.List;
 
 public class JoinExtractFilterTest {
 
     public static void runTest() {
-        var tester = new CalciteTester();
-        var builder = RuleBuilder.create();
-        var leftTable = builder.createQedTable(Seq.of(Tuple.of(RelType.fromString("INTEGER", true), false)));
-        var rightTable = builder.createQedTable(Seq.of(Tuple.of(RelType.fromString("VARCHAR", true), false)));
-        builder.addTable(leftTable);
-        builder.addTable(rightTable);
-        
-        var leftScan = builder.scan(leftTable.getName()).build();
-        var rightScan = builder.scan(rightTable.getName()).build();
-        
-        var before = builder.push(leftScan)
-                .push(rightScan)
-                .join(JoinRelType.INNER, builder.call(builder.genericPredicateOp("join", true), 
-                        builder.field(2, 0, 0), builder.field(2, 1, 0)))
+        var rule = new JoinExtractFilter();
+        RuleChecks.rewritesPattern(rule);
+        RuleChecks.rewritesConcretePredicates(rule);
+        RuleChecks.rejectsNearMisses(rule);
+        ordinaryTables(rule);
+    }
+
+    private static void ordinaryTables(JoinExtractFilter rule) {
+        var base = RuleBuilder.create();
+        var l = RuleChecks.table(base, 1, false);
+        var r = RuleChecks.table(base, 1, false);
+        var b = RuleChecks.ruleBuilder(base);
+        var before = b.scan(l).scan(r).join(JoinRelType.INNER, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
                 .build();
-        
-        var trueJoin = builder.push(leftScan)
-                .push(rightScan)
-                .join(JoinRelType.INNER, builder.literal(true))
-                .build();
-                
-        var after = builder.push(trueJoin)
-                .filter(builder.call(builder.genericPredicateOp("join", true), builder.field(0), builder.field(1)))
-                .build();
-        
-        var runner = CalciteTester.loadRule(org.qed.Backends.Calcite.Generated.JoinExtractFilter.Config.DEFAULT.toRule());
-        tester.verify(runner, before, after);
+        var after = b.scan(l).scan(r).join(JoinRelType.INNER, b.literal(true))
+                .filter(RuleChecks.eq(b, b.field(0), b.field(1))).build();
+        RuleChecks.rewrites(rule, before, after);
+
+        RuleChecks.doesNotApply(rule, b.scan(l).scan(r)
+                .join(JoinRelType.LEFT, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0))).build());
+        RuleChecks.doesNotApply(rule, b.scan(l).build());
     }
 
     public static void main(String[] args) {

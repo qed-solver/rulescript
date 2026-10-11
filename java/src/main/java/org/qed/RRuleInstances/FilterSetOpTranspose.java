@@ -1,23 +1,24 @@
 package org.qed.RRuleInstances;
 
+import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
-import org.qed.RRule;
 
 public record FilterSetOpTranspose() implements RRule {
-    static final RelRN left = RelRN.scan("Left", "Common_Type");
-    static final RelRN right = RelRN.scan("Right", "Common_Type");
-    
+    static final RelRN left = RelRN.scan("L", "T");
+    static final RelRN right = RelRN.scan("R", "T");
+
+    static final RexRN pLeft = left.pred("P");
+    static final RexRN pRight = right.pred("P");
+
     @Override
     public RelRN before() {
-        RelRN projTmp = left.union(false, right);
-        return projTmp.filter(projTmp.pred("filter"));
+        final RelRN unionAll = left.union(true, right);
+        return unionAll.filter(unionAll.pred("P"));
     }
-    
+
     @Override
     public RelRN after() {
-        RexRN leftPred = left.pred("filter");
-        RexRN rightPred = right.pred("filter");
-        return left.filter(leftPred).union(false, right.filter(rightPred));
+        return left.filter(pLeft).union(true, right.filter(pRight));
     }
 }

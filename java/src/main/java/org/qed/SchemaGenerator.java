@@ -36,9 +36,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-/**
- * A SchemaGenerator instance can execute DDL statements and generate schemas in the process.
- */
 public class SchemaGenerator {
 
     private static final Map<String, Class<?>> toPrimitive =
@@ -62,22 +59,13 @@ public class SchemaGenerator {
     private final QedSchema schema;
     private final Map<String, Function> declaredFunctions = new HashMap<>();
 
-    /**
-     * Create a SchemaGenerator instance by setting up a connection to JDBC.
-     */
     public SchemaGenerator() {
         schema = new QedSchema(this);
     }
 
-    /**
-     * Execute a CREATE statement.
-     *
-     * @param create The given CREATE statement.
-     */
     public void applyCreate(String create) throws SQLException {
         Pattern supported = Pattern.compile("(?i)CREATE\\s+(VIEW|TABLE)");
         if (!supported.matcher(create).find()) {
-            // TODO: Improve error handling
             return;
         }
         SqlParser schemaParser = SqlParser.create(create, schemaParserConfig);
@@ -103,11 +91,6 @@ public class SchemaGenerator {
         }
     }
 
-    /**
-     * Execute a DECLARE FUNCTION statement.
-     *
-     * @param declareFunction The given DECLARE FUNCTION statement.
-     */
     public void applyDeclareFunction(String declareFunction) throws Exception {
         Matcher matcher = functionPattern.matcher(declareFunction);
         if (!matcher.find()) {
@@ -156,16 +139,10 @@ public class SchemaGenerator {
         declaredFunctions.put(identifier, customFunction);
     }
 
-    /**
-     * @return The current schema.
-     */
     public SchemaPlus extractSchema() {
         return schema.plus();
     }
 
-    /**
-     * @return The declared custom store.
-     */
     public Map<String, Function> customFunctions() {
         return declaredFunctions;
     }
@@ -226,10 +203,10 @@ class QedSchema extends AbstractSchema {
                         "Unsupported declaration type " + column.getKind() + " in table " + createTable.name);
             }
         }
-        var qedTable = new QedTable(createTable.name.toString(), names.zip(
+        var qedTable = new QedTable(createTable.name.toString(), kala.collection.immutable.ImmutableMap.from(names.zip(
                         types.zip(nullabilities).map(type -> new RelType.BaseType(type.component1(),
                                 type.component2())))
-                .toImmutableMap(), ImmutableSet.from(keys), ImmutableSet.from(checkConstraints));
+                .map(t -> java.util.Map.entry(t.component1(), t.component2()))), ImmutableSet.from(keys), ImmutableSet.from(checkConstraints));
         tables.put(createTable.name.toString(), qedTable);
     }
 
@@ -237,7 +214,6 @@ class QedSchema extends AbstractSchema {
         if (sqlCreateView.columnList == null || sqlCreateView.columnList.getList().isEmpty()) {
             throw new RuntimeException("No field definition in view " + sqlCreateView.name);
         }
-        // Some regex hackery to extract the raw definition...
         var matcher = Pattern.compile("(?s).*?\\(.*?\\)\\s+[Aa][Ss](.*)").matcher(rawDef);
         if (!matcher.find()) {
             throw new RuntimeException("Cannot extract definition of view " + sqlCreateView.name);

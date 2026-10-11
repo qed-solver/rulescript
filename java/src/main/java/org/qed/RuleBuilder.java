@@ -45,27 +45,15 @@ public class RuleBuilder extends RelBuilder {
         return this;
     }
 
-    /**
-     * Create a qed table given the column types and whether they are unique (i.e. can be key)
-     *
-     * @param schema the list of column types and they are unique
-     * @return the table created from the given schema
-     */
     public QedTable createQedTable(Seq<Tuple2<RelType, Boolean>> schema) {
         var identifier = "Table_" + TABLE_ID_GENERATOR.getAndIncrement();
         var cols = schema.mapIndexed(
                 (idx, tuple) -> Tuple.of(identifier + "_Column_" + idx, tuple.component1(), tuple.component2()));
         return new QedTable(identifier,
-                cols.map(tuple -> Map.entry(tuple.component1(), tuple.component2())).toImmutableMap(),
+                kala.collection.immutable.ImmutableMap.from(cols.map(tuple -> Map.entry(tuple.component1(), tuple.component2()))),
                 Set.from(cols.filter(Tuple3::component3).map(tuple -> Set.of(tuple.component1()))), Set.of());
     }
 
-    /**
-     * Create and return the names of the created simple tables after registering them to the builder
-     *
-     * @param typeIds the absolute value represents type id, while the sign indicates the uniqueness
-     * @return the names for the created tables
-     */
     public Seq<String> sourceSimpleTables(Seq<Integer> typeIds) {
         return typeIds.map(id -> {
             var identifier = "Table_" + TABLE_ID_GENERATOR.getAndIncrement();

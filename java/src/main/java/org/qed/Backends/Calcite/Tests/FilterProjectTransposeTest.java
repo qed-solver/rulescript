@@ -1,55 +1,38 @@
 package org.qed.Backends.Calcite.Tests;
 
-import kala.collection.Seq;
-import kala.tuple.Tuple;
-import org.qed.Backends.Calcite.CalciteTester;
-import org.qed.RelType;
+import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.tools.RelBuilder;
+import org.qed.RRuleInstances.FilterProjectTranspose;
 import org.qed.RuleBuilder;
+
+import java.util.List;
 
 public class FilterProjectTransposeTest {
 
     public static void runTest() {
-        var tester = new CalciteTester();
-        var builder = RuleBuilder.create();
-        var table = builder.createQedTable(Seq.of(
-            Tuple.of(RelType.fromString("INTEGER", true), false),
-            Tuple.of(RelType.fromString("INTEGER", true), false),
-            Tuple.of(RelType.fromString("INTEGER", true), false)
-        ));
-        builder.addTable(table);
-        
-        var scan = builder.scan(table.getName()).build();
+        var rule = new FilterProjectTranspose();
+        RuleChecks.rewritesPattern(rule);
+        RuleChecks.rewritesConcretePredicates(rule);
+        RuleChecks.rejectsNearMisses(rule);
+        ordinaryTables(rule);
+    }
 
-        var before = builder
-            .push(scan)
-            .project(
-                builder.field(1),
-                builder.field(2)
-            )
-            .filter(
-                builder.and(
-                    builder.greaterThan(builder.field(0), builder.literal(50000)),
-                    builder.equals(builder.field(1), builder.literal(5))
-                )
-            )
-            .build();
+    private static void ordinaryTables(FilterProjectTranspose rule) {
+        var base = RuleBuilder.create();
+        var t = RuleChecks.table(base, 1, false);
+        var two = RuleChecks.table(base, 2, false);
+        var b = RuleChecks.ruleBuilder(base);
+        var before = b.scan(t).project(b.call(SqlStdOperatorTable.PLUS, b.field(0), b.literal(1)))
+                .filter(RuleChecks.gt(b, b.field(0), 5)).build();
+        var after = b.scan(t).filter(RuleChecks.gt(b, b.call(SqlStdOperatorTable.PLUS, b.field(0), b.literal(1)), 5))
+                .project(b.call(SqlStdOperatorTable.PLUS, b.field(0), b.literal(1))).build();
+        RuleChecks.rewrites(rule, before, after);
 
-        var after = builder
-            .push(scan)
-            .filter(
-                builder.and(
-                    builder.greaterThan(builder.field(1), builder.literal(50000)),
-                    builder.equals(builder.field(2), builder.literal(5))
-                )
-            )
-            .project(
-                builder.field(1),
-                builder.field(2)
-            )
-            .build();
-            
-        var runner = CalciteTester.loadRule(org.qed.Backends.Calcite.Generated.FilterProjectTranspose.Config.DEFAULT.toRule());
-        tester.verify(runner, before, after);
+        RuleChecks.doesNotApply(rule, b.scan(t).filter(RuleChecks.gt(b, b.field(0), 5)).build());
+        RuleChecks.doesNotApply(rule, b.scan(two).project(b.field(0), b.call(SqlStdOperatorTable.PLUS, b.field(1),
+                b.literal(1))).filter(RuleChecks.gt(b, b.field(0), 5)).build());
     }
 
     public static void main(String[] args) {

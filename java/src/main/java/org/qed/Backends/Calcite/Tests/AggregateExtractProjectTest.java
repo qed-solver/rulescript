@@ -1,58 +1,47 @@
 package org.qed.Backends.Calcite.Tests;
 
-import kala.collection.Seq;
-import kala.tuple.Tuple;
-import org.qed.Backends.Calcite.CalciteTester;
-import org.qed.RelType;
+import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.tools.RelBuilder;
+import org.qed.RRuleInstances.AggregateExtractProject;
 import org.qed.RuleBuilder;
+
+import java.util.List;
 
 public class AggregateExtractProjectTest {
 
     public static void runTest() {
-        var tester = new CalciteTester();
-        var builder = RuleBuilder.create();
-        
-        var empTable = builder.createQedTable(Seq.of(
-            Tuple.of(RelType.fromString("INTEGER", true), false),  // EMPNO (index 0)
-            Tuple.of(RelType.fromString("VARCHAR", true), false),  // ENAME (index 1)
-            Tuple.of(RelType.fromString("VARCHAR", true), false),  // JOB (index 2)
-            Tuple.of(RelType.fromString("INTEGER", true), false),  // MGR (index 3)
-            Tuple.of(RelType.fromString("DATE", true), false),     // HIREDATE (index 4)
-            Tuple.of(RelType.fromString("DECIMAL", true), false),  // SAL (index 5)
-            Tuple.of(RelType.fromString("DECIMAL", true), false),  // COMM (index 6)
-            Tuple.of(RelType.fromString("INTEGER", true), false)   // DEPTNO (index 7)
-        ));
-        builder.addTable(empTable);
-        
-        var empScan = builder.scan(empTable.getName()).build();
+        var rule = new AggregateExtractProject();
+        RuleChecks.rewritesPattern(rule);
+        RuleChecks.rewritesConcretePredicates(rule);
+        RuleChecks.rejectsNearMisses(rule);
+        ordinaryTables(rule);
+    }
 
-        var before = builder
-            .push(empScan)
-            .aggregate(
-                builder.groupKey(builder.field(0), builder.field(7)), // Group by EMPNO, DEPTNO
-                builder.sum(builder.field(5))  // SUM(SAL)
-            )
-            .build();
+    private static void ordinaryTables(AggregateExtractProject rule) {
+        var base = RuleBuilder.create();
+        var a = RuleChecks.table(base, 1, false);
+        var bb = RuleChecks.table(base, 1, false);
+        var c = RuleChecks.table(base, 1, false);
+        var b = RuleChecks.ruleBuilder(base);
+        var threeColumns = (java.util.function.Supplier<RelBuilder>) () ->
+                b.scan(a).scan(bb).join(JoinRelType.INNER, b.literal(true)).scan(c)
+                        .join(JoinRelType.INNER, b.literal(true));
+        var before = threeColumns.get().aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.SUM, b.field(1)))
+                .build();
+        var after = threeColumns.get().project(b.field(0), b.field(1))
+                .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.SUM, b.field(1))).build();
+        RuleChecks.rewrites(rule, before, after);
 
-        var after = builder
-            .push(empScan)
-            .project(
-                builder.field(0),  // DEPTNO -> X (position 0 in projection)
-                builder.field(5),  // EMPNO -> Y (position 1 in projection)  
-                builder.field(7)   // SAL -> Z (position 2 in projection)
-            )
-            .aggregate(
-                builder.groupKey(builder.field(0), builder.field(2)), // Group by X, Y
-                builder.sum(builder.field(1))  // SUM(Z)
-            )
-            .build();
-            
-        var runner = CalciteTester.loadRule(org.qed.Backends.Calcite.Generated.AggregateExtractProject.Config.DEFAULT.toRule());
-        tester.verify(runner, before, after);
+        RuleChecks.doesNotApply(rule, threeColumns.get()
+                .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.SUM, b.field(2))).build());
+        RuleChecks.doesNotApply(rule, threeColumns.get()
+                .aggregate(b.groupKey(1), b.aggregateCall(SqlStdOperatorTable.SUM, b.field(0))).build());
     }
 
     public static void main(String[] args) {
-        System.out.println("Running AggregateExtractProject comprehensive test...");
+        System.out.println("Running AggregateExtractProject test...");
         runTest();
     }
 }

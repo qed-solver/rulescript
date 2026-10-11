@@ -1,54 +1,35 @@
 package org.qed.Backends.Calcite.Tests;
 
-import kala.collection.Seq;
-import kala.tuple.Tuple;
-import org.qed.Backends.Calcite.CalciteTester;
-import org.qed.RelType;
+import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.tools.RelBuilder;
+import org.qed.RRuleInstances.UnionToDistinct;
 import org.qed.RuleBuilder;
+
+import java.util.List;
 
 public class UnionToDistinctTest {
 
     public static void runTest() {
-        var tester = new CalciteTester();
-        var builder = RuleBuilder.create();
-        
-        // Create left and right tables with same schema
-        var leftTable = builder.createQedTable(Seq.of(
-            Tuple.of(RelType.fromString("INTEGER", true), false),
-            Tuple.of(RelType.fromString("INTEGER", true), false)
-        ));
-        builder.addTable(leftTable);
-        
-        var rightTable = builder.createQedTable(Seq.of(
-            Tuple.of(RelType.fromString("INTEGER", true), false),
-            Tuple.of(RelType.fromString("INTEGER", true), false)
-        ));
-        builder.addTable(rightTable);
-        
-        var scanLeft = builder.scan(leftTable.getName()).build();
-        var scanRight = builder.scan(rightTable.getName()).build();
-        
-        // Before: left UNION right (UNION DISTINCT, all=false)
-        var before = builder
-            .push(scanLeft)
-            .push(scanRight)
-            .union(false, 2)  // UNION DISTINCT
-            .build();
-        
-        // After: (left UNION ALL right) then aggregate (group by all fields)
-        var after = builder
-            .push(scanLeft)
-            .push(scanRight)
-            .union(true, 2)  // UNION ALL
-            .aggregate(
-                builder.groupKey(builder.field(0), builder.field(1))
-            )
-            .build();
-            
-        var runner = CalciteTester.loadRule(
-            org.qed.Backends.Calcite.Generated.UnionToDistinct.Config.DEFAULT.toRule()
-        );
-        tester.verify(runner, before, after);
+        var rule = new UnionToDistinct();
+        RuleChecks.rewritesPattern(rule);
+        RuleChecks.rewritesConcretePredicates(rule);
+        RuleChecks.rejectsNearMisses(rule);
+        ordinaryTables(rule);
+    }
+
+    private static void ordinaryTables(UnionToDistinct rule) {
+        var base = RuleBuilder.create();
+        var ta = RuleChecks.table(base, 1, false);
+        var tb = RuleChecks.table(base, 1, false);
+        var b = RuleChecks.ruleBuilder(base);
+        var before = b.scan(ta).scan(tb).union(false, 2).build();
+        var after = b.scan(ta).scan(tb).union(true, 2).aggregate(b.groupKey(0)).build();
+        RuleChecks.rewrites(rule, before, after);
+
+        RuleChecks.doesNotApply(rule, b.scan(ta).scan(tb).union(true, 2).build());
+        RuleChecks.doesNotApply(rule, b.scan(ta).scan(tb).scan(ta).union(false, 3).build());
     }
 
     public static void main(String[] args) {
