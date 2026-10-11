@@ -6,6 +6,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 public record AggregateFilterTranspose() implements RRule {
     static final RelRN scanA = RelRN.scan("A", "A_Type");
     static final RelRN scanB = RelRN.scan("B", "B_Type");

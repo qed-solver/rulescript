@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — inner join only; the left input's project is a pure column reordering (swap) of the raw left input and the join condition is a single uninterpreted predicate
 public record HoistJoinProjectLeft() implements RRule {
     // Two-column raw left input; single-column raw right input.

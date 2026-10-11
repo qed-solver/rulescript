@@ -14,6 +14,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 public record MergeProjectWithValues() implements RRule {
     record LiteralValues(Object[] rowValues) implements RelRN {
         @Override

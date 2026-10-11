@@ -7,6 +7,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RexRN.Pred;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — only the Eq variant is covered: on a single-column scan, the Variable operand is the column x and the non-Variable operand is the uninterpreted expression e of the same type, proving the universal law e = x <-> x = e under three-valued semantics; the Ne/Is/IsNot/Plus/Mult/Bit*/Vector* variants remain out of reach because QED cannot know commutativity for uninterpreted operators
 public record CommuteVar() implements RRule {
     static final RelRN source = RelRN.scan("T", "V");

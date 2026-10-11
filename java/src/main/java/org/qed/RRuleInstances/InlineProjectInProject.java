@@ -8,6 +8,7 @@ import org.qed.RexRN;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — one inner synthesized column and one outer computed expression, with a single outer passthrough column equal to that inner synthesized column (no additional inner passthrough or outer columns; the HasDuplicateRefs guard is not bag-semantic).
 public record InlineProjectInProject() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");

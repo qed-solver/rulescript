@@ -9,6 +9,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — only the `Eq` alternative of the source rule is encoded (a single RRule instance has one before/after pair), so the `Le`/`Ge` alternatives are not covered
 public record SimplifySameVarEqualities() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");

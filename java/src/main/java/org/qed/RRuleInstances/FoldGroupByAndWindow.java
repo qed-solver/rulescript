@@ -8,6 +8,7 @@ import org.qed.RelType;
 import org.qed.RRule;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — one window function whose output is a partition-determined aggregate, and every GroupBy aggregate references only Window-input cols (case 5a); the 5b ConstAgg/FirstAgg pass-through of window outputs needs per-aggregate algebra QED lacks.
 public record FoldGroupByAndWindow() implements RRule {
     static final RelType.VarType kT = RexRN.varType("k", false);

@@ -6,6 +6,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RelType;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — both join inputs fixed to two columns and the join fixed to a plain inner join (the source rule applies to any arity and also matches the apply-join variant)
 public record PushLeakproofJoinIntoPermeableBarrierRight() implements RRule {
     // Leakproof left input: two uninterpreted columns (l0, l1).

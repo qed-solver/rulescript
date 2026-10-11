@@ -10,6 +10,7 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.sql.SqlOperator;
 
+// ORIGIN: CockroachDB
 public record HoistSelectNotExists() implements RRule {
     record ExistsSub(RelRN body) implements RexRN {
         @Override

@@ -6,6 +6,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — LEFT join only
 public record RemoveJoinNotNullCondition() implements RRule {
     static final RelRN left  = RelRN.scan("L", RexRN.varType("L_Type", false), false);

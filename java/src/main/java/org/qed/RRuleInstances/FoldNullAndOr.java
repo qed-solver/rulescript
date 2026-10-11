@@ -7,6 +7,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — only the And branch of the rule (And(Null,Null) => Null); the Or branch is structurally identical but not expressible in a single before()/after() pair
 public record FoldNullAndOr() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");

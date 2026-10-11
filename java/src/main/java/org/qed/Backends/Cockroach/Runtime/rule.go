@@ -239,3 +239,81 @@ func (x *Rex) check() error {
 	}
 	return fmt.Errorf("unsupported expression %q", x.Op)
 }
+
+func (r *Rule) growsOwnPattern() bool {
+	return r.From.Op != "scan" && r.To.size() > r.From.size() && r.To.contains(r.From)
+}
+
+func (r *Rel) size() int {
+	if r == nil || r.Op == "scan" {
+		return 0
+	}
+	return 1 + r.Input.size() + r.Left.size() + r.Right.size()
+}
+
+func (r *Rel) contains(pattern *Rel) bool {
+	if r == nil {
+		return false
+	}
+	if r.embeds(pattern) {
+		return true
+	}
+	return r.Input.contains(pattern) || r.Left.contains(pattern) || r.Right.contains(pattern)
+}
+
+func (r *Rel) embeds(pattern *Rel) bool {
+	if pattern == nil {
+		return true
+	}
+	if pattern.Op == "scan" {
+		return true
+	}
+	if r == nil || r.Op != pattern.Op || r.Type != pattern.Type || r.Apply != pattern.Apply || r.All != pattern.All {
+		return false
+	}
+	switch r.Op {
+	case "filter":
+		return pattern.Cond.embeds(r.Cond) && r.Input.embeds(pattern.Input)
+	case "project":
+		if len(r.Exprs) != len(pattern.Exprs) {
+			return false
+		}
+		for i := range pattern.Exprs {
+			if !pattern.Exprs[i].embeds(r.Exprs[i]) {
+				return false
+			}
+		}
+		return r.Input.embeds(pattern.Input)
+	case "aggregate":
+		return len(r.Groups) == len(pattern.Groups) && len(r.Aggs) == len(pattern.Aggs) && r.Input.embeds(pattern.Input)
+	case "join":
+		return pattern.Cond.embeds(r.Cond) && r.Left.embeds(pattern.Left) && r.Right.embeds(pattern.Right)
+	case "set":
+		return r.Left.embeds(pattern.Left) && r.Right.embeds(pattern.Right)
+	case "empty":
+		return r.Arity == pattern.Arity
+	}
+	return true
+}
+
+func (x *Rex) embeds(target *Rex) bool {
+	if x == nil {
+		return true
+	}
+	switch x.Op {
+	case "pred", "proj", "group_key", "agg", "field", "field_alias", "joinfield", "row":
+		return true
+	}
+	if target == nil || target.Op != x.Op || target.Operator != x.Operator || len(target.Args) != len(x.Args) {
+		return false
+	}
+	for i := range x.Args {
+		if !x.Args[i].embeds(target.Args[i]) {
+			return false
+		}
+	}
+	if x.Arg != nil {
+		return x.Arg.embeds(target.Arg)
+	}
+	return true
+}

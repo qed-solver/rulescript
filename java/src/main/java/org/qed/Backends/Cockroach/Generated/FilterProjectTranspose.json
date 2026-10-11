@@ -1,0 +1,69 @@
+{
+  "name" : "FilterProjectTranspose",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "F",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r1" ]
+      } ]
+    },
+    "input" : {
+      "op" : "project",
+      "exprs" : [ {
+        "op" : "proj",
+        "name" : "Proj",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ]
+      } ],
+      "input" : {
+        "op" : "scan",
+        "name" : "Source",
+        "id" : "r0"
+      },
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "Proj",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ]
+    } ],
+    "input" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "pred",
+        "name" : "F",
+        "args" : [ {
+          "op" : "proj",
+          "name" : "Proj",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r0"
+          } ]
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "Source",
+        "id" : "r0"
+      },
+      "id" : "r3"
+    },
+    "id" : "r4"
+  }
+}

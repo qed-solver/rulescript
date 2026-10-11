@@ -6,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RelType;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — covers only the distinct-Union arm of the rule (a RuleScript pattern is a single operator tree, so the distinct-Except arm must be a sibling rule); the right operand is modeled as structurally empty, which is the faithful encoding of `HasZeroRows $right` since the DSL has no cardinality constraint.
 public record EliminateDistinctSetLeft() implements RRule {
     // Arbitrary-width inputs: three uninterpreted VarTypes, shared by both

@@ -4,6 +4,7 @@ import org.apache.calcite.rel.core.JoinRelType;
 import org.qed.RRule;
 import org.qed.RelRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — covers the non-correlated AntiJoin operator; the correlated AntiJoinApply variant of the source rule is not modeled.
 public record EliminateAntiJoin() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");

@@ -12,6 +12,7 @@ import org.qed.RexRN;
 import org.qed.RexRN.Pred;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 public record PushSelectCondLeftIntoJoinLeftAndRight() implements RRule {
     static final RelType.VarType keyTy = RexRN.varType("Key_Type", false);
     static final RelRN left = RelRN.scan("L", keyTy, false);

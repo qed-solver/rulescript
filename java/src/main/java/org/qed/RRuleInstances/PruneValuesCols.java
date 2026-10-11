@@ -9,6 +9,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — fixed single-row three-column Values pruned to the two referenced columns, modeled with concrete literal content.
 public record PruneValuesCols() implements RRule {
     record LiteralValues(Object[] rowValues) implements RelRN {

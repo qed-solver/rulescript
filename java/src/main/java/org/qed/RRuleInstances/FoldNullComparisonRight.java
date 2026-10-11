@@ -9,6 +9,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — restricts FoldNullComparisonRight to the Eq (equality) comparison branch, folding `left = NULL` to `NULL` for an arbitrary boolean left input; the other ~20 comparison operators in the rule each require a distinct concrete operator
 public record FoldNullComparisonRight() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");

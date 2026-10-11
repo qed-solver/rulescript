@@ -8,6 +8,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RexRN.Pred;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — encodes only the Lt flip (x < y becomes y > x); the Le, Gt, and Ge commutation pairs of the original rule are not covered by this single record.
 public record CommuteConstInequality() implements RRule {
     static final RelRN left = RelRN.scan("L", "V");

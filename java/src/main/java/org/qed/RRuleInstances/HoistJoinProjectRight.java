@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — left join (source rule also covers inner-join and the apply variants) with a 1-column left input and 2-column right input, the passthrough project swapping the right's two columns, and the on-clause an uninterpreted predicate over (left, right) columns
 public record HoistJoinProjectRight() implements RRule {
     // Left input: one column (l0).

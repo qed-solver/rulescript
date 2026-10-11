@@ -8,6 +8,7 @@ import org.qed.RexRN;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — Explain's input has exactly two columns of which only the first is needed by the fixed explain physical properties, and Explain's output rows are uninterpreted functions of exactly that needed column
 public record PruneExplainCols() implements RRule {
     // Explain's input: two columns — col 0 is the column the required

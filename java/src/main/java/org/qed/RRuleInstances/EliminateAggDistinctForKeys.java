@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the aggregation argument is the input scan's unique key, which is also the (single-column) grouping key, so each group holds at most one row and AggDistinct is a per-group no-op; the general CanRemoveAggDistinctForKeys condition (grouping cols functionally determine the agg arg over any input) is not expressible because QED only models scan uniqueness as a functional dependency.
 public record EliminateAggDistinctForKeys() implements RRule {
     static final RelRN source = RelRN.scan("S", RexRN.varType("S_Type", false), true);

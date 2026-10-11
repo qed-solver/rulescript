@@ -1,0 +1,81 @@
+{
+  "name" : "SetOpToFilter",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "set",
+    "type" : "union",
+    "all" : false,
+    "left" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "pred",
+        "name" : "P1",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "Source",
+        "id" : "r0"
+      },
+      "id" : "r1"
+    },
+    "right" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "pred",
+        "name" : "P2",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "Source",
+        "id" : "r0"
+      },
+      "id" : "r2"
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r4"
+    } ],
+    "aggs" : [ ],
+    "input" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "or",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "P1",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "P2",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "Source",
+        "id" : "r0"
+      },
+      "id" : "r4"
+    },
+    "id" : "r5"
+  }
+}

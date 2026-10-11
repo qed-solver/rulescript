@@ -10,6 +10,7 @@ import org.qed.RelType;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — only the Eq branch of the 18-operator fold (eq(Null, x) ⇒ Null) is encoded; the other 17 branches are structurally identical but each requires its own before()/after() pair
 public record FoldNullComparisonLeft() implements RRule {
     static final RelType.VarType V = new RelType.VarType("V", true);

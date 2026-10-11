@@ -1,0 +1,95 @@
+{
+  "name" : "AggregateProjectMerge",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "aggregate",
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r2"
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "f",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r2"
+      } ]
+    } ],
+    "input" : {
+      "op" : "project",
+      "exprs" : [ {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r3"
+      }, {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r3"
+      } ],
+      "input" : {
+        "op" : "join",
+        "type" : "inner",
+        "cond" : {
+          "op" : "true"
+        },
+        "left" : {
+          "op" : "scan",
+          "name" : "A",
+          "id" : "r0",
+          "arity" : 1
+        },
+        "right" : {
+          "op" : "scan",
+          "name" : "B",
+          "id" : "r1",
+          "arity" : 1
+        },
+        "id" : "r3"
+      },
+      "id" : "r2"
+    },
+    "id" : "r4"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r3"
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "f",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r3"
+      } ]
+    } ],
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "true"
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "A",
+        "id" : "r0",
+        "arity" : 1
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "B",
+        "id" : "r1",
+        "arity" : 1
+      },
+      "id" : "r3"
+    },
+    "id" : "r5"
+  }
+}

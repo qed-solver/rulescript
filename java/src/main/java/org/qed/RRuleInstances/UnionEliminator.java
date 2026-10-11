@@ -3,6 +3,7 @@ package org.qed.RRuleInstances;
 import org.qed.RRule;
 import org.qed.RelRN;
 
+// ORIGIN: Calcite
 // SCOPE: FULL
 public record UnionEliminator() implements RRule {
     static final RelRN input = RelRN.scan("Input", "Input_Type");

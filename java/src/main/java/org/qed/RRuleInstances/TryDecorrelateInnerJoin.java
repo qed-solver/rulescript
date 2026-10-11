@@ -8,6 +8,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 public record TryDecorrelateInnerJoin() implements RRule {
   static final RelRN L  = RelRN.scan("L",  RexRN.varType("T", true), false);
   static final RelRN IL = RelRN.scan("IL", RexRN.varType("T", true), false);

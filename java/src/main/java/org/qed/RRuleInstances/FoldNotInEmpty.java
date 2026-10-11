@@ -4,6 +4,7 @@ import org.apache.calcite.rel.core.JoinRelType;
 import org.qed.RRule;
 import org.qed.RelRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the scalar NotIn predicate over an empty tuple is modeled as a relational anti-join against a zero-row relation, since QED has no scalar In/NotIn predicate or list constant.
 public record FoldNotInEmpty() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");

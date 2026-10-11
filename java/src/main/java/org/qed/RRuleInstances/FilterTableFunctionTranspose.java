@@ -8,6 +8,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: Calcite
 public record FilterTableFunctionTranspose() implements RRule {
     static final RelRN input = RelRN.scanMany("S", Seq.of(
             RexRN.varType("S0_Type", true),

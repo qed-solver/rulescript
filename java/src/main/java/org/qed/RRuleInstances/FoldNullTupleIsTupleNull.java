@@ -9,6 +9,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the tuple is fixed to arity 2 (both of its elements are the constant NULL, standing in for the side condition HasAllNullElements).
 public record FoldNullTupleIsTupleNull() implements RRule {
     // A constant NULL value (type-agnostic: IS NULL on NULL holds regardless of the

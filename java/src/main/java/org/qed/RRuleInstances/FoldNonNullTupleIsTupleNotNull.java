@@ -6,6 +6,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the tuple is fixed to arity 2 and both of its elements are encoded as non-nullable (standing in for the constant, non-null elements required by the side condition HasAllNonNullElements).
 public record FoldNonNullTupleIsTupleNotNull() implements RRule {
     // The tuple $input is represented by its elements as columns of the source

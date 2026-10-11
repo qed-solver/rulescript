@@ -8,6 +8,7 @@ import org.qed.RelType;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the ordinality-generated column is modeled as one shared uninterpreted function O of the input columns (the ForDuplicateRemoval case, where O's values don't matter) and every filter conjunct references only input columns (no unbound conjunct over O, so the outer Select is vacuous).
 public record PushSelectIntoOrdinality() implements RRule {
     // The Ordinality input: two uninterpreted columns.

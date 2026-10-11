@@ -6,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RelType;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — identity unordered DistinctOn (its output columns are exactly its grouping keys, with no aggregate outputs), and a single hoisted filter conjunct that references only the DistinctOn's output columns, so no FirstAgg synthesis is required.
 public record HoistSelectAboveUnorderedDistinctOn() implements RRule {
     // The DistinctOn's input, whose output columns (the grouping keys) are k1, k2.

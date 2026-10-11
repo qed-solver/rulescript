@@ -10,6 +10,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: Calcite
 public record OuterJoinToAntiJoin() implements RRule {
     static final RelRN left = RelRN.scan("L", new RelType.VarType("L_T", true), false);
     static final RelRN right = RelRN.scan("R", new RelType.VarType("R_T", false), false);

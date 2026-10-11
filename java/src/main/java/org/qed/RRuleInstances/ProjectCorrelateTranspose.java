@@ -6,6 +6,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 public record ProjectCorrelateTranspose() implements RRule {
     static final RelRN left = RelRN.scanMany("L", Seq.of(
             RexRN.varType("L0_Type", true),

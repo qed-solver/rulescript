@@ -8,6 +8,7 @@ import org.qed.RexRN;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
 
+// ORIGIN: Calcite
 public record ProjectTableScan() implements RRule {
     static final RelRN table = RelRN.scanMany("T", Seq.of(
             RexRN.varType("T0_Type", true),

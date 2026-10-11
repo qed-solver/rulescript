@@ -6,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import kala.collection.Seq;
 
+// ORIGIN: CockroachDB
 public record ExtractRedundantConjunct() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");
     static final RexRN a = source.pred("a");

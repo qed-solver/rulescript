@@ -8,6 +8,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: Calcite
 public record UnnestDecorrelate() implements RRule {
     static final RelRN left = RelRN.scanMany("L", Seq.of(
             RexRN.varType("L_Array_Type", true),

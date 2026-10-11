@@ -1,0 +1,60 @@
+{
+  "name" : "FilterMerge",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "outer",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0" ]
+      } ]
+    },
+    "input" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "pred",
+        "name" : "inner",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "Source",
+        "id" : "r0"
+      },
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "inner",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "pred",
+        "name" : "outer",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ]
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "id" : "r0"
+    },
+    "id" : "r3"
+  }
+}

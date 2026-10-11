@@ -9,6 +9,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the tuple is fixed to arity 2 with exactly one element being the constant NULL (satisfying the side condition HasNullElement) and the other element an arbitrary nullable value.
 public record FoldNullTupleIsTupleNotNull() implements RRule {
     // The constant NULL element of the tuple. The source rule's side condition

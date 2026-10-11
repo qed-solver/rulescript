@@ -8,6 +8,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — each join input has exactly one column, and the join condition is a single uninterpreted predicate over the join's two-column row
 public record CommuteRightJoin() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");

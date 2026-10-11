@@ -6,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RRule;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 // SCOPE: FULL
 public record SemiJoinFilterTranspose() implements RRule {
     static final RelRN X = RelRN.scanMany("X", Seq.of(

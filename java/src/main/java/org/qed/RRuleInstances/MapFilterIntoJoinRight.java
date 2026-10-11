@@ -10,6 +10,7 @@ import org.qed.RelType;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — only the INNER-join, single-equality, single-column case: ON is exactly (a.x = b.x) AND f(a.x) and the filter conjunct is remapped to f(b.x); the rule's other join kinds, multi-equality equivalence sets, and arbitrary filter expressions are not modeled.
 public record MapFilterIntoJoinRight() implements RRule {
     // Both columns share one uninterpreted key type, since the rule only

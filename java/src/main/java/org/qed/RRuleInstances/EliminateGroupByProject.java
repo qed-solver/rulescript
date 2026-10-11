@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — assumes the GroupBy is a DistinctOn (no aggregate output columns) over a fixed 2-column base whose project child only drops the second column (synthesizing no new expressions, so OutputCols(project) ⊆ OutputCols(base)) and the group key is the retained first column.
 public record EliminateGroupByProject() implements RRule {
     static final RelRN base = RelRN.scanMany("S",

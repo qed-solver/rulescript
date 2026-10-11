@@ -19,6 +19,7 @@ func (r *Rule) Apply(f *norm.Factory, e memo.RelExpr) (result memo.RelExpr, ok b
 		toRootSetID:     r.To.ID,
 		toRootValuesID:  r.To.ID,
 		multiJoin:       r.From.joinCount() > 1 || r.To.joinCount() > 1,
+		multiSet:        r.From.setCount() > 1 || r.To.setCount() > 1,
 		rels:            make(map[string]memo.RelExpr),
 		relOccurrences:  make(map[string][]memo.RelExpr),
 		buildOccurrence: make(map[string]int),
@@ -48,10 +49,11 @@ func (r *Rule) Apply(f *norm.Factory, e memo.RelExpr) (result memo.RelExpr, ok b
 	s.rootCols = append([]opt.ColumnID{}, s.cols[r.From.ID]...)
 	r.To.countScans(s.toScanCounts)
 	out := s.buildRel(r.To)
-	if (r.From.Op == "set" || s.repeatedScans) && !out.Relational().OutputCols.Equals(e.Relational().OutputCols) {
+	if (r.From.Op == "set" || r.To.Op == "set" || s.repeatedScans) &&
+		!out.Relational().OutputCols.Equals(e.Relational().OutputCols) {
 		out = s.renameOutput(out, s.cols[r.To.ID], s.cols[r.From.ID])
 	}
-	if !out.Relational().OutputCols.Equals(e.Relational().OutputCols) {
+	if !out.Relational().OutputCols.Equals(e.Relational().OutputCols) || out == e {
 		return nil, false
 	}
 	return out, true
@@ -112,6 +114,7 @@ type projBinding struct {
 	elem     opt.ScalarExpr
 	col      opt.ColumnID
 	args     []opt.ColumnID
+	argElems []opt.ScalarExpr
 	distinct bool
 }
 
@@ -130,6 +133,7 @@ type state struct {
 	toRootSetID     string
 	toRootValuesID  string
 	multiJoin       bool
+	multiSet        bool
 	preds           map[string]*predBinding
 	scalarPreds     map[string]*projBinding
 	projs           map[string]*projBinding
@@ -190,6 +194,19 @@ func (s *state) sameScan(a, b memo.RelExpr) bool {
 	lp.Table, rp.Table = 0, 0
 	lp.Cols, rp.Cols = opt.ColSet{}, opt.ColSet{}
 	return reflect.DeepEqual(lp, rp)
+}
+
+func (r *Rel) setCount() int {
+	switch r.Op {
+	case "filter", "project", "aggregate":
+		return r.Input.setCount()
+	case "join":
+		return r.Left.setCount() + r.Right.setCount()
+	case "set":
+		return 1 + r.Left.setCount() + r.Right.setCount()
+	default:
+		return 0
+	}
 }
 
 func (r *Rel) joinCount() int {
@@ -435,19 +452,22 @@ func (s *state) matchRel(p *Rel, e memo.RelExpr) bool {
 		}
 		var keyProject *memo.ProjectExpr
 		var ok bool
-		computed := 0
+		computedNames := make(map[string]bool)
 		for _, key := range p.Groups {
 			if key.Op == "group_key" {
-				computed++
+				computedNames[key.Name] = true
 			}
 		}
 		for _, agg := range p.Aggs {
 			for _, arg := range agg.Args {
 				if arg.Op == "group_key" {
-					computed++
+					computedNames[arg.Name] = true
 				}
 			}
 		}
+		computed := len(computedNames)
+		itemOf := make(map[string]int)
+		usedItems := make(map[int]bool)
 		if computed > 0 {
 			keyProject, ok = source.(*memo.ProjectExpr)
 			if !ok || len(keyProject.Projections) != computed {
@@ -463,7 +483,6 @@ func (s *state) matchRel(p *Rel, e memo.RelExpr) bool {
 		}
 		out := make([]opt.ColumnID, 0, len(p.Groups)+len(p.Aggs))
 		keys := opt.ColSet{}
-		projectItem := 0
 		for _, key := range p.Groups {
 			var col opt.ColumnID
 			switch key.Op {
@@ -474,12 +493,25 @@ func (s *state) matchRel(p *Rel, e memo.RelExpr) bool {
 				}
 				col = args[0]
 			case "group_key":
-				if keyProject == nil || !s.matchBoundScalar(key, keyProject.Projections[projectItem].Element,
-					keyProject.Projections[projectItem].Col, s.groups) {
+				if keyProject == nil {
 					return false
 				}
-				col = keyProject.Projections[projectItem].Col
-				projectItem++
+				index := -1
+				for j := range keyProject.Projections {
+					if usedItems[j] || !private.GroupingCols.Contains(keyProject.Projections[j].Col) {
+						continue
+					}
+					if s.matchBoundScalar(key, keyProject.Projections[j].Element, keyProject.Projections[j].Col, s.groups) {
+						index = j
+						break
+					}
+				}
+				if index < 0 {
+					return false
+				}
+				usedItems[index] = true
+				col = keyProject.Projections[index].Col
+				itemOf[key.Name] = index
 			default:
 				return false
 			}
@@ -498,12 +530,32 @@ func (s *state) matchRel(p *Rel, e memo.RelExpr) bool {
 		for i, agg := range p.Aggs {
 			for _, arg := range agg.Args {
 				if arg.Op == "group_key" {
-					if keyProject == nil || projectItem >= len(keyProject.Projections) ||
-						!s.matchBoundScalar(arg, keyProject.Projections[projectItem].Element,
-							keyProject.Projections[projectItem].Col, s.groups) {
+					if keyProject == nil {
 						return false
 					}
-					projectItem++
+					if index, seen := itemOf[arg.Name]; seen {
+						if !s.matchBoundScalar(arg, keyProject.Projections[index].Element,
+							keyProject.Projections[index].Col, s.groups) {
+							return false
+						}
+						continue
+					}
+					used := usedColumns(aggregations[i].Agg)
+					index := -1
+					for j := range keyProject.Projections {
+						if usedItems[j] || !used.Contains(keyProject.Projections[j].Col) {
+							continue
+						}
+						if s.matchBoundScalar(arg, keyProject.Projections[j].Element, keyProject.Projections[j].Col, s.groups) {
+							index = j
+							break
+						}
+					}
+					if index < 0 {
+						return false
+					}
+					usedItems[index] = true
+					itemOf[arg.Name] = index
 				}
 			}
 			item := &aggregations[i]
@@ -881,16 +933,77 @@ func (s *state) matchScalar(p *Rex, e opt.ScalarExpr) bool {
 	return false
 }
 
+func (s *state) boundProjArgs(args []*Rex) ([]opt.ScalarExpr, bool) {
+	if len(args) == 0 {
+		return nil, false
+	}
+	elems := make([]opt.ScalarExpr, len(args))
+	for i, a := range args {
+		if a.Op != "proj" {
+			return nil, false
+		}
+		b, ok := s.projs[a.Name]
+		if !ok || b.elem == nil {
+			return nil, false
+		}
+		elems[i] = b.elem
+	}
+	return elems, true
+}
+
+func usedColumnsExcept(e opt.Expr, skip []opt.ScalarExpr) opt.ColSet {
+	for _, s := range skip {
+		if e == opt.Expr(s) {
+			return opt.ColSet{}
+		}
+	}
+	if v, ok := e.(*memo.VariableExpr); ok {
+		return opt.MakeColSet(v.Col)
+	}
+	cols := opt.ColSet{}
+	for i := 0; i < e.ChildCount(); i++ {
+		cols.UnionWith(usedColumnsExcept(e.Child(i), skip))
+	}
+	return cols
+}
+
+func (s *state) replaceElems(e opt.ScalarExpr, from, to []opt.ScalarExpr) opt.ScalarExpr {
+	if len(from) != len(to) {
+		panic(abort{})
+	}
+	var replace norm.ReplaceFunc
+	replace = func(x opt.Expr) opt.Expr {
+		for i, f := range from {
+			if x == opt.Expr(f) {
+				return to[i]
+			}
+		}
+		return s.f.CopyAndReplaceDefault(x, replace)
+	}
+	return replace(e).(opt.ScalarExpr)
+}
+
 func (s *state) matchProjection(p *Rex, item *memo.ProjectionsItem) bool {
 	if p.Op != "proj" {
 		return false
 	}
-	if _, dup := s.projs[p.Name]; dup {
-		return false
+	if elems, nested := s.boundProjArgs(p.Args); nested {
+		if _, dup := s.projs[p.Name]; dup || !usedColumnsExcept(item.Element, elems).Empty() {
+			return false
+		}
+		s.projs[p.Name] = &projBinding{elem: item.Element, col: item.Col, argElems: elems}
+		return true
 	}
 	args, ok := s.matchArgs(p.Args)
 	if !ok || !item.ScalarProps().OuterCols.SubsetOf(opt.MakeColSet(args...)) {
 		return false
+	}
+	if previous, dup := s.projs[p.Name]; dup {
+		if previous.col != 0 || previous.elem != item.Element || !sameColumns(previous.args, args) {
+			return false
+		}
+		previous.col = item.Col
+		return true
 	}
 	s.projs[p.Name] = &projBinding{elem: item.Element, col: item.Col, args: args}
 	return true
@@ -1270,7 +1383,27 @@ func (s *state) buildRel(p *Rel) memo.RelExpr {
 			panic(abort{})
 		}
 		private := memo.SetPrivate{}
-		if s.set == nil {
+		if s.multiSet {
+			if len(leftCols) != len(rightCols) {
+				panic(abort{})
+			}
+			if p.ID == s.toRootSetID && len(s.rootCols) == len(leftCols) {
+				private.OutCols = s.setOutCols(p.setOperator(), leftCols, left, right)
+			} else {
+				private.OutCols = make(opt.ColList, len(leftCols))
+				for i, col := range leftCols {
+					private.OutCols[i] = s.f.Metadata().AddColumn("rulescript_set", s.f.Metadata().ColumnMeta(col).Type)
+				}
+			}
+			if left.Relational().OutputCols.Intersects(right.Relational().OutputCols) {
+				fresh := make([]opt.ColumnID, len(rightCols))
+				for i, col := range rightCols {
+					fresh[i] = s.f.Metadata().AddColumn("rulescript_set_right", s.f.Metadata().ColumnMeta(col).Type)
+				}
+				right = s.renameOutput(right, rightCols, fresh)
+				rightCols = fresh
+			}
+		} else if s.set == nil {
 			if p.ID != s.toRootSetID || len(s.rootCols) != len(leftCols) {
 				panic(abort{})
 			}
@@ -1282,7 +1415,7 @@ func (s *state) buildRel(p *Rel) memo.RelExpr {
 				right = s.renameOutput(right, rightCols, fresh)
 				rightCols = fresh
 			}
-			private.OutCols = append(opt.ColList{}, s.rootCols...)
+			private.OutCols = s.setOutCols(p.setOperator(), leftCols, left, right)
 		} else {
 			private = *s.set
 			outCols := make(opt.ColList, len(leftCols))
@@ -1321,6 +1454,25 @@ func (s *state) buildRel(p *Rel) memo.RelExpr {
 		panic(abort{})
 	}
 	panic(abort{})
+}
+
+func (s *state) setOutCols(op opt.Operator, leftCols []opt.ColumnID, left, right memo.RelExpr) opt.ColList {
+	reused := false
+	if op == opt.UnionOp || op == opt.UnionAllOp {
+		for _, col := range s.rootCols {
+			if left.Relational().OutputCols.Contains(col) || right.Relational().OutputCols.Contains(col) {
+				reused = true
+			}
+		}
+	}
+	if !reused {
+		return append(opt.ColList{}, s.rootCols...)
+	}
+	out := make(opt.ColList, len(leftCols))
+	for i, col := range leftCols {
+		out[i] = s.f.Metadata().AddColumn("rulescript_set", s.f.Metadata().ColumnMeta(col).Type)
+	}
+	return out
 }
 
 func (s *state) renameOutput(input memo.RelExpr, source, target []opt.ColumnID) memo.RelExpr {
@@ -1525,6 +1677,9 @@ func (s *state) buildProjection(p *Rex) memo.ProjectionsItem {
 		b.col = s.f.Metadata().AddColumn("computed", b.elem.DataType())
 	}
 	args := s.buildArgs(p.Args)
+	if b.argElems != nil {
+		return s.f.ConstructProjectionsItem(s.replaceElems(b.elem, b.argElems, args), b.col)
+	}
 	if s.isIdentity(b.args, args) {
 		return s.f.ConstructProjectionsItem(b.elem, b.col)
 	}
@@ -1592,6 +1747,12 @@ func (s *state) buildArgs(args []*Rex) []opt.ScalarExpr {
 				panic(abort{})
 			}
 			out = append(out, s.f.ConstructVariable(binding.col))
+		case "true":
+			out = append(out, s.f.ConstructTrue())
+		case "false":
+			out = append(out, s.f.ConstructFalse())
+		case "int":
+			out = append(out, s.f.ConstructConst(tree.NewDInt(tree.DInt(a.Value)), types.Int))
 		default:
 			panic(abort{})
 		}

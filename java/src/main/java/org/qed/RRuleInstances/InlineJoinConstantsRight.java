@@ -10,6 +10,7 @@ import org.qed.RexRN;
 import org.qed.RexRN.Pred;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the right input's inlinable constant column is modeled as an INNER equality join r = c (concrete EQUALS) against a unique single-column relation (the DSL has no typed constant literals), and one occurrence of the variable column in one uninterpreted INNER join conjunct is inlined to the constant column.
 public record InlineJoinConstantsRight() implements RRule {
     // Scan of a table with one variable column `r` (the column whose value is

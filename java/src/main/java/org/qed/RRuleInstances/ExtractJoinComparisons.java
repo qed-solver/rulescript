@@ -24,6 +24,7 @@ import org.qed.RuleBuilder;
 // uninterpreted predicate (cmp), so the proof is purely structural: both
 // sides denote the bag of (x, y) pairs satisfying L(x) ∧ R(y) ∧
 // cmp(f(x), g(y)).
+// ORIGIN: CockroachDB
 public record ExtractJoinComparisons() implements RRule {
     static final RelRN left  = RelRN.scan("L", "L_Type");
     static final RelRN right = RelRN.scan("R", "R_Type");

@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — identity unordered DistinctOn only (every input column is a grouping column and there are no aggregate outputs, so every filter is bound by the input columns and the kept/unbound remainder is vacuous); the rule's ConstAgg/FirstAgg-column case is unmodelable because QED's aggregates are uninterpreted.
 public record PushSelectIntoUnorderedDistinctOn() implements RRule {
     // col 0 = a, col 1 = b: both are grouping columns of the identity DistinctOn

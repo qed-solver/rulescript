@@ -10,6 +10,7 @@ import org.qed.RRule;
 import org.qed.RuleBuilder;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — INNER join only, one single-key equi conjunct, one 2-ary ON-clause item referencing exactly the right key plus one left non-key column, rebound to the left key.
 public record MapFilterIntoJoinLeft() implements RRule {
     static final SqlOperator eq = SqlStdOperatorTable.EQUALS;

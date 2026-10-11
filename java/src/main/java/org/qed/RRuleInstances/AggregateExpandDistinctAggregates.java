@@ -7,6 +7,7 @@ import org.qed.RelType;
 import org.qed.RuleBuilder;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 public record AggregateExpandDistinctAggregates() implements RRule {
     static final RelRN source = RelRN.scan("S", "S_Type");
     static final RexRN k = source.groupBy("k");

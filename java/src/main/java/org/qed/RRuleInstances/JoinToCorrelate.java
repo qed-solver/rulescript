@@ -7,6 +7,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: Calcite
 public record JoinToCorrelate() implements RRule {
     static final RelRN left = RelRN.scan("L", RexRN.varType("T", true), false);
     static final RelRN right = RelRN.scan("R", RexRN.varType("T", true), false);

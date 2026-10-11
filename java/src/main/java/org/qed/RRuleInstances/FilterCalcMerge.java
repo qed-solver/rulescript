@@ -8,6 +8,7 @@ import org.qed.RexRN;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
 
+// ORIGIN: Calcite
 public record FilterCalcMerge() implements RRule {
     static final RelRN source = RelRN.scanMany("S", Seq.of(
             RexRN.varType("X_Type", true),

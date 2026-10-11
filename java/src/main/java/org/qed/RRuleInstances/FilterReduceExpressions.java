@@ -4,6 +4,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 public record FilterReduceExpressions() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");
 

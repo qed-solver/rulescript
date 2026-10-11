@@ -4,6 +4,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 public record FilterProjectTranspose() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");
     static final RexRN projExpr = source.proj("Proj", "Proj_Type");

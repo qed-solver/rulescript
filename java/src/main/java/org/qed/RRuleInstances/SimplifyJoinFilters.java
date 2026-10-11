@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — only removes a True ON item, INNER join only
 public record SimplifyJoinFilters() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");

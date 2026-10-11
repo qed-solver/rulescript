@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — swaps two distinct ON-filter items in an INNER join (minimal 2-element unsorted list) rather than sorting an arbitrary-length filter list with the backend's SortFilters
 public record SortFiltersInJoin() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");

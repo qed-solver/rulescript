@@ -1,0 +1,141 @@
+{
+  "name" : "SemiJoinProjectTranspose",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "semi",
+    "cond" : {
+      "op" : "pred",
+      "name" : "C",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r3" ]
+      } ]
+    },
+    "left" : {
+      "op" : "project",
+      "exprs" : [ {
+        "op" : "proj",
+        "name" : "P0",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        } ]
+      }, {
+        "op" : "proj",
+        "name" : "P1",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        } ]
+      } ],
+      "input" : {
+        "op" : "scan",
+        "name" : "X",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "id" : "r2"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "Y",
+      "arity" : 2,
+      "id" : "r1"
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "P0",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r4"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r4"
+      } ]
+    }, {
+      "op" : "proj",
+      "name" : "P1",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r4"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r4"
+      } ]
+    } ],
+    "input" : {
+      "op" : "join",
+      "type" : "semi",
+      "cond" : {
+        "op" : "pred",
+        "name" : "C",
+        "args" : [ {
+          "op" : "proj",
+          "name" : "P0",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r4"
+          }, {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r4"
+          } ]
+        }, {
+          "op" : "proj",
+          "name" : "P1",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r4"
+          }, {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r4"
+          } ]
+        }, {
+          "op" : "field",
+          "ordinal" : 2,
+          "of" : "r4"
+        }, {
+          "op" : "field",
+          "ordinal" : 3,
+          "of" : "r4"
+        } ]
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "X",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "Y",
+        "arity" : 2,
+        "id" : "r1"
+      },
+      "id" : "r4"
+    },
+    "id" : "r5"
+  }
+}

@@ -4,6 +4,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the barrier's input is fixed to a single column; the original rule applies to any arity
 public record PushLeakproofFiltersIntoPermeableBarrier() implements RRule {
     // Barrier modeled as an identity projection (same as EliminateRedundantBarrier).

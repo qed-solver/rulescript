@@ -6,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RRule;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — uncorrelated EXISTS only (modeled as a left-semi join on a constant-true condition), instantiated with a single uninterpreted group key and no aggregate calls
 public record EliminateExistsGroupBy() implements RRule {
     // The outer relation whose rows each test the EXISTS subquery. An

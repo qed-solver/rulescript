@@ -5,6 +5,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.apache.calcite.rel.core.JoinRelType;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — non-Apply InnerJoin only; the ON condition and the Select's filter list are each abstracted as a single uninterpreted predicate
 public record MergeSelectInnerJoin() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");

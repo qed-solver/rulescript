@@ -8,6 +8,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: Calcite
 public record SemiJoinJoinTranspose() implements RRule {
     static final RelRN X = RelRN.scan("X", "Key_Type");
     static final RelRN Y = RelRN.scan("Y", "Key_Type");

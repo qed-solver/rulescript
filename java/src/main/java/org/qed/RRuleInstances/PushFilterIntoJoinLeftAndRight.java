@@ -7,6 +7,7 @@ import org.qed.RelRN;
 import org.qed.RelType;
 import org.qed.RRule;
 import org.qed.RexRN;
+// ORIGIN: CockroachDB
 public record PushFilterIntoJoinLeftAndRight() implements RRule {
     static final RelType.VarType kT = RexRN.varType("Key_Type", false);
     static final RelRN left = RelRN.scanMany("L", Seq.of(kT, kT));

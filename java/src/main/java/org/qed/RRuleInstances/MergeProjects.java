@@ -8,6 +8,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — one-column source and the outer projection references only the inner passthrough column, so the inner synthesized column is pruned.
 public record MergeProjects() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");

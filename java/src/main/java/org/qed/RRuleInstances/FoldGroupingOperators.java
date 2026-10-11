@@ -4,6 +4,7 @@ import kala.collection.Seq;
 import org.qed.RRule;
 import org.qed.RelRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the outer grouping operator has no aggregate calls and its group key is exactly the inner grouping operator's group key (trivial identity functional dependency), so the fold only drops the inner's single aggregate call; the aggregate-merging algebra and non-trivial functional dependencies of the full rule are not modeled.
 public record FoldGroupingOperators() implements RRule {
     static final RelRN source = RelRN.scan("S", "S_Type");

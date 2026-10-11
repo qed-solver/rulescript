@@ -10,6 +10,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the window functions are modeled as partition-determined uninterpreted aggregates joined back to the input on the partition column (no frame/ordering semantics), with a single partition column, a single window function, a two-column input, one pushed conjunct that references only the partition column (the rule's ColsAreDeterminedBy precondition, encoded by construction), and one remaining conjunct over the window output row.
 public record PushSelectIntoWindow() implements RRule {
     static final RelType.VarType kT = RexRN.varType("k", false);

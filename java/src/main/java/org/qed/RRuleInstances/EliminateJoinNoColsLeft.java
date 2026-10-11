@@ -8,6 +8,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — covers the non-correlated InnerJoin operator; the correlated InnerJoinApply variant of the source rule is not modeled.
 public record EliminateJoinNoColsLeft() implements RRule {
     // $left & ColsAreEmpty(OutputCols($left)) & HasOneRow($left): a

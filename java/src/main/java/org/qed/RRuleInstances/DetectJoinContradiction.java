@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — INNER join only
 public record DetectJoinContradiction() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");

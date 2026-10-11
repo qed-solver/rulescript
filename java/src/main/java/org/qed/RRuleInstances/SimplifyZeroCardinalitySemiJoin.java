@@ -5,6 +5,7 @@ import org.qed.RelRN;
 import org.qed.RRule;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the HasZeroRows precondition is encoded as a literal .empty() relation (a statically known-empty shape) and the join filter is fixed to an uninterpreted on-condition
 public record SimplifyZeroCardinalitySemiJoin() implements RRule {
     static final RelRN left = RelRN.scan("Left", "Left_Type");

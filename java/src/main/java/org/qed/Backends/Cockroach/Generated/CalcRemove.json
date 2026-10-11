@@ -1,0 +1,29 @@
+{
+  "name" : "CalcRemove",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r0"
+    } ],
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 2,
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "scan",
+    "name" : "Source",
+    "arity" : 2,
+    "id" : "r0"
+  }
+}

@@ -4,6 +4,7 @@ package org.qed.RRuleInstances;
 import org.qed.RRule;
 import org.qed.RelRN;
 
+// ORIGIN: CockroachDB
 public record EliminateZeroCardSelect() implements RRule {
     static final RelRN zeroInput = RelRN.scan("Input", "Input_Type").empty();
 

@@ -7,6 +7,7 @@ import org.qed.RelRN;
 import org.qed.RelType;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — encodes only the In branch with a fixed-shape tuple (a, b, a, b) over two distinct values modeled as source columns; the NotIn branch and arbitrary arities follow the same disjunction-idempotency argument.
 public record NormalizeInConst() implements RRule {
     // V: the (uninterpreted) type of the left operand and of the tuple elements.

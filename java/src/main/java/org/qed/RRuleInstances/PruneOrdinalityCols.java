@@ -8,6 +8,7 @@ import org.qed.RelType;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the ordinality-generated column is modeled as one uninterpreted function O of the retained input columns, shared by both sides and consumed by the outer projection, so row-position/ordering semantics are not captured
 public record PruneOrdinalityCols() implements RRule {
     // Ordinality input: 3 columns — c0/c1 are needed (referenced by the outer

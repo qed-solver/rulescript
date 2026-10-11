@@ -49,7 +49,7 @@ func TestSQLPushAggDistinctIntoGroupBy(t *testing.T) {
 		sql   string
 		fires bool
 	}{
-		{"SELECT a+1 AS k1, a+2 AS k2, count(DISTINCT a+3) AS f FROM t GROUP BY a+1, a+2", false},
+		{"SELECT a+1 AS k1, a+2 AS k2, count(DISTINCT a+3) AS f FROM t GROUP BY a+1, a+2", true},
 		{"SELECT k1,k2,count(DISTINCT x) FROM (SELECT a+1 AS k1,a+2 AS k2,a+3 AS x FROM t) AS q GROUP BY k1,k2", true},
 		{"SELECT k1,k2,count(DISTINCT x) FROM (SELECT a+1 AS k1,a+2 AS k2,a+3 AS x FROM t) AS q GROUP BY 1,2", true},
 	} {

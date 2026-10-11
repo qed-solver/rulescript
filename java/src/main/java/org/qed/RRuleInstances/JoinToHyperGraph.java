@@ -8,6 +8,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: Calcite
 public record JoinToHyperGraph() implements RRule {
     static final RelRN A = RelRN.scan("A", "A_Type");
     static final RelRN B = RelRN.scan("B", "B_Type");

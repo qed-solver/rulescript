@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the ProjectSet input has one used column and one unused column that is pruned, the zip emits a single column of rows, and the emitted rows depend on the input only through an uninterpreted membership predicate that does not reference the pruned column
 public record PruneProjectSetCols() implements RRule {
     // Inner input of the ProjectSet: two columns — col 0 is referenced by the

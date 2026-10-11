@@ -8,6 +8,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — fixed three-column inner project whose outer references only the passthrough and one synthesized column, pruning exactly the unused third column.
 public record PruneProjectCols() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");

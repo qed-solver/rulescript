@@ -10,6 +10,7 @@ import org.qed.RuleBuilder;
 
 import kala.collection.Seq;
 
+// ORIGIN: Calcite
 public record FilterFlattenCorrelatedCondition() implements RRule {
     static final RelRN outer = RelRN.scan("Outer", "T");
     static final RelRN inner = RelRN.scan("Inner", "T2");

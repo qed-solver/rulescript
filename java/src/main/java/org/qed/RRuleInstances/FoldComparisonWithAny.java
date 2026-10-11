@@ -6,6 +6,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — encodes only the constant instance TRUE = ANY (FALSE, TRUE) ⟹ TRUE, as OR(EQ(TRUE,FALSE), EQ(TRUE,TRUE)) ⟹ TRUE, since the DSL has no tuple/ANY node and no NULL literal.
 public record FoldComparisonWithAny() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");

@@ -1,0 +1,68 @@
+{
+  "name" : "JoinAddRedundantSemiJoin",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "pred",
+      "name" : "cond",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r2" ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "X",
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "Y",
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "pred",
+      "name" : "cond",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r3" ]
+      } ]
+    },
+    "left" : {
+      "op" : "join",
+      "type" : "semi",
+      "cond" : {
+        "op" : "pred",
+        "name" : "cond",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r4" ]
+        } ]
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "X",
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "Y",
+        "id" : "r1"
+      },
+      "id" : "r4"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "Y",
+      "id" : "r1"
+    },
+    "id" : "r3"
+  }
+}

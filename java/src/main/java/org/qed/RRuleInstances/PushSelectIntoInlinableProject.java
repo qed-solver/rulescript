@@ -7,6 +7,7 @@ import org.qed.RexRN;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — two synthesized (inlinable) columns and two uninterpreted passthrough columns, with every Select filter inlined below the Project (an uninterpreted predicate over each column's defining expression) and no filter left above the Project; the CanInlineProjections/FilterHasCorrelatedSubquery matching guards are not bag-semantic preconditions.
 public record PushSelectIntoInlinableProject() implements RRule {
     // The input relation: two physical columns a, b (as in the rule's example).

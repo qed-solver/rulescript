@@ -9,6 +9,7 @@ import org.qed.RuleBuilder;
 
 import kala.collection.Seq;
 
+// ORIGIN: Calcite
 public record FilterCorrelate() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");
     static final RelRN right = RelRN.scan("R", "R_Type");

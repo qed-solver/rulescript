@@ -6,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RelType;
 import org.qed.RRule;
 
+// ORIGIN: CockroachDB
 public record EliminateProject() implements RRule {
     // A two-column input standing in for $input (uninterpreted, any arity in
     // the original rule).

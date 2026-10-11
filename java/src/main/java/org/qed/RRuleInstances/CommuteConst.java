@@ -8,6 +8,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RexRN.Pred;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — only the Eq variant is covered, as a top-level EQUALS filter over a two-column row (inner cross join of two single-column scans of one shared type), proving the universal commutativity law x = y <-> y = x under three-valued semantics; the Plus/Mult/Bit* variants would be uninterpreted projections whose commutativity QED fundamentally cannot know
 public record CommuteConst() implements RRule {
     static final RelRN left = RelRN.scan("L", "V");

@@ -9,6 +9,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 public record TryRemapJoinOuterColsRight() implements RRule {
     static final RelRN L = RelRN.scan("L", RexRN.varType("T", true), false);
     static final RelRN R = RelRN.scan("R", RexRN.varType("T", true), false);

@@ -9,6 +9,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RexRN.Pred;
 
+// ORIGIN: Calcite
 public record ProjectJoinRemove() implements RRule {
     static final RelType.VarType V = new RelType.VarType("V", false);
     static final RelRN t = RelRN.scan("T", V, true);

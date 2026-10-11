@@ -8,6 +8,7 @@ import org.qed.RexRN;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — both UnionAll inputs share the same three-column schema (types C0, C1, C2) with exactly columns 0 and 2 needed, and the outer projection is one uninterpreted projection over column 0 plus a single passthrough of column 2.
 public record PruneUnionAllCols() implements RRule {
     // Both UnionAll inputs share one three-column schema. Column 1 (C1) is

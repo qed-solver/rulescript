@@ -8,6 +8,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 
+// ORIGIN: Calcite
 public record JoinUnionTranspose() implements RRule {
     static final RelRN X = RelRN.scan("X", "T");
     static final RelRN Y = RelRN.scan("Y", "T");

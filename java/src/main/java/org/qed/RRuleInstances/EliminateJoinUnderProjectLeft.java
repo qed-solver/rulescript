@@ -10,6 +10,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RexRN.Pred;
 
+// ORIGIN: CockroachDB
 public record EliminateJoinUnderProjectLeft() implements RRule {
     // Single NON-NULLABLE column and scan UNIQUE on that column: every row
     // matches itself (non-null, so l.c = l.c holds), and at most one row

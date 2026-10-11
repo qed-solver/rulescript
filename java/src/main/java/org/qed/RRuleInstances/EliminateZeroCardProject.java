@@ -6,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RelType;
 import org.qed.RRule;
 
+// ORIGIN: CockroachDB
 public record EliminateZeroCardProject() implements RRule {
     static final RelType.VarType t0 = new RelType.VarType("Input_Type0", true);
     static final RelType.VarType t1 = new RelType.VarType("Input_Type1", true);

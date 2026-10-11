@@ -8,6 +8,7 @@ import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.sql.SqlOperator;
 import kala.collection.Seq;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — LEFT outer join with INNER inner join over single-column L/IL/IR and one 2-arg computed projection f
 public record TryDecorrelateProjectInnerJoin() implements RRule {
     static final SqlOperator on = RuleBuilder.create().genericPredicateOp("on", true);

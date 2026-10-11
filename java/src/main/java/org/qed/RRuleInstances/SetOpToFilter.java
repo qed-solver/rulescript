@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 public record SetOpToFilter() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");
     static final RexRN p1 = source.pred("P1");

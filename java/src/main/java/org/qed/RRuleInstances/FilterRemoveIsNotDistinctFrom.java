@@ -8,6 +8,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RexRN.Pred;
 
+// ORIGIN: Calcite
 public record FilterRemoveIsNotDistinctFrom() implements RRule {
     static final RelRN left = RelRN.scan("L", "V");
     static final RelRN right = RelRN.scan("R", "V");

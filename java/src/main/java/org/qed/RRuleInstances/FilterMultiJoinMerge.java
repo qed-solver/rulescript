@@ -5,6 +5,7 @@ import org.qed.RelRN;
 import org.qed.RRule;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 public record FilterMultiJoinMerge() implements RRule {
     static final RelRN a = RelRN.scan("A", "A_Type");
     static final RelRN b = RelRN.scan("B", "B_Type");

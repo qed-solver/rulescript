@@ -6,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RelType;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the left operand is modeled as structurally empty, which is the faithful encoding of `HasZeroRows $left` since the DSL has no cardinality constraint.
 public record EliminateSetRight() implements RRule {
     // Arbitrary-width inputs: three uninterpreted VarTypes, shared by both

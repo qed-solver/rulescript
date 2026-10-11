@@ -10,6 +10,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — one window function, modeled as a per-partition uninterpreted aggregate whose input is the pruned (needed-columns-only) relation in both sides, so the never-used passthrough column is provably absent from the window's aggregate input (encoding the NeededWindowCols precondition by construction).
 public record PruneWindowInputCols() implements RRule {
     static final RelType.VarType kT = RexRN.varType("k", false);

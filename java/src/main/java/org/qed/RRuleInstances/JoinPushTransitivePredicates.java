@@ -9,6 +9,7 @@ import org.qed.RRule;
 import org.qed.RuleBuilder;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 public record JoinPushTransitivePredicates() implements RRule {
     static final SqlOperator eq = SqlStdOperatorTable.EQUALS;
 

@@ -7,6 +7,7 @@ import org.qed.RelRN;
 import org.qed.RelType;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: FULL
 public record SimplifyInSingleElement() implements RRule {
     // V: the (uninterpreted) type shared by the left operand and the single tuple element.

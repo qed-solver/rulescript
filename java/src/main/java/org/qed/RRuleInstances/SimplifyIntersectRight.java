@@ -7,6 +7,7 @@ import org.qed.RelRN;
 import org.qed.RRule;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — 2-input, single-column, same row type, identity column mapping, with the right input a base scan declared unique (has a strict key).
 public record SimplifyIntersectRight() implements RRule {
     // Right has a strict key (unique); left does not.

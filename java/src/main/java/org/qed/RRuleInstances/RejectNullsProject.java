@@ -6,6 +6,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the projection consists of a single synthesized column `-a` (concrete UNARY_MINUS over the one nullable input column `a`) plus one passthrough column, and the parent select filter is exactly IS NOT NULL on the synthesized column; the general null-transmission analysis of the original rule (arbitrary projections, RejectNullCols metadata) is not modeled.
 public record RejectNullsProject() implements RRule {
     // Input: one nullable column `a` (the candidate null-transmitting column).

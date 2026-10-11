@@ -6,6 +6,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: FULL
 public record RemoveNotNullCondition() implements RRule {
     // $input:* — the filtered input relation. Column 0 is the $col from the

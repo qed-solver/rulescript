@@ -1,0 +1,102 @@
+{
+  "name" : "MultiJoinOptimizeBushy",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "pred",
+      "name" : "F",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r5" ]
+      } ]
+    },
+    "left" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "true"
+      },
+      "left" : {
+        "op" : "join",
+        "type" : "inner",
+        "cond" : {
+          "op" : "true"
+        },
+        "left" : {
+          "op" : "scan",
+          "name" : "A",
+          "id" : "r0"
+        },
+        "right" : {
+          "op" : "scan",
+          "name" : "B",
+          "id" : "r1"
+        },
+        "id" : "r6"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "C",
+        "id" : "r2"
+      },
+      "id" : "r4"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "D",
+      "id" : "r3"
+    },
+    "id" : "r5"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "pred",
+      "name" : "F",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r8" ]
+      } ]
+    },
+    "left" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "true"
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "A",
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "B",
+        "id" : "r1"
+      },
+      "id" : "r6"
+    },
+    "right" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "true"
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "C",
+        "id" : "r2"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "D",
+        "id" : "r3"
+      },
+      "id" : "r7"
+    },
+    "id" : "r8"
+  }
+}

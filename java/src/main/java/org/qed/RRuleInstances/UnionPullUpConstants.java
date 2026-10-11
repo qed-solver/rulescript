@@ -5,6 +5,7 @@ import org.qed.RelRN;
 import org.qed.RRule;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 public record UnionPullUpConstants() implements RRule {
     static final RexRN lit = RexRN.trueLiteral();
 

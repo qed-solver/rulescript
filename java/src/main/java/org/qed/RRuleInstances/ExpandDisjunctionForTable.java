@@ -6,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RRule;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 public record ExpandDisjunctionForTable() implements RRule {
     static final RelRN t1 = RelRN.scan("t1", "T1_Type");
     static final RelRN t2 = RelRN.scan("t2", "T2_Type");

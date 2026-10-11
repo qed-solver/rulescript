@@ -6,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RelType;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — fixed 4-column scan (one group key, two aggregate arguments, one unused column), one group key, two non-distinct single-argument aggregates, and the outer projection selects all aggregate output columns.
 public record PruneGroupByCols() implements RRule {
     static final RelRN base = RelRN.scanMany("S",

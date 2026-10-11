@@ -4,6 +4,7 @@ import kala.collection.Seq;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.sql.SqlOperator;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — INNER join only; right Project a pure column remap (passthrough, no computed projections); 1-col left / 2-col right
 public record TryDecorrelateProject() implements RRule {
   static final RelRN L = RelRN.scan("L","L_Type");

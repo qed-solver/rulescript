@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the ProjectSet input has one column, the zip emits one column of rows, there is exactly one bound filter conjunct (on the input column, pushed below the ProjectSet) and one unbound conjunct (on the synthesized column, kept above); the zip's row-emission membership predicate is uninterpreted over the input column and the emitted row, and the bound conjunct does not reference any column the membership predicate depends on (IsBoundBy guard).
 public record PushSelectIntoProjectSet() implements RRule {
     // Input of the ProjectSet: one column a (an "input column" of the

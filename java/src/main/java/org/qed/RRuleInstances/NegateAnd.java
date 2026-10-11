@@ -6,6 +6,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 public record NegateAnd() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");
     static final RexRN left = source.pred("left");

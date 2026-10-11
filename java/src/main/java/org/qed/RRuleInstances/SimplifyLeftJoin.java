@@ -9,6 +9,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RexRN.Pred;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — self-join in which both inputs are the same single non-nullable-column scan joined on equality of that column
 public record SimplifyLeftJoin() implements RRule {
     // Single NON-NULLABLE column: ensures a left row's column value always

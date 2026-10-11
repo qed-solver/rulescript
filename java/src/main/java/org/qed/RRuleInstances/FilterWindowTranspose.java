@@ -6,6 +6,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: Calcite
 public record FilterWindowTranspose() implements RRule {
     static final RelRN base = RelRN.scanMany("B", Seq.of(
             RexRN.varType("K_Type", true),

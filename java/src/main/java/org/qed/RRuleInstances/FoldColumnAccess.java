@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — a 2-element statically constructed tuple in projection position: a ProjectMany building two arbitrary scalar expressions over a base, with a single-column field access on that tuple, replaced by projecting the accessed element directly.
 public record FoldColumnAccess() implements RRule {
     static final RelRN base = RelRN.scan("Source", "Source_Type");

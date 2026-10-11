@@ -10,6 +10,7 @@ import org.qed.RelType;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — encodes only the In branch over a fixed 2-element non-empty tuple; NotIn and other non-empty arities are structurally identical but each needs its own before()/after() pair
 public record FoldNullInNonEmpty() implements RRule {
     static final RelType.VarType V = new RelType.VarType("V", true);

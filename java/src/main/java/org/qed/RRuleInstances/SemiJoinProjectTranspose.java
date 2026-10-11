@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
 
+// ORIGIN: Calcite
 public record SemiJoinProjectTranspose() implements RRule {
     static final RelRN x = RelRN.scanMany("X", Seq.of(
             new RelType.VarType("X0_Type", true),

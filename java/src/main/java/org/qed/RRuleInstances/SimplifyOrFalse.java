@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — assumes the Or-with-False occurs as the entire filter predicate, not nested inside another boolean operator or used as a join condition
 public record SimplifyOrFalse() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");

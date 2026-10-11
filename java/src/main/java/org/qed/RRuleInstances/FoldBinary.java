@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 public record FoldBinary() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");
 

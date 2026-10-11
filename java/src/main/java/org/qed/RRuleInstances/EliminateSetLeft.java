@@ -6,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RelType;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — covers only the UnionAll arm (the ExceptAll arm requires bag-minus semantics that QED does not model), with the zero-row right operand modeled as a structurally empty relation to encode HasZeroRows.
 public record EliminateSetLeft() implements RRule {
     // Arbitrary-width inputs: three uninterpreted VarTypes, shared by both

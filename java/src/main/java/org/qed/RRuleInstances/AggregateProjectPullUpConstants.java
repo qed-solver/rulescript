@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 public record AggregateProjectPullUpConstants() implements RRule {
     static final RelRN source = RelRN.scan("S", "S_Type");
     static final RexRN constant = RexRN.trueLiteral();

@@ -57,14 +57,11 @@ public final class CockroachGenerator {
         collectJoinFieldRelations(rel(rule.after(), false), positionalScans);
         constrainPositionalScans(from, positionalScans);
         constrainPositionalScans(to, positionalScans);
-        if (setCount(from) > 1 || setCount(to) > 1) {
-            throw new UnsupportedOperationException("Unsupported multiple set operations: SetPrivate mapping");
-        }
         if (setCount(to) > 0 && setCount(from) == 0 &&
                 (!to.path("op").asText().equals("set") || setCount(to) != 1
                         || rootOutputArity(from) < 0
-                        || rootOutputArity(from) != rootOutputArity((ObjectNode) to.get("left"))
-                        || rootOutputArity(from) != rootOutputArity((ObjectNode) to.get("right")))) {
+                        || differentArity(rootOutputArity(from), rootOutputArity((ObjectNode) to.get("left")))
+                        || differentArity(rootOutputArity(from), rootOutputArity((ObjectNode) to.get("right"))))) {
             throw new UnsupportedOperationException("Unsupported new set operation: root output column mapping");
         }
         var matchedEmptyIds = new HashSet<String>();
@@ -148,6 +145,35 @@ public final class CockroachGenerator {
                         }
                         source = candidate;
                         mapping = ordinals;
+                    }
+                }
+                if (source == null) {
+                    var projects = new ArrayList<ObjectNode>();
+                    collectProjects(from, projects);
+                    if (rel.withArray("rows").size() == 1) {
+                        for (var project : projects) {
+                            var ordinals = new ArrayList<Integer>();
+                            var used = new HashSet<Integer>();
+                            var valid = true;
+                            for (int target = 0; target < width && valid; target++) {
+                                int match = -1;
+                                for (int index = 0; index < project.withArray("exprs").size(); index++) {
+                                    if (project.withArray("exprs").get(index).equals(rel.withArray("rows").get(0).get(target))) {
+                                        if (match >= 0) { valid = false; break; }
+                                        match = index;
+                                    }
+                                }
+                                if (match < 0 || !used.add(match)) { valid = false; }
+                                else { ordinals.add(match); }
+                            }
+                            if (valid) {
+                                if (source != null) {
+                                    throw new UnsupportedOperationException("Unsupported ambiguous new Values column mapping");
+                                }
+                                source = project;
+                                mapping = ordinals;
+                            }
+                        }
                     }
                 }
                 if (source == null) {
@@ -251,6 +277,21 @@ public final class CockroachGenerator {
         }
     }
 
+    private static void collectProjects(ObjectNode rel, List<ObjectNode> found) {
+        switch (rel.path("op").asText()) {
+            case "project" -> {
+                found.add(rel);
+                collectProjects((ObjectNode) rel.get("input"), found);
+            }
+            case "filter", "aggregate" -> collectProjects((ObjectNode) rel.get("input"), found);
+            case "join", "set" -> {
+                collectProjects((ObjectNode) rel.get("left"), found);
+                collectProjects((ObjectNode) rel.get("right"), found);
+            }
+            default -> { }
+        }
+    }
+
     private static void collectProjectIds(ObjectNode rel, Set<String> ids) {
         switch (rel.path("op").asText()) {
             case "project" -> {
@@ -290,6 +331,10 @@ public final class CockroachGenerator {
             }
             default -> { }
         }
+    }
+
+    private static boolean differentArity(int expected, int actual) {
+        return actual >= 0 && actual != expected;
     }
 
     private static int rootOutputArity(ObjectNode rel) {
@@ -414,8 +459,8 @@ public final class CockroachGenerator {
                     for (var arg : agg.withArray("args")) {
                         if (arg.path("op").asText().equals("group_key")) {
                             var keyName = arg.path("name").asText();
-                            if (from && !groups.add(keyName)) {
-                                throw new UnsupportedOperationException("Unsupported repeated grouping symbol: " + keyName);
+                            if (from) {
+                                groups.add(keyName);
                             }
                             if (!from && !groups.contains(keyName)) {
                                 throw new UnsupportedOperationException("Unsupported unbound grouping symbol: " + keyName);
@@ -567,9 +612,8 @@ public final class CockroachGenerator {
     }
 
     private static void checkProj(ObjectNode proj, boolean from, Set<String> projs) {
-        if (from && !projs.add(proj.path("name").asText())) {
-            throw new UnsupportedOperationException("Unsupported repeated projection symbol: "
-                    + proj.path("name").asText());
+        if (from) {
+            projs.add(proj.path("name").asText());
         }
         if (!from && !projs.contains(proj.path("name").asText())) {
             throw new UnsupportedOperationException("Unsupported unbound projection symbol: "
@@ -588,10 +632,15 @@ public final class CockroachGenerator {
                     }
                 }
                 case "proj" -> {
-                    if (from && !symbol.path("op").asText().equals("pred")) {
+                    if (from && !symbol.path("op").asText().equals("pred") && !symbol.path("op").asText().equals("proj")) {
                         throw new UnsupportedOperationException("Unsupported bound symbol argument: proj");
                     }
                     checkProj((ObjectNode) arg, from, projs);
+                }
+                case "true", "false", "int" -> {
+                    if (from) {
+                        throw new UnsupportedOperationException("Unsupported symbol argument: " + arg.path("op").asText());
+                    }
                 }
                 default -> throw new UnsupportedOperationException("Unsupported symbol argument: "
                         + arg.path("op").asText());

@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the aggregation argument is the input relation's unique (primary) key, so each group holds at most one row and AggDistinct is a per-group no-op; the full rule (min/max/bool_and/bool_or are idempotent, so AggDistinct never changes their value over arbitrary inputs) is unprovable in QED, which models every aggregate, even one named "Min", as an uninterpreted function knowing only bag-equality of its input.
 public record EliminateAggDistinct() implements RRule {
     static final RelRN source = RelRN.scan("S", RexRN.varType("S_Type", false), true);

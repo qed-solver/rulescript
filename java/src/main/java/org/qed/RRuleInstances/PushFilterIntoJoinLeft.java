@@ -8,6 +8,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — INNER join only (no Semi/Left/Full/Anti), one left-bound conjunct with no outer columns, one unbound conjunct, single-column inputs
 public record PushFilterIntoJoinLeft() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");

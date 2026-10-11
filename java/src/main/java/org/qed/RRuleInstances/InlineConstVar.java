@@ -10,6 +10,7 @@ import org.qed.RexRN;
 import org.qed.RexRN.Pred;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — "a variable restricted to a constant c" is modeled as an INNER equality join a = c against a unique single-column relation (the DSL has no typed constant literals), and one occurrence of the variable in one uninterpreted filter conjunct is inlined to c (a single self-retriggering iteration of the rule).
 public record InlineConstVar() implements RRule {
     // Source scan: the table `foo` with one column `a` (the variable column).

@@ -8,6 +8,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — fixed three-column scan input whose Select filter and outer projection reference only columns 0 and 1, pruning exactly the never-referenced third column.
 public record PruneSelectCols() implements RRule {
     // Select input: three columns. Columns 0 and 1 are needed (used by the

@@ -18,6 +18,7 @@ import org.qed.RuleBuilder;
 // pre-existing partition columns (partcols=[]) so AddColsToPartition adds
 // exactly L's own key as the sole partition column, single aggregate call,
 // ON references only the input's value column.
+// ORIGIN: CockroachDB
 public record TryDecorrelateWindow() implements RRule {
     static final RelType.VarType vType = new RelType.VarType("V", false);
     static final RelRN input = RelRN.scan("Input", vType, false);

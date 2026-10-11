@@ -6,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
 
+// ORIGIN: Calcite
 public record ProjectSetOpTranspose() implements RRule {
     static final RelRN left = RelRN.scan("L", "T");
     static final RelRN right = RelRN.scan("R", "T");

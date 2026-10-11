@@ -5,6 +5,7 @@ import org.qed.RelRN;
 import org.qed.RRule;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 // SCOPE: FULL
 public record JoinExtractFilter() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");

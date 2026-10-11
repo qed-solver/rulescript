@@ -8,6 +8,7 @@ import org.qed.RelType;
 import org.qed.RRule;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — window functions modeled as partition-determined per-partition uninterpreted aggregates joined back to the input (no frame/ordering semantics, same modeling as FoldGroupByAndWindow); fixed shape with exactly two window functions, the one needed by the outer projection is kept and the other pruned.
 public record PruneWindowOutputCols() implements RRule {
     static final RelType.VarType kT = RexRN.varType("k", false);

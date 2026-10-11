@@ -8,6 +8,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 public record TryDecorrelateSemiJoin() implements RRule {
     // EnsureKey($left): single column, fully keyed so KeyCols = {c0} and NonKeyCols = {}
     static final RelRN L = RelRN.scan("L", RexRN.varType("TL", true), true);

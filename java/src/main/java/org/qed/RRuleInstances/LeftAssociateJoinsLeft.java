@@ -8,6 +8,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the outer ON is a fixed representative split into two uninterpreted conjuncts (one bound to insideLeft+outsideRight, one unbound referencing insideRight+outsideRight) over single-column scans, not an arbitrary ExtractBound/Unbound decomposition
 public record LeftAssociateJoinsLeft() implements RRule {
     // Base relations (single-column scans), mirroring the rule's example:

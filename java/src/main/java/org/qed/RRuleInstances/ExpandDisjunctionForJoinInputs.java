@@ -6,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RRule;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 public record ExpandDisjunctionForJoinInputs() implements RRule {
     static final RelRN L = RelRN.scanMany("L", Seq.of(RexRN.varType("L_Type", true), RexRN.varType("L_Type2", true)));
     static final RelRN R = RelRN.scanMany("R", Seq.of(RexRN.varType("R_Type", true), RexRN.varType("R_Type2", true)));

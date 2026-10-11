@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the input has exactly two columns, which are the grouping columns (the DSL's scan has fixed arity); a no-agg GroupBy's output depends only on its grouping columns, so the only loss is the number of grouping columns.
 public record ConvertGroupByToDistinct() implements RRule {
     // Input relation whose columns are exactly the grouping columns. Since a

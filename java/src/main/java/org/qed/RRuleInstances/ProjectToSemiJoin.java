@@ -8,6 +8,7 @@ import org.qed.RelType;
 import org.qed.RRule;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 public record ProjectToSemiJoin() implements RRule {
     static final RelType.VarType T = RexRN.varType("T", true);
     static final RelRN left = RelRN.scanMany("L", Seq.of(T, T));

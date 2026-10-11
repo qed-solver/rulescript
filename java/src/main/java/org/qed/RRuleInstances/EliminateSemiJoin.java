@@ -5,6 +5,7 @@ import org.qed.RelRN;
 import org.qed.RRule;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — self semi-join in which both inputs are the same scan and the join filter is constant true, so every left row matches whenever the relation is non-empty
 public record EliminateSemiJoin() implements RRule {
     // The relation joined with itself. Sharing the same scan on both sides is

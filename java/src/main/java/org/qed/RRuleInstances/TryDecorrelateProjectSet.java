@@ -8,6 +8,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — one column each for left, ProjectSet input, and zip emission; ProjectSet abstracted as an INNER join under uninterpreted membership M and InnerJoinApply as a plain INNER join (correlation/row-emission unmodeled); $private join attributes dropped.
 public record TryDecorrelateProjectSet() implements RRule {
     // Left input of the InnerJoinApply (one column).

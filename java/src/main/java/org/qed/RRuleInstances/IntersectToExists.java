@@ -6,6 +6,7 @@ import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RelRN;
 import org.qed.RRule;
 
+// ORIGIN: Calcite
 public record IntersectToExists() implements RRule {
     static final RelRN a = RelRN.scan("A", "T");
     static final RelRN b = RelRN.scan("B", "T");

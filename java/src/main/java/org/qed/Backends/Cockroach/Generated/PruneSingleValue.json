@@ -1,0 +1,60 @@
+{
+  "name" : "PruneSingleValue",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "pred",
+      "name" : "jcond",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r2" ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "O",
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "values",
+      "rows" : [ [ {
+        "op" : "true"
+      } ] ],
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    }, {
+      "op" : "true"
+    } ],
+    "input" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "pred",
+        "name" : "jcond",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "true"
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "O",
+        "id" : "r0"
+      },
+      "id" : "r3"
+    },
+    "id" : "r4"
+  }
+}

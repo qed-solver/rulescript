@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the non-null redundant grouping column is assumed to be literally the same field as the surviving grouping column (a 2-column input whose two grouping columns are equal), and the UpsertDistinctOn has no aggregation output columns.
 public record ReduceNotNullGroupingCols() implements RRule {
     // Non-null key type: matches the source rule's NotNullCols precondition on the

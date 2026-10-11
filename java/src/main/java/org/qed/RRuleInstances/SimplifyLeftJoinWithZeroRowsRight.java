@@ -10,6 +10,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 public record SimplifyLeftJoinWithZeroRowsRight() implements RRule {
     static final RelType.VarType l0 = new RelType.VarType("Left_Type0", true);
     static final RelType.VarType l1 = new RelType.VarType("Left_Type1", true);

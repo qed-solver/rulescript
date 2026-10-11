@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — a 2-element statically constructed array in projection position (a ProjectMany building two arbitrary scalar expressions over a base), with a constant 1-based indirection index 2 (0-based ordinal 1, the in-range case of Cockroach's FoldIndirection), replaced by projecting the referenced element directly.
 public record FoldIndirection() implements RRule {
     static final RelRN base = RelRN.scan("Source", "Source_Type");

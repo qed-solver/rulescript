@@ -4,6 +4,7 @@ import kala.collection.Seq;
 import org.qed.RRule;
 import org.qed.RelRN;
 
+// ORIGIN: Calcite
 public record AggregateUnionAggregate() implements RRule {
     static final RelRN l = RelRN.scan("L", "T");
     static final RelRN a = RelRN.scan("A", "T");

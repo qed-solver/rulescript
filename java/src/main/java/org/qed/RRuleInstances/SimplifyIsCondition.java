@@ -7,6 +7,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RexRN.Pred;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — encodes the left-operand-never-null branch of EitherExprIsNeverNull: $left is a never-null (NOT NULL) column and $right is an arbitrary nullable column of the same uninterpreted type
 public record SimplifyIsCondition() implements RRule {
     // $input:* — the filtered input relation.

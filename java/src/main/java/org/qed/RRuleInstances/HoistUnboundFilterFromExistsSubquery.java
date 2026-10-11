@@ -9,6 +9,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 public record HoistUnboundFilterFromExistsSubquery() implements RRule {
     record Exists(RelRN input) implements RexRN {
         @Override

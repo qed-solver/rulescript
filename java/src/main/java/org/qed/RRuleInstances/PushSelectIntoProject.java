@@ -7,6 +7,7 @@ import org.qed.RexRN;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — one passthrough input column and one synthesized column, with exactly two filter conjuncts: one bound to the input column (pushed below the Project) and one referencing the synthesized column (kept above); the IsBoundBy/ExtractBoundConditions/ExtractUnboundConditions guards are enforced structurally by which column each conjunct references.
 public record PushSelectIntoProject() implements RRule {
     // The input relation: one physical column a.

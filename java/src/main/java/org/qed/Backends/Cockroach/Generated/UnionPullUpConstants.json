@@ -1,0 +1,91 @@
+{
+  "name" : "UnionPullUpConstants",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "set",
+    "type" : "union",
+    "all" : true,
+    "left" : {
+      "op" : "project",
+      "exprs" : [ {
+        "op" : "true"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r0"
+      } ],
+      "input" : {
+        "op" : "scan",
+        "name" : "A",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "id" : "r2"
+    },
+    "right" : {
+      "op" : "project",
+      "exprs" : [ {
+        "op" : "true"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r1"
+      } ],
+      "input" : {
+        "op" : "scan",
+        "name" : "B",
+        "arity" : 2,
+        "id" : "r1"
+      },
+      "id" : "r3"
+    },
+    "id" : "r4"
+  },
+  "to" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "true"
+    }, {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r5"
+    } ],
+    "input" : {
+      "op" : "set",
+      "type" : "union",
+      "all" : true,
+      "left" : {
+        "op" : "project",
+        "exprs" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        } ],
+        "input" : {
+          "op" : "scan",
+          "name" : "A",
+          "arity" : 2,
+          "id" : "r0"
+        },
+        "id" : "r6"
+      },
+      "right" : {
+        "op" : "project",
+        "exprs" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r1"
+        } ],
+        "input" : {
+          "op" : "scan",
+          "name" : "B",
+          "arity" : 2,
+          "id" : "r1"
+        },
+        "id" : "r7"
+      },
+      "id" : "r5"
+    },
+    "id" : "r8"
+  }
+}

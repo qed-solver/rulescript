@@ -8,6 +8,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: Calcite
 public record JoinAggregateTranspose() implements RRule {
     static final RelRN left = RelRN.scanMany("L", Seq.of(
             RexRN.varType("g_type", true), RexRN.varType("v_type", true)));

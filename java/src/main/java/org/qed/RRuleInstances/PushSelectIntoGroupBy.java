@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — only the GroupBy branch of the source rule is modeled (not the DistinctOn alternative), over an uninterpreted two-column base relation with a single identity grouping column and one non-distinct aggregate call, with every filter conjunct referencing only the grouping column (the rule's ConstAgg-column case is unmodelable: QED's aggregates are uninterpreted, so it cannot see that a ConstAgg's output is per-group-constant).
 public record PushSelectIntoGroupBy() implements RRule {
     // col 0 = x (grouping column), col 1 = y (aggregate input)

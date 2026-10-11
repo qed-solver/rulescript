@@ -1,0 +1,92 @@
+{
+  "name" : "JoinToSemiJoin",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r3"
+    } ],
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r3"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r3"
+        } ]
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "L",
+        "id" : "r0",
+        "arity" : 1
+      },
+      "right" : {
+        "op" : "aggregate",
+        "groups" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r1"
+        } ],
+        "aggs" : [ ],
+        "input" : {
+          "op" : "scan",
+          "name" : "R",
+          "id" : "r1",
+          "arity" : 1
+        },
+        "id" : "r2"
+      },
+      "id" : "r3"
+    },
+    "id" : "r4"
+  },
+  "to" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r5"
+    } ],
+    "input" : {
+      "op" : "join",
+      "type" : "semi",
+      "cond" : {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r5"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r5"
+        } ]
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "L",
+        "id" : "r0",
+        "arity" : 1
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "R",
+        "id" : "r1",
+        "arity" : 1
+      },
+      "id" : "r5"
+    },
+    "id" : "r6"
+  }
+}

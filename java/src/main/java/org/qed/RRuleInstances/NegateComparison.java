@@ -8,6 +8,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RexRN.Pred;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — only the Eq→Ne pair of NegateComparison's operator map is encoded (NOT(x = y) ⟺ x <> y); the full rule covers 12 operator pairs, each requiring its own before/after pair.
 public record NegateComparison() implements RRule {
     static final RelRN left = RelRN.scan("L", "V");

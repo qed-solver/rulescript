@@ -8,6 +8,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RexRN.Pred;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — only the Le variant is encoded, proving a <= b <==> b >= a for two independent same-type column references (inner cross join of two single-column scans of one shared type) under three-valued semantics; Lt/Ge/Gt would need their own separate rule files.
 public record CommuteVarInequality() implements RRule {
     static final RelRN left = RelRN.scan("L", "V");

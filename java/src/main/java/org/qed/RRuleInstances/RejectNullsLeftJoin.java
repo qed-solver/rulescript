@@ -7,6 +7,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the null-rejecting filter is restricted to an explicit IS_NOT_NULL on the right input's column, and only the LeftJoin→InnerJoin variant is modeled (FullJoin→RightJoin and the Apply variants are not)
 public record RejectNullsLeftJoin() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");

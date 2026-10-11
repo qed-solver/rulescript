@@ -8,6 +8,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the barrier's input is fixed to a single column with exactly one (uninterpreted) projection expression and one passthrough column; the original rule applies to any arity
 public record PushLeakproofProjectionsIntoPermeableBarrier() implements RRule {
     // $input, modeled as a single-column scan (as in EliminateRedundantBarrier

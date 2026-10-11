@@ -16,6 +16,7 @@ import org.qed.RexRN;
 // already-unique-keyed relation cannot introduce duplicates into what
 // remains, the covered AggDistinct->plain identity extends unaffected to
 // the AggFilter case; only the AggFilter wrapper itself goes unverified.
+// ORIGIN: CockroachDB
 public record EliminateAggFilteredDistinctForKeys() implements RRule {
     static final RelRN source = RelRN.scan("S", RexRN.varType("S_Type", false), true);
     static final RexRN key = source.field(0);

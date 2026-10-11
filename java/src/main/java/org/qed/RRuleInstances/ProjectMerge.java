@@ -7,6 +7,7 @@ import org.qed.RexRN;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
 
+// ORIGIN: Calcite
 // SCOPE: FULL
 public record ProjectMerge() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");

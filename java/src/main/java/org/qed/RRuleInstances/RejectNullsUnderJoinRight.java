@@ -7,6 +7,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — only the InnerJoin variant is modeled (InnerJoinApply/LeftJoin/LeftJoinApply/SemiJoin/AntiJoin are not), and null-rejection is restricted to a single explicit IS_NOT_NULL conjunct on the right input's column inside the ON condition
 public record RejectNullsUnderJoinRight() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");

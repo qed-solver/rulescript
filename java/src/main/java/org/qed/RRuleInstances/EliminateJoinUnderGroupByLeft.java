@@ -6,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RRule;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the join is a LEFT join of two one-column scans, and the grouping operator is a group-by with exactly one group key referencing the left (preserved) input's column and no aggregate calls, so the rule's ProjectRemappedCols/PruneOrdering wrapper is the identity and the right input is simply dropped.
 public record EliminateJoinUnderGroupByLeft() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");

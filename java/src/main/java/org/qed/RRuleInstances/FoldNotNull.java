@@ -7,6 +7,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: FULL
 public record FoldNotNull() implements RRule {
 

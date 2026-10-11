@@ -4,6 +4,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 public record FilterSetOpTranspose() implements RRule {
     static final RelRN left = RelRN.scan("L", "T");
     static final RelRN right = RelRN.scan("R", "T");

@@ -4,6 +4,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: FULL
 public record MergeSelects() implements RRule {
     static final RelRN input = RelRN.scan("input", "input_type");

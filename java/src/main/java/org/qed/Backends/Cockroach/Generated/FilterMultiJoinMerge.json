@@ -1,0 +1,98 @@
+{
+  "name" : "FilterMultiJoinMerge",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "filter_cond",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r4" ]
+      } ]
+    },
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "pred",
+        "name" : "post_join_filter",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r4" ]
+        } ]
+      },
+      "left" : {
+        "op" : "join",
+        "type" : "inner",
+        "cond" : {
+          "op" : "true"
+        },
+        "left" : {
+          "op" : "scan",
+          "name" : "A",
+          "id" : "r0"
+        },
+        "right" : {
+          "op" : "scan",
+          "name" : "B",
+          "id" : "r1"
+        },
+        "id" : "r3"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "C",
+        "id" : "r2"
+      },
+      "id" : "r4"
+    },
+    "id" : "r5"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "post_join_filter",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r6" ]
+        } ]
+      }, {
+        "op" : "pred",
+        "name" : "filter_cond",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r6" ]
+        } ]
+      } ]
+    },
+    "left" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "true"
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "A",
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "B",
+        "id" : "r1"
+      },
+      "id" : "r3"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "C",
+      "id" : "r2"
+    },
+    "id" : "r6"
+  }
+}

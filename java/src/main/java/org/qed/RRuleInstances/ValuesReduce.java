@@ -6,6 +6,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: Calcite
 public record ValuesReduce() implements RRule {
 
     @Override

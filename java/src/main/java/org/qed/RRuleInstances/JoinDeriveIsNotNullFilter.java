@@ -10,6 +10,7 @@ import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
 
+// ORIGIN: Calcite
 public record JoinDeriveIsNotNullFilter() implements RRule {
     static final RelRN left = RelRN.scan("L", "Key_Type");
     static final RelRN right = RelRN.scan("R", "Key_Type");

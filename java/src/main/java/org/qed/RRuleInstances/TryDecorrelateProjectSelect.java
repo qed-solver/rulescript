@@ -18,6 +18,7 @@ import org.qed.RuleBuilder;
 // FiltersBoundBy guard is a firing heuristic, not a soundness precondition,
 // since the filter-into-ON merge is valid regardless of what the filter
 // actually depends on.
+// ORIGIN: CockroachDB
 public record TryDecorrelateProjectSelect() implements RRule {
     static final RelType.VarType kType = new RelType.VarType("K", true);
     static final RelType.VarType vType = new RelType.VarType("V", true);

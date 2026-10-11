@@ -7,6 +7,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — only the IsNot(Eq, False) -> Eq case, on an INNER join, with both compared columns NOT NULL
 public record SimplifyJoinNotNullEquality() implements RRule {
     // The join's two inputs, each a single-column scan whose column is NOT

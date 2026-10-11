@@ -11,6 +11,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 public record ProjectInnerJoinValues() implements RRule {
     // $right:(Values) & (HasOneRow $right): a one-row, 2-column Values relation.
     record LiteralValues(Object[] rowValues) implements RelRN {

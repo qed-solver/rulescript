@@ -6,6 +6,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — assumes the tuple's non-null constant element is the first element (second element arbitrary, nullable)
 public record FoldNonNullTupleIsTupleNull() implements RRule {
     // The tuple $input is represented by its elements as columns of the source

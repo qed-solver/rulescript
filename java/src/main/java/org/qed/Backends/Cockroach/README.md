@@ -41,4 +41,4 @@ COCKROACH_RULESCRIPT_DIR=<path to Generated/> ./cockroach-short demo
 ```
 
 Every query is then optimized with the rules (they run as `ExternalNormalizeRule`, which can be switched off with
-`SET disable_optimizer_rules`). `./scripts/demo-cockroach.sh` builds the server and prints plans with the rules off and on.
+`SET disable_optimizer_rules`). Rules whose output contains their own pattern (so they would keep growing the plan) are skipped at startup with a message. `./scripts/demo-cockroach.sh` builds the server and prints plans with the rules off and on.

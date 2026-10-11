@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 // SCOPE: FULL
 public record JoinAddRedundantSemiJoin() implements RRule {
     static final RelRN X = RelRN.scan("X", "X_Type");

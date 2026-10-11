@@ -6,6 +6,7 @@ import org.qed.RelRN;
 import org.qed.RelType;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 public record AggregateUnionTranspose() implements RRule {
     static final Seq<RelType.VarType> rowType = Seq.of(
             RexRN.varType("T0", true),

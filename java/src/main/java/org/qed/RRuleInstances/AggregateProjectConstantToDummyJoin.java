@@ -8,6 +8,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: Calcite
 public record AggregateProjectConstantToDummyJoin() implements RRule {
     static final RelRN source = RelRN.scan("S", "S_Type");
     static final RexRN lit0 = RexRN.trueLiteral();

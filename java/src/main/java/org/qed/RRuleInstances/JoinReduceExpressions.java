@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 public record JoinReduceExpressions() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");
     static final RelRN right = RelRN.scan("R", "R_Type");

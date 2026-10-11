@@ -7,6 +7,7 @@ import org.qed.RexRN;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — one virtual (synthesized) column and one non-virtual synthesized column with two uninterpreted passthrough columns, one filter inlined into the scan below the Project (an uninterpreted predicate over the virtual column's defining expression) and one filter left above the Project; the VirtualColumns/ColsAreEmpty/IsFilterEmpty matching guards are not bag-semantic preconditions.
 public record InlineSelectVirtualColumns() implements RRule {
     // The scan: two physical columns a, b (as in the rule's example).

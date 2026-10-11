@@ -3,6 +3,7 @@ package org.qed.RRuleInstances;
 import org.qed.RRule;
 import org.qed.RelRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: FULL
 public record EliminateSelect() implements RRule {
 

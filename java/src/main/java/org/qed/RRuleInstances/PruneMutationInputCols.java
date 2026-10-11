@@ -8,6 +8,7 @@ import org.qed.RexRN;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the mutation's input has exactly two columns of which only the first is needed, and the mutation's per-row behavior is an uninterpreted function of exactly that needed column (its other children — unique checks, fk checks, private data — are held fixed)
 public record PruneMutationInputCols() implements RRule {
     static final RelRN input = RelRN.scanMany("I", Seq.of(

@@ -9,6 +9,7 @@ import org.qed.RexRN;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — assumes an uncorrelated anti-join with a 1-column left, a 2-column right of which one column is pruned, and an uninterpreted on-clause over the kept (left, right-key) pair
 public record PruneSemiAntiJoinRightCols() implements RRule {
     static final RelType.VarType t0 = new RelType.VarType("T0", true);

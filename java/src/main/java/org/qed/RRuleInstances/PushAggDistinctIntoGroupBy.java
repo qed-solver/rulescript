@@ -7,6 +7,7 @@ import org.qed.RelType;
 import org.qed.RuleBuilder;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the GroupBy/ScalarGroupBy has exactly one aggregation, a single-argument DISTINCT call, with two grouping columns and no non-distinct aggregations, whereas the source rule matches any single aggregate function with any input arguments over any grouping set.
 public record PushAggDistinctIntoGroupBy() implements RRule {
     static final RelRN source = RelRN.scan("S", "S_Type");

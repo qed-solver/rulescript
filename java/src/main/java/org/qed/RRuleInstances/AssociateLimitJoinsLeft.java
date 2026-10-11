@@ -8,6 +8,7 @@ import org.qed.RelRN;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the identical Limit/ordering wrapper is omitted and join conditions are uninterpreted predicates over fixed single-column fields
 public record AssociateLimitJoinsLeft() implements RRule {
     // Three single-column base relations.

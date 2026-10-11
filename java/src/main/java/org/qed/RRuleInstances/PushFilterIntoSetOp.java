@@ -4,6 +4,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the 2-input set (distinct) INTERSECT instance with both inputs sharing one column type and one uninterpreted predicate, whereas Cockroach's rule applies to Union/Except/Intersect, all- or distinct-variants, of any arity.
 public record PushFilterIntoSetOp() implements RRule {
     static final RelRN left = RelRN.scan("L", "T");

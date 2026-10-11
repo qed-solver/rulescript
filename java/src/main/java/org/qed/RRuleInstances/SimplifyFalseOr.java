@@ -5,6 +5,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — assumes Or(False, right) is the entire predicate of a Filter over a single scan, not an arbitrary boolean context
 public record SimplifyFalseOr() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");

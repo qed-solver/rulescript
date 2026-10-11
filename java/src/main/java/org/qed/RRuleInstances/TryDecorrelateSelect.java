@@ -19,6 +19,7 @@ import org.qed.RuleBuilder;
 // pre-filter, or folded into the join's row-level ON test) and the set of R
 // rows that survive to be matched against a given L row is identical in
 // both formulations.
+// ORIGIN: CockroachDB
 public record TryDecorrelateSelect() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");
     static final RelRN right = RelRN.scan("R", "R_Type");

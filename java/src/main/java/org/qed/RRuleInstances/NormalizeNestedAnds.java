@@ -4,6 +4,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — assumes $left, $innerLeft, $innerRight are each atomic (non-And) predicates
 public record NormalizeNestedAnds() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");

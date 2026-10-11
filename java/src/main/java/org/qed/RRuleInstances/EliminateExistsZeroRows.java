@@ -7,6 +7,7 @@ import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 public record EliminateExistsZeroRows() implements RRule {
     record Exists(RelRN input) implements RexRN {
         @Override

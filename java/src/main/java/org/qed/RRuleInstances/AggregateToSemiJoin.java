@@ -7,6 +7,7 @@ import org.qed.RelRN;
 import org.qed.RRule;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
 public record AggregateToSemiJoin() implements RRule {
     static final RelRN left = RelRN.scan("L", RexRN.varType("Lk_Type", true), false);
     static final RelRN right = RelRN.scan("R", RexRN.varType("R_Type", true), false);

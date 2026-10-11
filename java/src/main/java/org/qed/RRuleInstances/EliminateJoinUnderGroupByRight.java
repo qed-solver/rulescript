@@ -8,6 +8,7 @@ import org.qed.RelType;
 import org.qed.RRule;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — the join is an INNER self-join on equality over a single non-nullable key column, and the grouping operator is a group-by with exactly one group key referencing the right (kept) input's column and no aggregate calls, so the left input is simply dropped.
 public record EliminateJoinUnderGroupByRight() implements RRule {
     static final RelType.VarType T = RexRN.varType("T", false); // non-nullable

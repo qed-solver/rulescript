@@ -8,6 +8,7 @@ import org.qed.RRule;
 import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
+// ORIGIN: Calcite
 public record JoinCommute() implements RRule {
     static final RelRN left = RelRN.scan("L", "L_Type");
     static final RelRN right = RelRN.scan("R", "R_Type");

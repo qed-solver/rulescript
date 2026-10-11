@@ -8,6 +8,7 @@ import org.qed.RelType;
 import org.qed.RRule;
 import org.qed.RexRN;
 
+// ORIGIN: CockroachDB
 // SCOPE: PARTIAL — only the INNER-join three-variable case from the rule's own example: the join condition is exactly two cross-side equalities (a.x = b.x AND b.x = a.y) over one shared column type, remapped to (a.x = a.y AND b.x = a.y) to drop one cross-side condition, and the general multi-condition, multi-join-kind equivalence-class remapping driven by MapJoinOpEqualities' functional-dependency closure is not modeled.
 public record MapEqualityIntoJoinLeftAndRight() implements RRule {
     // All three columns share one uninterpreted column type, as the real rule
