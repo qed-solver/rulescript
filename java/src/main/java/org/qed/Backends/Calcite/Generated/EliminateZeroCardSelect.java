@@ -45,12 +45,6 @@ public class EliminateZeroCardSelect extends RelRule<EliminateZeroCardSelect.Con
 			return;
 		}
 		final LogicalValues r_2 = call.rel(2);
-		if (!(r_2.getTuples().isEmpty())) {
-			return;
-		}
-		if (!(r_2.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		b.values(r_2.getRowType());
 		CalciteRuntime.transform(call, b);
 	}
@@ -70,7 +64,7 @@ public class EliminateZeroCardSelect extends RelRule<EliminateZeroCardSelect.Con
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalFilter.class).oneInput(s_1 -> s_1.operand(LogicalFilter.class).oneInput(s_2 -> s_2.operand(LogicalValues.class).noInputs()));
+			return s_0 -> s_0.operand(LogicalFilter.class).oneInput(s_1 -> s_1.operand(LogicalFilter.class).oneInput(s_2 -> s_2.operand(LogicalValues.class).predicate(r_2 -> r_2.getTuples().isEmpty() && r_2.getRowType().getFieldCount() == 1).noInputs()));
 		}
 	}
 }

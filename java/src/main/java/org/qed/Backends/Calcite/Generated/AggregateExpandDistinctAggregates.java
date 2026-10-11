@@ -67,9 +67,6 @@ public class AggregateExpandDistinctAggregates extends RelRule<AggregateExpandDi
 			return;
 		}
 		final RelNode r_2 = call.rel(2);
-		if (!(r_2.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "S_Type", true, r_2, 0))) {
 			return;
 		}
@@ -94,7 +91,7 @@ public class AggregateExpandDistinctAggregates extends RelRule<AggregateExpandDi
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalAggregate.class).oneInput(s_1 -> s_1.operand(LogicalProject.class).oneInput(s_2 -> s_2.operand(RelNode.class).anyInputs()));
+			return s_0 -> s_0.operand(LogicalAggregate.class).oneInput(s_1 -> s_1.operand(LogicalProject.class).oneInput(s_2 -> s_2.operand(RelNode.class).predicate(r_2 -> r_2.getRowType().getFieldCount() == 1).anyInputs()));
 		}
 	}
 }

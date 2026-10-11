@@ -46,17 +46,11 @@ public class EliminateGroupByProject extends RelRule<EliminateGroupByProject.Con
 			return;
 		}
 		final LogicalProject r_1 = call.rel(1);
-		if (!(r_1.getProjects().size() == 1)) {
-			return;
-		}
 		final RexNode e_2 = r_1.getProjects().get(0);
 		if (!(e_2 instanceof RexInputRef && ((RexInputRef) e_2).getIndex() == 0)) {
 			return;
 		}
 		final RelNode r_2 = call.rel(2);
-		if (!(r_2.getRowType().getFieldCount() == 2)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "S_Type_0", true, r_2, 0))) {
 			return;
 		}
@@ -83,7 +77,7 @@ public class EliminateGroupByProject extends RelRule<EliminateGroupByProject.Con
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalAggregate.class).oneInput(s_1 -> s_1.operand(LogicalProject.class).oneInput(s_2 -> s_2.operand(RelNode.class).anyInputs()));
+			return s_0 -> s_0.operand(LogicalAggregate.class).oneInput(s_1 -> s_1.operand(LogicalProject.class).predicate(r_1 -> r_1.getProjects().size() == 1).oneInput(s_2 -> s_2.operand(RelNode.class).predicate(r_2 -> r_2.getRowType().getFieldCount() == 2).anyInputs()));
 		}
 	}
 }

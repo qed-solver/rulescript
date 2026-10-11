@@ -31,9 +31,6 @@ public class TryDecorrelateSelect extends RelRule<TryDecorrelateSelect.Config> {
 		final RelBuilder b = CalciteRuntime.builder(call);
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalJoin r_0 = call.rel(0);
-		if (!(r_0.getJoinType() == JoinRelType.INNER)) {
-			return;
-		}
 		final RexNode e_0 = r_0.getCondition();
 		final RexNode[] args_1 = new RexNode[]{CalciteRuntime.ref(0), CalciteRuntime.ref(1)};
 		final RexNode sym_2 = e_0;
@@ -41,9 +38,6 @@ public class TryDecorrelateSelect extends RelRule<TryDecorrelateSelect.Config> {
 			return;
 		}
 		final RelNode r_1 = call.rel(1);
-		if (!(r_1.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "L_Type", true, r_1, 0))) {
 			return;
 		}
@@ -55,9 +49,6 @@ public class TryDecorrelateSelect extends RelRule<TryDecorrelateSelect.Config> {
 			return;
 		}
 		final RelNode r_3 = call.rel(3);
-		if (!(r_3.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "R_Type", true, r_3, 0))) {
 			return;
 		}
@@ -82,7 +73,7 @@ public class TryDecorrelateSelect extends RelRule<TryDecorrelateSelect.Config> {
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalJoin.class).inputs(s_1 -> s_1.operand(RelNode.class).anyInputs(), s_2 -> s_2.operand(LogicalFilter.class).oneInput(s_3 -> s_3.operand(RelNode.class).anyInputs()));
+			return s_0 -> s_0.operand(LogicalJoin.class).predicate(r_0 -> r_0.getJoinType() == JoinRelType.INNER).inputs(s_1 -> s_1.operand(RelNode.class).predicate(r_1 -> r_1.getRowType().getFieldCount() == 1).anyInputs(), s_2 -> s_2.operand(LogicalFilter.class).oneInput(s_3 -> s_3.operand(RelNode.class).predicate(r_3 -> r_3.getRowType().getFieldCount() == 1).anyInputs()));
 		}
 	}
 }

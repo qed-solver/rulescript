@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -12,6 +13,28 @@ import (
 )
 
 var rulesDir = envutil.EnvOrDefaultString("COCKROACH_RULESCRIPT_DIR", "")
+var firingLog = envutil.EnvOrDefaultString("COCKROACH_RULESCRIPT_LOG", "")
+
+var (
+	firingMu   sync.Mutex
+	firingFile *os.File
+)
+
+func recordFiring(name string) {
+	if firingLog == "" {
+		return
+	}
+	firingMu.Lock()
+	defer firingMu.Unlock()
+	if firingFile == nil {
+		file, err := os.OpenFile(firingLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			return
+		}
+		firingFile = file
+	}
+	fmt.Fprintln(firingFile, name)
+}
 
 func init() {
 	if rulesDir == "" {
@@ -78,6 +101,7 @@ func (r *registered) Apply(f *norm.Factory, e memo.RelExpr) (memo.RelExpr, bool)
 		delete(r.active, rule)
 		if ok {
 			r.applied++
+			recordFiring(rule.Name)
 			return out, true
 		}
 	}

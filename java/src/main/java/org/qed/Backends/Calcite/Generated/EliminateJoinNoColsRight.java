@@ -31,9 +31,6 @@ public class EliminateJoinNoColsRight extends RelRule<EliminateJoinNoColsRight.C
 		final RelBuilder b = CalciteRuntime.builder(call);
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalJoin r_0 = call.rel(0);
-		if (!(r_0.getJoinType() == JoinRelType.INNER)) {
-			return;
-		}
 		final RexNode e_0 = r_0.getCondition();
 		final RexNode[] args_1 = new RexNode[]{CalciteRuntime.ref(0)};
 		final RexNode sym_2 = e_0;
@@ -41,16 +38,10 @@ public class EliminateJoinNoColsRight extends RelRule<EliminateJoinNoColsRight.C
 			return;
 		}
 		final RelNode r_1 = call.rel(1);
-		if (!(r_1.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "L_Type", true, r_1, 0))) {
 			return;
 		}
 		final LogicalProject r_2 = call.rel(2);
-		if (!(r_2.getProjects().size() == 0)) {
-			return;
-		}
 		final LogicalValues r_3 = call.rel(3);
 		if (!(CalciteRuntime.sameValues(call, r_3, new String[]{"_r"}, true))) {
 			return;
@@ -75,7 +66,7 @@ public class EliminateJoinNoColsRight extends RelRule<EliminateJoinNoColsRight.C
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalJoin.class).inputs(s_1 -> s_1.operand(RelNode.class).anyInputs(), s_2 -> s_2.operand(LogicalProject.class).oneInput(s_3 -> s_3.operand(LogicalValues.class).noInputs()));
+			return s_0 -> s_0.operand(LogicalJoin.class).predicate(r_0 -> r_0.getJoinType() == JoinRelType.INNER).inputs(s_1 -> s_1.operand(RelNode.class).predicate(r_1 -> r_1.getRowType().getFieldCount() == 1).anyInputs(), s_2 -> s_2.operand(LogicalProject.class).predicate(r_2 -> r_2.getProjects().size() == 0).oneInput(s_3 -> s_3.operand(LogicalValues.class).noInputs()));
 		}
 	}
 }

@@ -38,12 +38,6 @@ public class PruneEmpty extends RelRule<PruneEmpty.Config> {
 			return;
 		}
 		final LogicalValues r_1 = call.rel(1);
-		if (!(r_1.getTuples().isEmpty())) {
-			return;
-		}
-		if (!(r_1.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		b.values(r_1.getRowType());
 		CalciteRuntime.transform(call, b);
 	}
@@ -63,7 +57,7 @@ public class PruneEmpty extends RelRule<PruneEmpty.Config> {
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalFilter.class).oneInput(s_1 -> s_1.operand(LogicalValues.class).noInputs());
+			return s_0 -> s_0.operand(LogicalFilter.class).oneInput(s_1 -> s_1.operand(LogicalValues.class).predicate(r_1 -> r_1.getTuples().isEmpty() && r_1.getRowType().getFieldCount() == 1).noInputs());
 		}
 	}
 }

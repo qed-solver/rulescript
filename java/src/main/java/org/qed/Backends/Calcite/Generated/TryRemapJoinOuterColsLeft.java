@@ -39,24 +39,15 @@ public class TryRemapJoinOuterColsLeft extends RelRule<TryRemapJoinOuterColsLeft
 		}
 		final LogicalCorrelate r_1 = call.rel(1);
 		final RelNode r_2 = call.rel(2);
-		if (!(r_2.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "T", true, r_2, 0))) {
 			return;
 		}
 		final LogicalFilter r_3 = call.rel(3);
-		if (!(r_1.getJoinType() == JoinRelType.INNER)) {
-			return;
-		}
 		final RexNode[] ca_3 = CalciteRuntime.correlateArguments(r_1);
 		if (!(CalciteRuntime.isCall(r_3.getCondition(), SqlStdOperatorTable.EQUALS, ca_3))) {
 			return;
 		}
 		final RelNode r_4 = call.rel(4);
-		if (!(r_4.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "T", true, r_4, 0))) {
 			return;
 		}
@@ -82,7 +73,7 @@ public class TryRemapJoinOuterColsLeft extends RelRule<TryRemapJoinOuterColsLeft
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalFilter.class).oneInput(s_1 -> s_1.operand(LogicalCorrelate.class).inputs(s_2 -> s_2.operand(RelNode.class).anyInputs(), s_3 -> s_3.operand(LogicalFilter.class).oneInput(s_4 -> s_4.operand(RelNode.class).anyInputs())));
+			return s_0 -> s_0.operand(LogicalFilter.class).oneInput(s_1 -> s_1.operand(LogicalCorrelate.class).predicate(r_1 -> r_1.getJoinType() == JoinRelType.INNER).inputs(s_2 -> s_2.operand(RelNode.class).predicate(r_2 -> r_2.getRowType().getFieldCount() == 1).anyInputs(), s_3 -> s_3.operand(LogicalFilter.class).oneInput(s_4 -> s_4.operand(RelNode.class).predicate(r_4 -> r_4.getRowType().getFieldCount() == 1).anyInputs())));
 		}
 	}
 }

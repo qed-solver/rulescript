@@ -31,9 +31,6 @@ public class ProjectFilterTranspose extends RelRule<ProjectFilterTranspose.Confi
 		final RelBuilder b = CalciteRuntime.builder(call);
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalProject r_0 = call.rel(0);
-		if (!(r_0.getProjects().size() == 2)) {
-			return;
-		}
 		final RexNode e_0 = r_0.getProjects().get(0);
 		final RexNode[] args_1 = new RexNode[]{CalciteRuntime.ref(0), CalciteRuntime.ref(1)};
 		final RexNode sym_2 = e_0;
@@ -54,9 +51,6 @@ public class ProjectFilterTranspose extends RelRule<ProjectFilterTranspose.Confi
 			return;
 		}
 		final RelNode r_2 = call.rel(2);
-		if (!(r_2.getRowType().getFieldCount() == 2)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "X_Type", true, r_2, 0))) {
 			return;
 		}
@@ -85,7 +79,7 @@ public class ProjectFilterTranspose extends RelRule<ProjectFilterTranspose.Confi
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalProject.class).oneInput(s_1 -> s_1.operand(LogicalFilter.class).oneInput(s_2 -> s_2.operand(RelNode.class).anyInputs()));
+			return s_0 -> s_0.operand(LogicalProject.class).predicate(r_0 -> r_0.getProjects().size() == 2).oneInput(s_1 -> s_1.operand(LogicalFilter.class).oneInput(s_2 -> s_2.operand(RelNode.class).predicate(r_2 -> r_2.getRowType().getFieldCount() == 2).anyInputs()));
 		}
 	}
 }

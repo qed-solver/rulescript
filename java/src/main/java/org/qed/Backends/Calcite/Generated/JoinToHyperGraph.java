@@ -31,9 +31,6 @@ public class JoinToHyperGraph extends RelRule<JoinToHyperGraph.Config> {
 		final RelBuilder b = CalciteRuntime.builder(call);
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalJoin r_0 = call.rel(0);
-		if (!(r_0.getJoinType() == JoinRelType.INNER)) {
-			return;
-		}
 		final RexNode e_0 = r_0.getCondition();
 		final List<RexNode> c_1 = CalciteRuntime.conjunctions(e_0);
 		if (!(c_1.size() == 2)) {
@@ -52,9 +49,6 @@ public class JoinToHyperGraph extends RelRule<JoinToHyperGraph.Config> {
 			return;
 		}
 		final LogicalJoin r_1 = call.rel(1);
-		if (!(r_1.getJoinType() == JoinRelType.INNER)) {
-			return;
-		}
 		final RexNode e_8 = r_1.getCondition();
 		final RexNode[] args_9 = new RexNode[]{CalciteRuntime.ref(0), CalciteRuntime.ref(1)};
 		final RexNode sym_10 = e_8;
@@ -62,23 +56,14 @@ public class JoinToHyperGraph extends RelRule<JoinToHyperGraph.Config> {
 			return;
 		}
 		final RelNode r_2 = call.rel(2);
-		if (!(r_2.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "A_Type", true, r_2, 0))) {
 			return;
 		}
 		final RelNode r_3 = call.rel(3);
-		if (!(r_3.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "B_Type", true, r_3, 0))) {
 			return;
 		}
 		final RelNode r_4 = call.rel(4);
-		if (!(r_4.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "C_Type", true, r_4, 0))) {
 			return;
 		}
@@ -105,7 +90,7 @@ public class JoinToHyperGraph extends RelRule<JoinToHyperGraph.Config> {
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalJoin.class).inputs(s_1 -> s_1.operand(LogicalJoin.class).inputs(s_2 -> s_2.operand(RelNode.class).anyInputs(), s_3 -> s_3.operand(RelNode.class).anyInputs()), s_4 -> s_4.operand(RelNode.class).anyInputs());
+			return s_0 -> s_0.operand(LogicalJoin.class).predicate(r_0 -> r_0.getJoinType() == JoinRelType.INNER).inputs(s_1 -> s_1.operand(LogicalJoin.class).predicate(r_1 -> r_1.getJoinType() == JoinRelType.INNER).inputs(s_2 -> s_2.operand(RelNode.class).predicate(r_2 -> r_2.getRowType().getFieldCount() == 1).anyInputs(), s_3 -> s_3.operand(RelNode.class).predicate(r_3 -> r_3.getRowType().getFieldCount() == 1).anyInputs()), s_4 -> s_4.operand(RelNode.class).predicate(r_4 -> r_4.getRowType().getFieldCount() == 1).anyInputs());
 		}
 	}
 }

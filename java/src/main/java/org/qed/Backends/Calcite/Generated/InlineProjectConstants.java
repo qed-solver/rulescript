@@ -31,9 +31,6 @@ public class InlineProjectConstants extends RelRule<InlineProjectConstants.Confi
 		final RelBuilder b = CalciteRuntime.builder(call);
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalProject r_0 = call.rel(0);
-		if (!(r_0.getProjects().size() == 1)) {
-			return;
-		}
 		final RexNode e_0 = r_0.getProjects().get(0);
 		final RexNode[] args_1 = new RexNode[]{CalciteRuntime.ref(0)};
 		final RexNode sym_2 = e_0;
@@ -41,9 +38,6 @@ public class InlineProjectConstants extends RelRule<InlineProjectConstants.Confi
 			return;
 		}
 		final LogicalJoin r_1 = call.rel(1);
-		if (!(r_1.getJoinType() == JoinRelType.INNER)) {
-			return;
-		}
 		final RexNode e_3 = r_1.getCondition();
 		if (!(e_3 instanceof RexCall && ((RexCall) e_3).getOperator() == SqlStdOperatorTable.EQUALS && ((RexCall) e_3).getOperands().size() == 2)) {
 			return;
@@ -57,16 +51,10 @@ public class InlineProjectConstants extends RelRule<InlineProjectConstants.Confi
 			return;
 		}
 		final RelNode r_2 = call.rel(2);
-		if (!(r_2.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "Source_Type", true, r_2, 0))) {
 			return;
 		}
 		final RelNode r_3 = call.rel(3);
-		if (!(r_3.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "Const_Type", false, r_3, 0))) {
 			return;
 		}
@@ -95,7 +83,7 @@ public class InlineProjectConstants extends RelRule<InlineProjectConstants.Confi
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalProject.class).oneInput(s_1 -> s_1.operand(LogicalJoin.class).inputs(s_2 -> s_2.operand(RelNode.class).anyInputs(), s_3 -> s_3.operand(RelNode.class).anyInputs()));
+			return s_0 -> s_0.operand(LogicalProject.class).predicate(r_0 -> r_0.getProjects().size() == 1).oneInput(s_1 -> s_1.operand(LogicalJoin.class).predicate(r_1 -> r_1.getJoinType() == JoinRelType.INNER).inputs(s_2 -> s_2.operand(RelNode.class).predicate(r_2 -> r_2.getRowType().getFieldCount() == 1).anyInputs(), s_3 -> s_3.operand(RelNode.class).predicate(r_3 -> r_3.getRowType().getFieldCount() == 1 && !r_3.getRowType().getFieldList().get(0).getType().isNullable()).anyInputs()));
 		}
 	}
 }

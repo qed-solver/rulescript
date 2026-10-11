@@ -31,9 +31,6 @@ public class EliminateZeroCardProject extends RelRule<EliminateZeroCardProject.C
 		final RelBuilder b = CalciteRuntime.builder(call);
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalProject r_0 = call.rel(0);
-		if (!(r_0.getProjects().size() == 3)) {
-			return;
-		}
 		final RexNode e_0 = r_0.getProjects().get(0);
 		if (!(e_0 instanceof RexInputRef && ((RexInputRef) e_0).getIndex() == 0)) {
 			return;
@@ -49,12 +46,6 @@ public class EliminateZeroCardProject extends RelRule<EliminateZeroCardProject.C
 			return;
 		}
 		final LogicalValues r_1 = call.rel(1);
-		if (!(r_1.getTuples().isEmpty())) {
-			return;
-		}
-		if (!(r_1.getRowType().getFieldCount() == 2)) {
-			return;
-		}
 		b.values(r_0.getRowType());
 		CalciteRuntime.transform(call, b);
 	}
@@ -74,7 +65,7 @@ public class EliminateZeroCardProject extends RelRule<EliminateZeroCardProject.C
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalProject.class).oneInput(s_1 -> s_1.operand(LogicalValues.class).noInputs());
+			return s_0 -> s_0.operand(LogicalProject.class).predicate(r_0 -> r_0.getProjects().size() == 3).oneInput(s_1 -> s_1.operand(LogicalValues.class).predicate(r_1 -> r_1.getTuples().isEmpty() && r_1.getRowType().getFieldCount() == 2).noInputs());
 		}
 	}
 }

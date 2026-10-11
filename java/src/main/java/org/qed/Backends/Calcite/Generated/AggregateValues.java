@@ -46,9 +46,6 @@ public class AggregateValues extends RelRule<AggregateValues.Config> {
 			return;
 		}
 		final RelNode r_1 = call.rel(1);
-		if (!(r_1.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "S_Type", true, r_1, 0))) {
 			return;
 		}
@@ -73,7 +70,7 @@ public class AggregateValues extends RelRule<AggregateValues.Config> {
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalAggregate.class).oneInput(s_1 -> s_1.operand(RelNode.class).anyInputs());
+			return s_0 -> s_0.operand(LogicalAggregate.class).oneInput(s_1 -> s_1.operand(RelNode.class).predicate(r_1 -> r_1.getRowType().getFieldCount() == 1).anyInputs());
 		}
 	}
 }

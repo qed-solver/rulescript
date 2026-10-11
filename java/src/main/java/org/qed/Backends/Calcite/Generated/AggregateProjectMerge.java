@@ -54,9 +54,6 @@ public class AggregateProjectMerge extends RelRule<AggregateProjectMerge.Config>
 			return;
 		}
 		final LogicalProject r_1 = call.rel(1);
-		if (!(r_1.getProjects().size() == 2)) {
-			return;
-		}
 		final RexNode e_4 = r_1.getProjects().get(0);
 		if (!(e_4 instanceof RexInputRef && ((RexInputRef) e_4).getIndex() == 1)) {
 			return;
@@ -66,24 +63,15 @@ public class AggregateProjectMerge extends RelRule<AggregateProjectMerge.Config>
 			return;
 		}
 		final LogicalJoin r_2 = call.rel(2);
-		if (!(r_2.getJoinType() == JoinRelType.INNER)) {
-			return;
-		}
 		final RexNode e_6 = r_2.getCondition();
 		if (!(e_6.isAlwaysTrue())) {
 			return;
 		}
 		final RelNode r_3 = call.rel(3);
-		if (!(r_3.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "A_Type", true, r_3, 0))) {
 			return;
 		}
 		final RelNode r_4 = call.rel(4);
-		if (!(r_4.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "B_Type", true, r_4, 0))) {
 			return;
 		}
@@ -109,7 +97,7 @@ public class AggregateProjectMerge extends RelRule<AggregateProjectMerge.Config>
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalAggregate.class).oneInput(s_1 -> s_1.operand(LogicalProject.class).oneInput(s_2 -> s_2.operand(LogicalJoin.class).inputs(s_3 -> s_3.operand(RelNode.class).anyInputs(), s_4 -> s_4.operand(RelNode.class).anyInputs())));
+			return s_0 -> s_0.operand(LogicalAggregate.class).oneInput(s_1 -> s_1.operand(LogicalProject.class).predicate(r_1 -> r_1.getProjects().size() == 2).oneInput(s_2 -> s_2.operand(LogicalJoin.class).predicate(r_2 -> r_2.getJoinType() == JoinRelType.INNER).inputs(s_3 -> s_3.operand(RelNode.class).predicate(r_3 -> r_3.getRowType().getFieldCount() == 1).anyInputs(), s_4 -> s_4.operand(RelNode.class).predicate(r_4 -> r_4.getRowType().getFieldCount() == 1).anyInputs())));
 		}
 	}
 }

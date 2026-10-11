@@ -31,9 +31,6 @@ public class SimplifyLeftJoinWithZeroRowsRight extends RelRule<SimplifyLeftJoinW
 		final RelBuilder b = CalciteRuntime.builder(call);
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalJoin r_0 = call.rel(0);
-		if (!(r_0.getJoinType() == JoinRelType.LEFT)) {
-			return;
-		}
 		final RexNode e_0 = r_0.getCondition();
 		final RexNode[] args_1 = new RexNode[]{CalciteRuntime.ref(0), CalciteRuntime.ref(1), CalciteRuntime.ref(2), CalciteRuntime.ref(3)};
 		final RexNode sym_2 = e_0;
@@ -41,9 +38,6 @@ public class SimplifyLeftJoinWithZeroRowsRight extends RelRule<SimplifyLeftJoinW
 			return;
 		}
 		final RelNode r_1 = call.rel(1);
-		if (!(r_1.getRowType().getFieldCount() == 2)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "Left_Type0", true, r_1, 0))) {
 			return;
 		}
@@ -51,12 +45,6 @@ public class SimplifyLeftJoinWithZeroRowsRight extends RelRule<SimplifyLeftJoinW
 			return;
 		}
 		final LogicalValues r_2 = call.rel(2);
-		if (!(r_2.getTuples().isEmpty())) {
-			return;
-		}
-		if (!(r_2.getRowType().getFieldCount() == 2)) {
-			return;
-		}
 		b.push(r_1);
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1), b.getRexBuilder().makeNullLiteral(r_2.getRowType().getFieldList().get(0).getType()), b.getRexBuilder().makeNullLiteral(r_2.getRowType().getFieldList().get(1).getType())));
 		CalciteRuntime.transform(call, b);
@@ -77,7 +65,7 @@ public class SimplifyLeftJoinWithZeroRowsRight extends RelRule<SimplifyLeftJoinW
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalJoin.class).inputs(s_1 -> s_1.operand(RelNode.class).anyInputs(), s_2 -> s_2.operand(LogicalValues.class).noInputs());
+			return s_0 -> s_0.operand(LogicalJoin.class).predicate(r_0 -> r_0.getJoinType() == JoinRelType.LEFT).inputs(s_1 -> s_1.operand(RelNode.class).predicate(r_1 -> r_1.getRowType().getFieldCount() == 2).anyInputs(), s_2 -> s_2.operand(LogicalValues.class).predicate(r_2 -> r_2.getTuples().isEmpty() && r_2.getRowType().getFieldCount() == 2).noInputs());
 		}
 	}
 }

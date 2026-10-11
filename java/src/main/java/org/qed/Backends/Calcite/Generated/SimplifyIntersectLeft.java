@@ -31,16 +31,7 @@ public class SimplifyIntersectLeft extends RelRule<SimplifyIntersectLeft.Config>
 		final RelBuilder b = CalciteRuntime.builder(call);
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalIntersect r_0 = call.rel(0);
-		if (!(r_0.all == false)) {
-			return;
-		}
-		if (!(r_0.getInputs().size() == 2)) {
-			return;
-		}
 		final RelNode r_1 = call.rel(1);
-		if (!(r_1.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "T", false, r_1, 0))) {
 			return;
 		}
@@ -48,9 +39,6 @@ public class SimplifyIntersectLeft extends RelRule<SimplifyIntersectLeft.Config>
 			return;
 		}
 		final RelNode r_2 = call.rel(2);
-		if (!(r_2.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "T", false, r_2, 0))) {
 			return;
 		}
@@ -75,7 +63,7 @@ public class SimplifyIntersectLeft extends RelRule<SimplifyIntersectLeft.Config>
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalIntersect.class).inputs(s_1 -> s_1.operand(RelNode.class).anyInputs(), s_2 -> s_2.operand(RelNode.class).anyInputs());
+			return s_0 -> s_0.operand(LogicalIntersect.class).predicate(r_0 -> r_0.all == false && r_0.getInputs().size() == 2).inputs(s_1 -> s_1.operand(RelNode.class).predicate(r_1 -> r_1.getRowType().getFieldCount() == 1 && !r_1.getRowType().getFieldList().get(0).getType().isNullable()).anyInputs(), s_2 -> s_2.operand(RelNode.class).predicate(r_2 -> r_2.getRowType().getFieldCount() == 1 && !r_2.getRowType().getFieldList().get(0).getType().isNullable()).anyInputs());
 		}
 	}
 }

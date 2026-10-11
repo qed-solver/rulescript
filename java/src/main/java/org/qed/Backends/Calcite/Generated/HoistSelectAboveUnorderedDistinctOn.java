@@ -57,9 +57,6 @@ public class HoistSelectAboveUnorderedDistinctOn extends RelRule<HoistSelectAbov
 			return;
 		}
 		final RelNode r_2 = call.rel(2);
-		if (!(r_2.getRowType().getFieldCount() == 2)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "k1", false, r_2, 0))) {
 			return;
 		}
@@ -87,7 +84,7 @@ public class HoistSelectAboveUnorderedDistinctOn extends RelRule<HoistSelectAbov
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalAggregate.class).oneInput(s_1 -> s_1.operand(LogicalFilter.class).oneInput(s_2 -> s_2.operand(RelNode.class).anyInputs()));
+			return s_0 -> s_0.operand(LogicalAggregate.class).oneInput(s_1 -> s_1.operand(LogicalFilter.class).oneInput(s_2 -> s_2.operand(RelNode.class).predicate(r_2 -> r_2.getRowType().getFieldCount() == 2 && !r_2.getRowType().getFieldList().get(0).getType().isNullable() && !r_2.getRowType().getFieldList().get(1).getType().isNullable()).anyInputs()));
 		}
 	}
 }

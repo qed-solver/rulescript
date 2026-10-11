@@ -31,9 +31,6 @@ public class PruneMutationInputCols extends RelRule<PruneMutationInputCols.Confi
 		final RelBuilder b = CalciteRuntime.builder(call);
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalProject r_0 = call.rel(0);
-		if (!(r_0.getProjects().size() == 1)) {
-			return;
-		}
 		final RexNode e_0 = r_0.getProjects().get(0);
 		final RexNode[] args_1 = new RexNode[]{CalciteRuntime.ref(0)};
 		final RexNode sym_2 = e_0;
@@ -41,9 +38,6 @@ public class PruneMutationInputCols extends RelRule<PruneMutationInputCols.Confi
 			return;
 		}
 		final RelNode r_1 = call.rel(1);
-		if (!(r_1.getRowType().getFieldCount() == 2)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "I0_Type", true, r_1, 0))) {
 			return;
 		}
@@ -71,7 +65,7 @@ public class PruneMutationInputCols extends RelRule<PruneMutationInputCols.Confi
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalProject.class).oneInput(s_1 -> s_1.operand(RelNode.class).anyInputs());
+			return s_0 -> s_0.operand(LogicalProject.class).predicate(r_0 -> r_0.getProjects().size() == 1).oneInput(s_1 -> s_1.operand(RelNode.class).predicate(r_1 -> r_1.getRowType().getFieldCount() == 2).anyInputs());
 		}
 	}
 }

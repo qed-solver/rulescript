@@ -125,6 +125,10 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     private void bindColumn(Env env, Operand operand, int ordinal, RelType.VarType type) {
         var id = typeId(type);
         env.boundTypes.add(id);
+        if (!type.isNullable() && env.operands.containsKey(operand.index)) {
+            env.prefilter(operand, "!r_" + operand.index + ".getRowType().getFieldList().get(" + ordinal
+                    + ").getType().isNullable()");
+        }
         env.check("CalciteRuntime.bindColumn(types, " + literal(id) + ", " + type.isNullable() + ", r_"
                 + operand.index + ", " + ordinal + ")");
     }
@@ -926,6 +930,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         final String type;
         final Kind kind;
         final List<Operand> kids = new ArrayList<>();
+        final List<String> predicates = new ArrayList<>();
         final boolean inline;
 
         Operand(int index, String type, Kind kind, boolean inline) {
@@ -937,7 +942,8 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
 
         String render() {
             var v = "s_" + index;
-            var head = v + " -> " + v + ".operand(" + type + ".class)";
+            var head = v + " -> " + v + ".operand(" + type + ".class)"
+                    + (predicates.isEmpty() ? "" : ".predicate(r_" + index + " -> " + String.join(" && ", predicates) + ")");
             return head + switch (kind) {
                 case ANY -> ".anyInputs()";
                 case NONE -> ".noInputs()";
@@ -958,6 +964,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         final List<String> prelude = new ArrayList<>();
         final List<String> body = new ArrayList<>();
         final Map<RelRN, Integer> rels = new HashMap<>();
+        final Map<Integer, Operand> operands = new HashMap<>();
         final Map<String, Integer> scans = new HashMap<>();
         final Map<String, Symbol> symbols = new HashMap<>();
         final Map<String, String> aggregates = new HashMap<>();
@@ -978,6 +985,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         Operand hidden(String type, Operand.Kind kind) {
             if (inlineSource == null) {
                 var operand = new Operand(nextOperand++, type, kind, false);
+                operands.put(operand.index, operand);
                 prelude.add("final " + type + " r_" + operand.index + " = call.rel(" + operand.index + ");");
                 return operand;
             }
@@ -1000,7 +1008,21 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             return false;
         }
 
+        private static final java.util.regex.Pattern LOCAL = java.util.regex.Pattern.compile(
+                "r_(\\d+)\\.(getRowType\\(\\)\\.getFieldCount\\(\\) == \\d+|getJoinType\\(\\) == JoinRelType\\.\\w+"
+                        + "|getProjects\\(\\)\\.size\\(\\) == \\d+|all == (true|false)|getInputs\\(\\)\\.size\\(\\) == \\d+"
+                        + "|getTuples\\(\\)\\.isEmpty\\(\\))");
+
+        void prefilter(Operand operand, String condition) {
+            operand.predicates.add(condition);
+        }
+
         void check(String condition) {
+            var local = LOCAL.matcher(condition);
+            if (local.matches() && operands.containsKey(Integer.parseInt(local.group(1)))) {
+                prefilter(operands.get(Integer.parseInt(local.group(1))), condition);
+                return;
+            }
             prelude.add("if (!(" + condition + ")) {\n\t\t\treturn;\n\t\t}");
         }
 

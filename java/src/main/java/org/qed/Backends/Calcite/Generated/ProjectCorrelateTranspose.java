@@ -31,9 +31,6 @@ public class ProjectCorrelateTranspose extends RelRule<ProjectCorrelateTranspose
 		final RelBuilder b = CalciteRuntime.builder(call);
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalProject r_0 = call.rel(0);
-		if (!(r_0.getProjects().size() == 2)) {
-			return;
-		}
 		final RexNode e_0 = r_0.getProjects().get(0);
 		if (!(e_0 instanceof RexInputRef && ((RexInputRef) e_0).getIndex() == 0)) {
 			return;
@@ -43,17 +40,11 @@ public class ProjectCorrelateTranspose extends RelRule<ProjectCorrelateTranspose
 			return;
 		}
 		final LogicalJoin r_1 = call.rel(1);
-		if (!(r_1.getJoinType() == JoinRelType.INNER)) {
-			return;
-		}
 		final RexNode e_2 = r_1.getCondition();
 		if (!(e_2.isAlwaysTrue())) {
 			return;
 		}
 		final RelNode r_2 = call.rel(2);
-		if (!(r_2.getRowType().getFieldCount() == 2)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "L0_Type", true, r_2, 0))) {
 			return;
 		}
@@ -61,9 +52,6 @@ public class ProjectCorrelateTranspose extends RelRule<ProjectCorrelateTranspose
 			return;
 		}
 		final RelNode r_3 = call.rel(3);
-		if (!(r_3.getRowType().getFieldCount() == 2)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "R0_Type", true, r_3, 0))) {
 			return;
 		}
@@ -94,7 +82,7 @@ public class ProjectCorrelateTranspose extends RelRule<ProjectCorrelateTranspose
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalProject.class).oneInput(s_1 -> s_1.operand(LogicalJoin.class).inputs(s_2 -> s_2.operand(RelNode.class).anyInputs(), s_3 -> s_3.operand(RelNode.class).anyInputs()));
+			return s_0 -> s_0.operand(LogicalProject.class).predicate(r_0 -> r_0.getProjects().size() == 2).oneInput(s_1 -> s_1.operand(LogicalJoin.class).predicate(r_1 -> r_1.getJoinType() == JoinRelType.INNER).inputs(s_2 -> s_2.operand(RelNode.class).predicate(r_2 -> r_2.getRowType().getFieldCount() == 2).anyInputs(), s_3 -> s_3.operand(RelNode.class).predicate(r_3 -> r_3.getRowType().getFieldCount() == 2).anyInputs()));
 		}
 	}
 }

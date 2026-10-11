@@ -31,9 +31,6 @@ public class MapFilterIntoJoinRight extends RelRule<MapFilterIntoJoinRight.Confi
 		final RelBuilder b = CalciteRuntime.builder(call);
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalJoin r_0 = call.rel(0);
-		if (!(r_0.getJoinType() == JoinRelType.INNER)) {
-			return;
-		}
 		final RexNode e_0 = r_0.getCondition();
 		final List<RexNode> c_1 = CalciteRuntime.conjunctions(e_0);
 		if (!(c_1.size() == 2)) {
@@ -58,16 +55,10 @@ public class MapFilterIntoJoinRight extends RelRule<MapFilterIntoJoinRight.Confi
 			return;
 		}
 		final RelNode r_1 = call.rel(1);
-		if (!(r_1.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "Key_Type", false, r_1, 0))) {
 			return;
 		}
 		final RelNode r_2 = call.rel(2);
-		if (!(r_2.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "Key_Type", false, r_2, 0))) {
 			return;
 		}
@@ -92,7 +83,7 @@ public class MapFilterIntoJoinRight extends RelRule<MapFilterIntoJoinRight.Confi
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalJoin.class).inputs(s_1 -> s_1.operand(RelNode.class).anyInputs(), s_2 -> s_2.operand(RelNode.class).anyInputs());
+			return s_0 -> s_0.operand(LogicalJoin.class).predicate(r_0 -> r_0.getJoinType() == JoinRelType.INNER).inputs(s_1 -> s_1.operand(RelNode.class).predicate(r_1 -> r_1.getRowType().getFieldCount() == 1 && !r_1.getRowType().getFieldList().get(0).getType().isNullable()).anyInputs(), s_2 -> s_2.operand(RelNode.class).predicate(r_2 -> r_2.getRowType().getFieldCount() == 1 && !r_2.getRowType().getFieldList().get(0).getType().isNullable()).anyInputs());
 		}
 	}
 }

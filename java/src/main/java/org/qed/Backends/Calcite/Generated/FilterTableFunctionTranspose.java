@@ -38,9 +38,6 @@ public class FilterTableFunctionTranspose extends RelRule<FilterTableFunctionTra
 			return;
 		}
 		final LogicalProject r_1 = call.rel(1);
-		if (!(r_1.getProjects().size() == 2)) {
-			return;
-		}
 		final RexNode e_3 = r_1.getProjects().get(0);
 		if (!(e_3 instanceof RexInputRef && ((RexInputRef) e_3).getIndex() == 0)) {
 			return;
@@ -50,9 +47,6 @@ public class FilterTableFunctionTranspose extends RelRule<FilterTableFunctionTra
 			return;
 		}
 		final LogicalJoin r_2 = call.rel(2);
-		if (!(r_2.getJoinType() == JoinRelType.INNER)) {
-			return;
-		}
 		final RexNode e_5 = r_2.getCondition();
 		final RexNode[] args_6 = new RexNode[]{CalciteRuntime.ref(0), CalciteRuntime.ref(1), CalciteRuntime.ref(2)};
 		final RexNode sym_7 = e_5;
@@ -60,9 +54,6 @@ public class FilterTableFunctionTranspose extends RelRule<FilterTableFunctionTra
 			return;
 		}
 		final RelNode r_3 = call.rel(3);
-		if (!(r_3.getRowType().getFieldCount() == 2)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "S0_Type", true, r_3, 0))) {
 			return;
 		}
@@ -70,9 +61,6 @@ public class FilterTableFunctionTranspose extends RelRule<FilterTableFunctionTra
 			return;
 		}
 		final RelNode r_4 = call.rel(4);
-		if (!(r_4.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "T_Type", true, r_4, 0))) {
 			return;
 		}
@@ -99,7 +87,7 @@ public class FilterTableFunctionTranspose extends RelRule<FilterTableFunctionTra
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalFilter.class).oneInput(s_1 -> s_1.operand(LogicalProject.class).oneInput(s_2 -> s_2.operand(LogicalJoin.class).inputs(s_3 -> s_3.operand(RelNode.class).anyInputs(), s_4 -> s_4.operand(RelNode.class).anyInputs())));
+			return s_0 -> s_0.operand(LogicalFilter.class).oneInput(s_1 -> s_1.operand(LogicalProject.class).predicate(r_1 -> r_1.getProjects().size() == 2).oneInput(s_2 -> s_2.operand(LogicalJoin.class).predicate(r_2 -> r_2.getJoinType() == JoinRelType.INNER).inputs(s_3 -> s_3.operand(RelNode.class).predicate(r_3 -> r_3.getRowType().getFieldCount() == 2).anyInputs(), s_4 -> s_4.operand(RelNode.class).predicate(r_4 -> r_4.getRowType().getFieldCount() == 1).anyInputs())));
 		}
 	}
 }

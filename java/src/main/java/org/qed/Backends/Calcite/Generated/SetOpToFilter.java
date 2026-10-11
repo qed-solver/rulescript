@@ -31,12 +31,6 @@ public class SetOpToFilter extends RelRule<SetOpToFilter.Config> {
 		final RelBuilder b = CalciteRuntime.builder(call);
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalUnion r_0 = call.rel(0);
-		if (!(r_0.all == false)) {
-			return;
-		}
-		if (!(r_0.getInputs().size() == 2)) {
-			return;
-		}
 		final LogicalFilter r_1 = call.rel(1);
 		final RexNode e_0 = r_1.getCondition();
 		final RexNode[] args_1 = new RexNode[]{CalciteRuntime.ref(0)};
@@ -45,9 +39,6 @@ public class SetOpToFilter extends RelRule<SetOpToFilter.Config> {
 			return;
 		}
 		final RelNode r_2 = call.rel(2);
-		if (!(r_2.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "Source_Type", true, r_2, 0))) {
 			return;
 		}
@@ -83,7 +74,7 @@ public class SetOpToFilter extends RelRule<SetOpToFilter.Config> {
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalUnion.class).inputs(s_1 -> s_1.operand(LogicalFilter.class).oneInput(s_2 -> s_2.operand(RelNode.class).anyInputs()), s_3 -> s_3.operand(LogicalFilter.class).oneInput(s_4 -> s_4.operand(RelNode.class).anyInputs()));
+			return s_0 -> s_0.operand(LogicalUnion.class).predicate(r_0 -> r_0.all == false && r_0.getInputs().size() == 2).inputs(s_1 -> s_1.operand(LogicalFilter.class).oneInput(s_2 -> s_2.operand(RelNode.class).predicate(r_2 -> r_2.getRowType().getFieldCount() == 1).anyInputs()), s_3 -> s_3.operand(LogicalFilter.class).oneInput(s_4 -> s_4.operand(RelNode.class).anyInputs()));
 		}
 	}
 }

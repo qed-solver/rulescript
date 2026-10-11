@@ -31,9 +31,6 @@ public class FoldNullUnary extends RelRule<FoldNullUnary.Config> {
 		final RelBuilder b = CalciteRuntime.builder(call);
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalProject r_0 = call.rel(0);
-		if (!(r_0.getProjects().size() == 1)) {
-			return;
-		}
 		final RexNode e_0 = r_0.getProjects().get(0);
 		if (!(e_0 instanceof RexCall && ((RexCall) e_0).getOperator() == SqlStdOperatorTable.UNARY_MINUS && ((RexCall) e_0).getOperands().size() == 1)) {
 			return;
@@ -43,9 +40,6 @@ public class FoldNullUnary extends RelRule<FoldNullUnary.Config> {
 			return;
 		}
 		final RelNode r_1 = call.rel(1);
-		if (!(r_1.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "Source_Type", true, r_1, 0))) {
 			return;
 		}
@@ -69,7 +63,7 @@ public class FoldNullUnary extends RelRule<FoldNullUnary.Config> {
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalProject.class).oneInput(s_1 -> s_1.operand(RelNode.class).anyInputs());
+			return s_0 -> s_0.operand(LogicalProject.class).predicate(r_0 -> r_0.getProjects().size() == 1).oneInput(s_1 -> s_1.operand(RelNode.class).predicate(r_1 -> r_1.getRowType().getFieldCount() == 1).anyInputs());
 		}
 	}
 }

@@ -31,9 +31,6 @@ public class SemiJoinFilterTranspose extends RelRule<SemiJoinFilterTranspose.Con
 		final RelBuilder b = CalciteRuntime.builder(call);
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalJoin r_0 = call.rel(0);
-		if (!(r_0.getJoinType() == JoinRelType.SEMI)) {
-			return;
-		}
 		final RexNode e_0 = r_0.getCondition();
 		final RexNode[] args_1 = new RexNode[]{CalciteRuntime.ref(0), CalciteRuntime.ref(1), CalciteRuntime.ref(2), CalciteRuntime.ref(3)};
 		final RexNode sym_2 = e_0;
@@ -48,9 +45,6 @@ public class SemiJoinFilterTranspose extends RelRule<SemiJoinFilterTranspose.Con
 			return;
 		}
 		final RelNode r_2 = call.rel(2);
-		if (!(r_2.getRowType().getFieldCount() == 2)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "X0_Type", true, r_2, 0))) {
 			return;
 		}
@@ -58,9 +52,6 @@ public class SemiJoinFilterTranspose extends RelRule<SemiJoinFilterTranspose.Con
 			return;
 		}
 		final RelNode r_3 = call.rel(3);
-		if (!(r_3.getRowType().getFieldCount() == 2)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "Y0_Type", true, r_3, 0))) {
 			return;
 		}
@@ -89,7 +80,7 @@ public class SemiJoinFilterTranspose extends RelRule<SemiJoinFilterTranspose.Con
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalJoin.class).inputs(s_1 -> s_1.operand(LogicalFilter.class).oneInput(s_2 -> s_2.operand(RelNode.class).anyInputs()), s_3 -> s_3.operand(RelNode.class).anyInputs());
+			return s_0 -> s_0.operand(LogicalJoin.class).predicate(r_0 -> r_0.getJoinType() == JoinRelType.SEMI).inputs(s_1 -> s_1.operand(LogicalFilter.class).oneInput(s_2 -> s_2.operand(RelNode.class).predicate(r_2 -> r_2.getRowType().getFieldCount() == 2).anyInputs()), s_3 -> s_3.operand(RelNode.class).predicate(r_3 -> r_3.getRowType().getFieldCount() == 2).anyInputs());
 		}
 	}
 }

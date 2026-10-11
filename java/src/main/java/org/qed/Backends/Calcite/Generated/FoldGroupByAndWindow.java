@@ -54,9 +54,6 @@ public class FoldGroupByAndWindow extends RelRule<FoldGroupByAndWindow.Config> {
 			return;
 		}
 		final LogicalJoin r_1 = call.rel(1);
-		if (!(r_1.getJoinType() == JoinRelType.INNER)) {
-			return;
-		}
 		final RexNode e_4 = r_1.getCondition();
 		if (!(e_4 instanceof RexCall && ((RexCall) e_4).getOperator() == SqlStdOperatorTable.EQUALS && ((RexCall) e_4).getOperands().size() == 2)) {
 			return;
@@ -70,9 +67,6 @@ public class FoldGroupByAndWindow extends RelRule<FoldGroupByAndWindow.Config> {
 			return;
 		}
 		final RelNode r_2 = call.rel(2);
-		if (!(r_2.getRowType().getFieldCount() == 2)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "k", false, r_2, 0))) {
 			return;
 		}
@@ -126,7 +120,7 @@ public class FoldGroupByAndWindow extends RelRule<FoldGroupByAndWindow.Config> {
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalAggregate.class).oneInput(s_1 -> s_1.operand(LogicalJoin.class).inputs(s_2 -> s_2.operand(RelNode.class).anyInputs(), s_3 -> s_3.operand(LogicalAggregate.class).oneInput(s_4 -> s_4.operand(RelNode.class).anyInputs())));
+			return s_0 -> s_0.operand(LogicalAggregate.class).oneInput(s_1 -> s_1.operand(LogicalJoin.class).predicate(r_1 -> r_1.getJoinType() == JoinRelType.INNER).inputs(s_2 -> s_2.operand(RelNode.class).predicate(r_2 -> r_2.getRowType().getFieldCount() == 2 && !r_2.getRowType().getFieldList().get(0).getType().isNullable() && !r_2.getRowType().getFieldList().get(1).getType().isNullable()).anyInputs(), s_3 -> s_3.operand(LogicalAggregate.class).oneInput(s_4 -> s_4.operand(RelNode.class).anyInputs())));
 		}
 	}
 }

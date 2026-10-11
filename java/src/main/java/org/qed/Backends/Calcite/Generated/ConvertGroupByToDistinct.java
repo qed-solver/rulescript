@@ -50,9 +50,6 @@ public class ConvertGroupByToDistinct extends RelRule<ConvertGroupByToDistinct.C
 			return;
 		}
 		final RelNode r_1 = call.rel(1);
-		if (!(r_1.getRowType().getFieldCount() == 2)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "K1_Type", false, r_1, 0))) {
 			return;
 		}
@@ -80,7 +77,7 @@ public class ConvertGroupByToDistinct extends RelRule<ConvertGroupByToDistinct.C
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalAggregate.class).oneInput(s_1 -> s_1.operand(RelNode.class).anyInputs());
+			return s_0 -> s_0.operand(LogicalAggregate.class).oneInput(s_1 -> s_1.operand(RelNode.class).predicate(r_1 -> r_1.getRowType().getFieldCount() == 2 && !r_1.getRowType().getFieldList().get(0).getType().isNullable() && !r_1.getRowType().getFieldList().get(1).getType().isNullable()).anyInputs());
 		}
 	}
 }

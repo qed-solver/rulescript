@@ -31,9 +31,6 @@ public class OuterJoinToAntiJoin extends RelRule<OuterJoinToAntiJoin.Config> {
 		final RelBuilder b = CalciteRuntime.builder(call);
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalProject r_0 = call.rel(0);
-		if (!(r_0.getProjects().size() == 1)) {
-			return;
-		}
 		final RexNode e_0 = r_0.getProjects().get(0);
 		if (!(e_0 instanceof RexInputRef && ((RexInputRef) e_0).getIndex() == 0)) {
 			return;
@@ -48,9 +45,6 @@ public class OuterJoinToAntiJoin extends RelRule<OuterJoinToAntiJoin.Config> {
 			return;
 		}
 		final LogicalJoin r_2 = call.rel(2);
-		if (!(r_2.getJoinType() == JoinRelType.LEFT)) {
-			return;
-		}
 		final RexNode e_3 = r_2.getCondition();
 		final RexNode[] args_4 = new RexNode[]{CalciteRuntime.ref(0), CalciteRuntime.ref(1)};
 		final RexNode sym_5 = e_3;
@@ -58,16 +52,10 @@ public class OuterJoinToAntiJoin extends RelRule<OuterJoinToAntiJoin.Config> {
 			return;
 		}
 		final RelNode r_3 = call.rel(3);
-		if (!(r_3.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "L_T", true, r_3, 0))) {
 			return;
 		}
 		final RelNode r_4 = call.rel(4);
-		if (!(r_4.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "R_T", false, r_4, 0))) {
 			return;
 		}
@@ -92,7 +80,7 @@ public class OuterJoinToAntiJoin extends RelRule<OuterJoinToAntiJoin.Config> {
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalProject.class).oneInput(s_1 -> s_1.operand(LogicalFilter.class).oneInput(s_2 -> s_2.operand(LogicalJoin.class).inputs(s_3 -> s_3.operand(RelNode.class).anyInputs(), s_4 -> s_4.operand(RelNode.class).anyInputs())));
+			return s_0 -> s_0.operand(LogicalProject.class).predicate(r_0 -> r_0.getProjects().size() == 1).oneInput(s_1 -> s_1.operand(LogicalFilter.class).oneInput(s_2 -> s_2.operand(LogicalJoin.class).predicate(r_2 -> r_2.getJoinType() == JoinRelType.LEFT).inputs(s_3 -> s_3.operand(RelNode.class).predicate(r_3 -> r_3.getRowType().getFieldCount() == 1).anyInputs(), s_4 -> s_4.operand(RelNode.class).predicate(r_4 -> r_4.getRowType().getFieldCount() == 1 && !r_4.getRowType().getFieldList().get(0).getType().isNullable()).anyInputs())));
 		}
 	}
 }

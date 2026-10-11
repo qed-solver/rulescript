@@ -32,25 +32,16 @@ public class DecorrelateJoin extends RelRule<DecorrelateJoin.Config> {
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalCorrelate r_0 = call.rel(0);
 		final RelNode r_1 = call.rel(1);
-		if (!(r_1.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "T", true, r_1, 0))) {
 			return;
 		}
 		final LogicalFilter r_2 = call.rel(2);
-		if (!(r_0.getJoinType() == JoinRelType.INNER)) {
-			return;
-		}
 		final RexNode[] ca_0 = CalciteRuntime.correlateArguments(r_0);
 		final RexNode sym_1 = r_2.getCondition();
 		if (!(CalciteRuntime.abstracts(sym_1, ca_0))) {
 			return;
 		}
 		final RelNode r_3 = call.rel(3);
-		if (!(r_3.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "T", true, r_3, 0))) {
 			return;
 		}
@@ -75,7 +66,7 @@ public class DecorrelateJoin extends RelRule<DecorrelateJoin.Config> {
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalCorrelate.class).inputs(s_1 -> s_1.operand(RelNode.class).anyInputs(), s_2 -> s_2.operand(LogicalFilter.class).oneInput(s_3 -> s_3.operand(RelNode.class).anyInputs()));
+			return s_0 -> s_0.operand(LogicalCorrelate.class).predicate(r_0 -> r_0.getJoinType() == JoinRelType.INNER).inputs(s_1 -> s_1.operand(RelNode.class).predicate(r_1 -> r_1.getRowType().getFieldCount() == 1).anyInputs(), s_2 -> s_2.operand(LogicalFilter.class).oneInput(s_3 -> s_3.operand(RelNode.class).predicate(r_3 -> r_3.getRowType().getFieldCount() == 1).anyInputs()));
 		}
 	}
 }

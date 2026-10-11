@@ -31,9 +31,6 @@ public class JoinPushTransitivePredicates extends RelRule<JoinPushTransitivePred
 		final RelBuilder b = CalciteRuntime.builder(call);
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalJoin r_0 = call.rel(0);
-		if (!(r_0.getJoinType() == JoinRelType.INNER)) {
-			return;
-		}
 		final RexNode e_0 = r_0.getCondition();
 		if (!(e_0 instanceof RexCall && ((RexCall) e_0).getOperator() == SqlStdOperatorTable.EQUALS && ((RexCall) e_0).getOperands().size() == 2)) {
 			return;
@@ -47,9 +44,6 @@ public class JoinPushTransitivePredicates extends RelRule<JoinPushTransitivePred
 			return;
 		}
 		final RelNode r_1 = call.rel(1);
-		if (!(r_1.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "Key_Type", false, r_1, 0))) {
 			return;
 		}
@@ -61,9 +55,6 @@ public class JoinPushTransitivePredicates extends RelRule<JoinPushTransitivePred
 			return;
 		}
 		final RelNode r_3 = call.rel(3);
-		if (!(r_3.getRowType().getFieldCount() == 1)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "Key_Type", false, r_3, 0))) {
 			return;
 		}
@@ -90,7 +81,7 @@ public class JoinPushTransitivePredicates extends RelRule<JoinPushTransitivePred
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalJoin.class).inputs(s_1 -> s_1.operand(RelNode.class).anyInputs(), s_2 -> s_2.operand(LogicalFilter.class).oneInput(s_3 -> s_3.operand(RelNode.class).anyInputs()));
+			return s_0 -> s_0.operand(LogicalJoin.class).predicate(r_0 -> r_0.getJoinType() == JoinRelType.INNER).inputs(s_1 -> s_1.operand(RelNode.class).predicate(r_1 -> r_1.getRowType().getFieldCount() == 1 && !r_1.getRowType().getFieldList().get(0).getType().isNullable()).anyInputs(), s_2 -> s_2.operand(LogicalFilter.class).oneInput(s_3 -> s_3.operand(RelNode.class).predicate(r_3 -> r_3.getRowType().getFieldCount() == 1 && !r_3.getRowType().getFieldList().get(0).getType().isNullable()).anyInputs()));
 		}
 	}
 }

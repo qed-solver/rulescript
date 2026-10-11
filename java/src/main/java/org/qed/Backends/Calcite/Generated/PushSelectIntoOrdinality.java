@@ -38,9 +38,6 @@ public class PushSelectIntoOrdinality extends RelRule<PushSelectIntoOrdinality.C
 			return;
 		}
 		final LogicalProject r_1 = call.rel(1);
-		if (!(r_1.getProjects().size() == 3)) {
-			return;
-		}
 		final RexNode e_3 = r_1.getProjects().get(0);
 		if (!(e_3 instanceof RexInputRef && ((RexInputRef) e_3).getIndex() == 0)) {
 			return;
@@ -56,9 +53,6 @@ public class PushSelectIntoOrdinality extends RelRule<PushSelectIntoOrdinality.C
 			return;
 		}
 		final RelNode r_2 = call.rel(2);
-		if (!(r_2.getRowType().getFieldCount() == 2)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "C0_Type", true, r_2, 0))) {
 			return;
 		}
@@ -86,7 +80,7 @@ public class PushSelectIntoOrdinality extends RelRule<PushSelectIntoOrdinality.C
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalFilter.class).oneInput(s_1 -> s_1.operand(LogicalProject.class).oneInput(s_2 -> s_2.operand(RelNode.class).anyInputs()));
+			return s_0 -> s_0.operand(LogicalFilter.class).oneInput(s_1 -> s_1.operand(LogicalProject.class).predicate(r_1 -> r_1.getProjects().size() == 3).oneInput(s_2 -> s_2.operand(RelNode.class).predicate(r_2 -> r_2.getRowType().getFieldCount() == 2).anyInputs()));
 		}
 	}
 }

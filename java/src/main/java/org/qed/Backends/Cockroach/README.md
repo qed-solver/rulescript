@@ -33,12 +33,28 @@ The first generates, copies into CockroachDB and runs the tests (`-f` filters th
 
 ## Use in a CockroachDB server
 
-Build CockroachDB after `setup-cockroach.sh` (`cd vendor/cockroach && ./dev build cockroach-short`), then start it with the
-generated rules loaded:
+Build CockroachDB after `setup-cockroach.sh` (`cd vendor/cockroach && ./dev build cockroach-short`). The server loads every
+`*.json` rule file from the directory in `COCKROACH_RULESCRIPT_DIR`; any rule you want in the optimizer is just a file there.
 
-```sh
-COCKROACH_RULESCRIPT_DIR=<path to Generated/> ./cockroach-short demo
-```
+1. Generate the rules (`./mvnw -q compile exec:java@cockroach-codegen`); they are written to `Generated/`.
+2. Make a directory holding only the rules you want, for example a few by name or every rule of one origin:
 
-Every query is then optimized with the rules (they run as `ExternalNormalizeRule`, which can be switched off with
-`SET disable_optimizer_rules`). Rules whose output contains their own pattern (so they would keep growing the plan) are skipped at startup with a message. `./scripts/demo-cockroach.sh` builds the server and prints plans with the rules off and on.
+   ```sh
+   mkdir my-rules
+   cp Generated/MergeSelects.json Generated/UnionToDistinct.json my-rules/
+   for f in ../../RRuleInstances/*.java; do grep -q '^// ORIGIN: Calcite' "$f" && cp Generated/$(basename "$f" .java).json my-rules/; done
+   ```
+
+3. Start CockroachDB with that directory:
+
+   ```sh
+   COCKROACH_RULESCRIPT_DIR=$PWD/my-rules ./cockroach-short demo
+   ```
+
+   On startup it prints `rulescript: loaded N rules from ...` and one `rulescript: skipped ...` line per file it did not load.
+   A rule is skipped when its output contains its own pattern (it would keep growing the plan).
+4. Every query is now optimized with the rules, as `ExternalNormalizeRule`. Turn them off for a session with
+   `SET disable_optimizer_rules = 'ExternalNormalizeRule'`. Without `COCKROACH_RULESCRIPT_DIR` the server is unchanged.
+
+To see which rules fire, also set `COCKROACH_RULESCRIPT_LOG=<file>`; each time a rule rewrites an expression its name is
+appended to that file (`sort <file> | uniq -c` gives the counts).

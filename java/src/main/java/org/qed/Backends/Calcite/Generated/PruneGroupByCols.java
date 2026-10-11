@@ -31,9 +31,6 @@ public class PruneGroupByCols extends RelRule<PruneGroupByCols.Config> {
 		final RelBuilder b = CalciteRuntime.builder(call);
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalProject r_0 = call.rel(0);
-		if (!(r_0.getProjects().size() == 3)) {
-			return;
-		}
 		final RexNode e_0 = r_0.getProjects().get(0);
 		if (!(e_0 instanceof RexInputRef && ((RexInputRef) e_0).getIndex() == 0)) {
 			return;
@@ -78,9 +75,6 @@ public class PruneGroupByCols extends RelRule<PruneGroupByCols.Config> {
 			return;
 		}
 		final RelNode r_2 = call.rel(2);
-		if (!(r_2.getRowType().getFieldCount() == 4)) {
-			return;
-		}
 		if (!(CalciteRuntime.bindColumn(types, "K_Type", true, r_2, 0))) {
 			return;
 		}
@@ -115,7 +109,7 @@ public class PruneGroupByCols extends RelRule<PruneGroupByCols.Config> {
 
 		@Override
 		default RelRule.OperandTransform operandSupplier() {
-			return s_0 -> s_0.operand(LogicalProject.class).oneInput(s_1 -> s_1.operand(LogicalAggregate.class).oneInput(s_2 -> s_2.operand(RelNode.class).anyInputs()));
+			return s_0 -> s_0.operand(LogicalProject.class).predicate(r_0 -> r_0.getProjects().size() == 3).oneInput(s_1 -> s_1.operand(LogicalAggregate.class).oneInput(s_2 -> s_2.operand(RelNode.class).predicate(r_2 -> r_2.getRowType().getFieldCount() == 4).anyInputs()));
 		}
 	}
 }
