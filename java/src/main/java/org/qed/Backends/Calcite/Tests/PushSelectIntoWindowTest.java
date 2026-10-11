@@ -17,7 +17,7 @@ public class PushSelectIntoWindowTest {
 
     private static void ordinaryTables(PushSelectIntoWindow rule) {
         var base = RuleBuilder.create();
-        var t = RuleChecks.table(base, 2, false);
+        var t = RuleChecks.table(base, 2, false, false);
         var w = base.genericAggregateOp("w", RelType.fromString("INTEGER", true));
         var b = RuleChecks.ruleBuilder(base);
 
@@ -28,8 +28,9 @@ public class PushSelectIntoWindowTest {
         var window = base.push(input).push(perPart)
                 .join(JoinRelType.INNER, RuleChecks.eq(base, base.field(2, 0, 0), base.field(2, 1, 0)))
                 .build();
+        var q = base.genericPredicateOp("Q", true);
         var before = base.push(window)
-                .filter(base.and(RuleChecks.gt(base, base.field(0), 5), RuleChecks.gt(base, base.field(1), 10)))
+                .filter(base.and(RuleChecks.gt(base, base.field(0), 5), base.call(q, base.field(0), base.field(1), base.field(3))))
                 .build();
 
         var filteredInput = b.scan(t).filter(RuleChecks.gt(b, b.field(0), 5)).build();
@@ -39,7 +40,7 @@ public class PushSelectIntoWindowTest {
         var filteredWindow = b.push(filteredInput).push(filteredPerPart)
                 .join(JoinRelType.INNER, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
                 .build();
-        var after = b.push(filteredWindow).filter(RuleChecks.gt(b, b.field(1), 10)).build();
+        var after = b.push(filteredWindow).filter(b.call(q, b.field(0), b.field(1), b.field(3))).build();
         RuleChecks.rewrites(rule, before, after);
 
         var leftWindow = base.push(input).push(perPart)

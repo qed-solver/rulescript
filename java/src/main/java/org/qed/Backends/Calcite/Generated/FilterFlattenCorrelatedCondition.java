@@ -74,7 +74,7 @@ public class FilterFlattenCorrelatedCondition extends RelRule<FilterFlattenCorre
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1), CalciteRuntime.instantiate(sym_5, args_4, new RexNode[]{CalciteRuntime.field(b, 1, 1)})));
 		b.filter(b.call(op_1, CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 2)));
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

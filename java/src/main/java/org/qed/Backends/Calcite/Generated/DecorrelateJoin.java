@@ -57,7 +57,7 @@ public class DecorrelateJoin extends RelRule<DecorrelateJoin.Config> {
 		b.push(r_1);
 		b.push(r_3);
 		b.join(JoinRelType.INNER, CalciteRuntime.instantiate(sym_1, ca_0, new RexNode[]{CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)}));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

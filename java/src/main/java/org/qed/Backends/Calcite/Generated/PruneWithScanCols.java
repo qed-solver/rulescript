@@ -56,7 +56,7 @@ public class PruneWithScanCols extends RelRule<PruneWithScanCols.Config> {
 		b.push(r_1);
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
 		b.project(CalciteRuntime.instantiate(sym_2, args_1, new RexNode[]{CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)}));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

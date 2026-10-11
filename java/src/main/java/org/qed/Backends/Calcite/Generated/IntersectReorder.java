@@ -62,7 +62,7 @@ public class IntersectReorder extends RelRule<IntersectReorder.Config> {
 		b.push(r_1);
 		b.push(r_2);
 		b.intersect(false, 3);
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

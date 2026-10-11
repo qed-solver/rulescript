@@ -74,7 +74,7 @@ public class TryDecorrelateProject extends RelRule<TryDecorrelateProject.Config>
 		b.join(JoinRelType.INNER, b.literal(true));
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 2), CalciteRuntime.field(b, 1, 1)));
 		b.filter(CalciteRuntime.instantiate(sym_2, args_1, new RexNode[]{CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1), CalciteRuntime.field(b, 1, 2)}));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

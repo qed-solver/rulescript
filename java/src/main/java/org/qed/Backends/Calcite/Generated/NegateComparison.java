@@ -73,7 +73,7 @@ public class NegateComparison extends RelRule<NegateComparison.Config> {
 		b.push(r_3);
 		b.join(JoinRelType.INNER, b.literal(true));
 		b.filter(b.call(SqlStdOperatorTable.NOT_EQUALS, CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

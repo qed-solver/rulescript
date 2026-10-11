@@ -55,7 +55,7 @@ public class FoldNotInEmpty extends RelRule<FoldNotInEmpty.Config> {
 			return;
 		}
 		b.push(r_1);
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

@@ -30,13 +30,8 @@
         "op" : "pred",
         "name" : "M",
         "args" : [ {
-          "op" : "field",
-          "ordinal" : 0,
-          "of" : "r0"
-        }, {
-          "op" : "field",
-          "ordinal" : 0,
-          "of" : "r1"
+          "op" : "row",
+          "rels" : [ "r2" ]
         } ]
       },
       "left" : {
@@ -73,13 +68,8 @@
         "op" : "pred",
         "name" : "M",
         "args" : [ {
-          "op" : "field",
-          "ordinal" : 0,
-          "of" : "r0"
-        }, {
-          "op" : "field",
-          "ordinal" : 0,
-          "of" : "r1"
+          "op" : "row",
+          "rels" : [ "r4" ]
         } ]
       },
       "left" : {

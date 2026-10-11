@@ -35,7 +35,7 @@ public class JoinConditionPush extends RelRule<JoinConditionPush.Config> {
 			return;
 		}
 		final RexNode e_0 = r_0.getCondition();
-		final List<RexNode> c_1 = RelOptUtil.conjunctions(e_0);
+		final List<RexNode> c_1 = CalciteRuntime.conjunctions(e_0);
 		if (!(c_1.size() == 3)) {
 			return;
 		}
@@ -76,7 +76,7 @@ public class JoinConditionPush extends RelRule<JoinConditionPush.Config> {
 		b.push(r_2);
 		b.filter(CalciteRuntime.instantiate(sym_7, args_6, new RexNode[]{CalciteRuntime.field(b, 1, 0)}));
 		b.join(JoinRelType.INNER, CalciteRuntime.instantiate(sym_10, args_9, new RexNode[]{CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)}));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

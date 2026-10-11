@@ -1,6 +1,8 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.logical.LogicalAggregate;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.util.ImmutableBitSet;
 import org.qed.RRuleInstances.FoldGroupingOperators;
 import org.qed.RuleBuilder;
 
@@ -20,11 +22,11 @@ public class FoldGroupingOperatorsTest {
         var base = RuleBuilder.create();
         var t = RuleChecks.table(base, 1, false);
         var b = RuleChecks.ruleBuilder(base);
-        var before = b.scan(t)
+        var inner = b.scan(t)
                 .project(List.of(b.field(0)), List.of("k"), true)
                 .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.SUM, b.field(0)))
-                .aggregate(b.groupKey(0))
                 .build();
+        var before = LogicalAggregate.create(inner, ImmutableBitSet.of(0), null, List.of());
         var after = b.scan(t).aggregate(b.groupKey(0)).build();
         RuleChecks.rewrites(rule, before, after);
 

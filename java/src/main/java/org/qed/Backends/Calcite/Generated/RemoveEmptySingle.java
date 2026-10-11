@@ -61,7 +61,7 @@ public class RemoveEmptySingle extends RelRule<RemoveEmptySingle.Config> {
 			return;
 		}
 		b.values(r_0.getRowType());
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

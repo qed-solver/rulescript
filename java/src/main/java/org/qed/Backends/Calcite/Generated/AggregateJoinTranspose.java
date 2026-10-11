@@ -85,7 +85,7 @@ public class AggregateJoinTranspose extends RelRule<AggregateJoinTranspose.Confi
 		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
 		b.join(JoinRelType.INNER, CalciteRuntime.instantiate(sym_5, args_4, new RexNode[]{CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 2)}));
 		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 1), CalciteRuntime.field(b, 1, 3)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

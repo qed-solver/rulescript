@@ -186,8 +186,30 @@ public final class FaithfulPlans {
                     rexBuilder.makeCall(proj.operator(), proj.sources().map(e -> rex(builder, options, e)).asJava());
             case RexRN.GroupBy groupBy ->
                     rexBuilder.makeCall(groupBy.operator(), groupBy.sources().map(e -> rex(builder, options, e)).asJava());
-            default -> pattern.semantics();
+            default -> {
+                var body = subqueryBody(pattern);
+                yield body == null ? pattern.semantics()
+                        : org.apache.calcite.rex.RexSubQuery.exists(build(body, options));
+            }
         };
+    }
+
+    private static RelRN subqueryBody(RexRN pattern) {
+        if (!pattern.getClass().isRecord() || pattern.getClass().getEnclosingClass() == RexRN.class) {
+            return null;
+        }
+        try {
+            for (var component : pattern.getClass().getRecordComponents()) {
+                var accessor = component.getAccessor();
+                accessor.setAccessible(true);
+                if (accessor.invoke(pattern) instanceof RelRN body) {
+                    return body;
+                }
+            }
+        } catch (ReflectiveOperationException e) {
+            return null;
+        }
+        return null;
     }
 
     private static final List<org.apache.calcite.sql.SqlOperator> UNARY_PREDICATES = List.of(

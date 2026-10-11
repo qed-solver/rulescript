@@ -1,5 +1,8 @@
 package org.qed.Backends.Calcite.Tests;
 
+import java.util.List;
+
+import org.apache.calcite.rel.logical.LogicalProject;
 import org.qed.RRuleInstances.PruneOrdinalityCols;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
@@ -19,24 +22,33 @@ public class PruneOrdinalityColsTest {
         var three = RuleChecks.table(builder, 3, false);
         var oOp = builder.genericProjectionOp("O", RelType.fromString("INTEGER", true));
         var gOp = builder.genericProjectionOp("G", RelType.fromString("INTEGER", true));
-        var before = builder.scan(three)
-                .project(builder.field(0), builder.field(1), builder.field(2),
-                        builder.call(oOp, builder.field(0), builder.field(1)))
-                .project(builder.call(gOp, builder.field(0), builder.field(1), builder.field(3)))
-                .build();
         var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(three)
-                .project(plain.field(0), plain.field(1))
-                .project(plain.field(0), plain.field(1), plain.call(oOp, plain.field(0), plain.field(1)))
-                .project(plain.call(gOp, plain.field(0), plain.field(1), plain.field(2)))
-                .build();
+        var rx = plain.getRexBuilder();
+        var scanned = plain.scan(three).build();
+        var ord = LogicalProject.create(scanned, List.of(), List.of(
+                rx.makeInputRef(scanned, 0), rx.makeInputRef(scanned, 1), rx.makeInputRef(scanned, 2),
+                rx.makeCall(oOp, rx.makeInputRef(scanned, 0), rx.makeInputRef(scanned, 1))), (List<String>) null);
+        var before = LogicalProject.create(ord, List.of(), List.of(
+                rx.makeCall(gOp, rx.makeInputRef(ord, 0), rx.makeInputRef(ord, 1), rx.makeInputRef(ord, 3))),
+                (List<String>) null);
+        var pruned = plain.scan(three).build();
+        var prunedOrd = LogicalProject.create(LogicalProject.create(pruned, List.of(), List.of(
+                rx.makeInputRef(pruned, 0), rx.makeInputRef(pruned, 1)), (List<String>) null), List.of(), List.of(
+                rx.makeInputRef(pruned, 0), rx.makeInputRef(pruned, 1),
+                rx.makeCall(oOp, rx.makeInputRef(pruned, 0), rx.makeInputRef(pruned, 1))), (List<String>) null);
+        var after = LogicalProject.create(prunedOrd, List.of(), List.of(
+                rx.makeCall(gOp, rx.makeInputRef(prunedOrd, 0), rx.makeInputRef(prunedOrd, 1),
+                        rx.makeInputRef(prunedOrd, 2))), (List<String>) null);
         RuleChecks.rewrites(rule, before, after);
 
-        var nearMiss = builder.scan(three)
-                .project(builder.field(0), builder.field(1), builder.field(2),
-                        builder.call(oOp, builder.field(0), builder.field(2)))
-                .project(builder.call(gOp, builder.field(0), builder.field(1), builder.field(3)))
-                .build();
+        var nearMissScan = plain.scan(three).build();
+        var nearMissOrd = LogicalProject.create(nearMissScan, List.of(), List.of(
+                rx.makeInputRef(nearMissScan, 0), rx.makeInputRef(nearMissScan, 1), rx.makeInputRef(nearMissScan, 2),
+                rx.makeCall(oOp, rx.makeInputRef(nearMissScan, 0), rx.makeInputRef(nearMissScan, 2))),
+                (List<String>) null);
+        var nearMiss = LogicalProject.create(nearMissOrd, List.of(), List.of(
+                rx.makeCall(gOp, rx.makeInputRef(nearMissOrd, 0), rx.makeInputRef(nearMissOrd, 1),
+                        rx.makeInputRef(nearMissOrd, 3))), (List<String>) null);
         RuleChecks.doesNotApply(rule, nearMiss);
     }
 

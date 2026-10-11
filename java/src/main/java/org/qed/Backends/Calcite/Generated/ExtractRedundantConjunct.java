@@ -32,12 +32,12 @@ public class ExtractRedundantConjunct extends RelRule<ExtractRedundantConjunct.C
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalFilter r_0 = call.rel(0);
 		final RexNode e_0 = r_0.getCondition();
-		final List<RexNode> d_1 = RelOptUtil.disjunctions(e_0);
+		final List<RexNode> d_1 = CalciteRuntime.disjunctions(e_0);
 		if (!(d_1.size() == 2)) {
 			return;
 		}
 		final RexNode e_2 = d_1.get(0);
-		final List<RexNode> c_3 = RelOptUtil.conjunctions(e_2);
+		final List<RexNode> c_3 = CalciteRuntime.conjunctions(e_2);
 		if (!(c_3.size() == 2)) {
 			return;
 		}
@@ -54,7 +54,7 @@ public class ExtractRedundantConjunct extends RelRule<ExtractRedundantConjunct.C
 			return;
 		}
 		final RexNode e_10 = d_1.get(1);
-		final List<RexNode> c_11 = RelOptUtil.conjunctions(e_10);
+		final List<RexNode> c_11 = CalciteRuntime.conjunctions(e_10);
 		if (!(c_11.size() == 2)) {
 			return;
 		}
@@ -77,7 +77,7 @@ public class ExtractRedundantConjunct extends RelRule<ExtractRedundantConjunct.C
 		}
 		b.push(r_1);
 		b.filter(b.and(CalciteRuntime.instantiate(sym_6, args_5, new RexNode[]{CalciteRuntime.field(b, 1, 0)}), b.or(CalciteRuntime.instantiate(sym_9, args_8, new RexNode[]{CalciteRuntime.field(b, 1, 0)}), CalciteRuntime.instantiate(sym_15, args_14, new RexNode[]{CalciteRuntime.field(b, 1, 0)}))));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

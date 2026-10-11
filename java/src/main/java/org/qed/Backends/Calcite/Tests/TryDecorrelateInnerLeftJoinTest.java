@@ -21,12 +21,12 @@ public class TryDecorrelateInnerLeftJoinTest {
         var ir = RuleChecks.table(builder, 1, false);
         var on = builder.genericPredicateOp("on", true);
         var innerOn = builder.genericPredicateOp("innerOn", true);
-        var before = builder.scan(l)
-                .scan(il).scan(ir)
-                .join(JoinRelType.LEFT, builder.call(innerOn, builder.field(2, 0, 0), builder.field(2, 1, 0)))
-                .join(JoinRelType.INNER, builder.call(on, builder.field(2, 0, 0), builder.field(2, 1, 1)))
-                .build();
         var plain = RuleChecks.ruleBuilder(builder);
+        var before = plain.scan(l)
+                .scan(il).scan(ir)
+                .join(JoinRelType.LEFT, plain.call(innerOn, plain.field(2, 0, 0), plain.field(2, 1, 0)))
+                .join(JoinRelType.INNER, plain.call(on, plain.field(2, 0, 0), plain.field(2, 1, 0)))
+                .build();
         var after = plain.scan(l)
                 .scan(il)
                 .join(JoinRelType.INNER, plain.call(on, plain.field(2, 0, 0), plain.field(2, 1, 0)))

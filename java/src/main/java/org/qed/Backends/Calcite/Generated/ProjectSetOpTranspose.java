@@ -66,7 +66,7 @@ public class ProjectSetOpTranspose extends RelRule<ProjectSetOpTranspose.Config>
 		b.push(r_3);
 		b.project(CalciteRuntime.instantiate(sym_2, args_1, new RexNode[]{CalciteRuntime.field(b, 1, 0)}));
 		b.union(true, 2);
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

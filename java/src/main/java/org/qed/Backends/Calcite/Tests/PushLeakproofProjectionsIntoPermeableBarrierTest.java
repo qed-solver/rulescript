@@ -21,14 +21,13 @@ public class PushLeakproofProjectionsIntoPermeableBarrierTest {
         var one = RuleChecks.table(base, 1, false);
         var two = RuleChecks.table(base, 2, false);
         var b = RuleChecks.ruleBuilder(base);
-        var first = List.of(b.field(0));
-        var before = b.scan(one).project(first, List.of(), true)
+        var before = b.scan(one).project(List.of(b.field(0)), List.of(), true)
                 .project(b.call(SqlStdOperatorTable.PLUS, b.field(0), b.literal(1)), b.field(0)).build();
         var after = b.scan(one)
                 .project(b.call(SqlStdOperatorTable.PLUS, b.field(0), b.literal(1)), b.field(0)).build();
         RuleChecks.rewrites(rule, before, after);
 
-        var wide = b.scan(two).project(first, List.of(), true)
+        var wide = b.scan(two).project(List.of(b.field(0)), List.of(), true)
                 .project(b.call(SqlStdOperatorTable.PLUS, b.field(0), b.literal(1)), b.field(0)).build();
         RuleChecks.doesNotApply(rule, wide);
     }

@@ -87,7 +87,7 @@ public class UnionPullUpConstants extends RelRule<UnionPullUpConstants.Config> {
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 1)));
 		b.union(true, 2);
 		b.project(List.<RexNode>of(b.literal(true), CalciteRuntime.field(b, 1, 0)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

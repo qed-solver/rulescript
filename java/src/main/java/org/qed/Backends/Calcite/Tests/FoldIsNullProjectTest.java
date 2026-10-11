@@ -20,10 +20,10 @@ public class FoldIsNullProjectTest {
     private static void ordinaryTables(FoldIsNullProject rule) {
         var builder = RuleBuilder.create();
         var notNullFirst = table(builder, false);
-        var before = builder.scan(notNullFirst)
-                .project(builder.call(SqlStdOperatorTable.IS_NULL, builder.field(0)), builder.field(1))
-                .build();
         var plain = RuleChecks.ruleBuilder(builder);
+        var before = plain.scan(notNullFirst)
+                .project(plain.call(SqlStdOperatorTable.IS_NULL, plain.field(0)), plain.field(1))
+                .build();
         var after = plain.scan(notNullFirst)
                 .project(plain.literal(false), plain.field(1))
                 .build();

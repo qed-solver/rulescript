@@ -17,7 +17,7 @@ public class InlineSelectConstantsTest {
     private static void ordinaryTables(InlineSelectConstants rule) {
         var builder = RuleBuilder.create();
         var source = RuleChecks.table(builder, 1, false);
-        var constant = RuleChecks.table(builder, 1, true);
+        var constant = RuleChecks.table(builder, 1, true, false);
         var predicate = builder.genericPredicateOp("g", true);
         var before = builder.scan(source).scan(constant)
                 .join(JoinRelType.INNER, RuleChecks.eq(builder, builder.field(2, 0, 0), builder.field(2, 1, 0)))

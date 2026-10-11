@@ -94,7 +94,7 @@ public class AggregateToSemiJoin extends RelRule<AggregateToSemiJoin.Config> {
 		b.push(r_4);
 		b.join(JoinRelType.SEMI, b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)));
 		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

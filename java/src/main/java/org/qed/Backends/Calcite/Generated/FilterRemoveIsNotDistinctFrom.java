@@ -69,7 +69,7 @@ public class FilterRemoveIsNotDistinctFrom extends RelRule<FilterRemoveIsNotDist
 		b.push(r_3);
 		b.join(JoinRelType.INNER, b.literal(true));
 		b.filter(b.or(b.and(b.call(SqlStdOperatorTable.IS_NULL, CalciteRuntime.field(b, 1, 0)), b.call(SqlStdOperatorTable.IS_NULL, CalciteRuntime.field(b, 1, 1))), b.call(SqlStdOperatorTable.IS_TRUE, b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)))));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

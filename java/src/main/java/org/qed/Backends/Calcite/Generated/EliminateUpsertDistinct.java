@@ -57,7 +57,7 @@ public class EliminateUpsertDistinct extends RelRule<EliminateUpsertDistinct.Con
 		}
 		b.push(r_1);
 		b.project(CalciteRuntime.field(b, 1, 0));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

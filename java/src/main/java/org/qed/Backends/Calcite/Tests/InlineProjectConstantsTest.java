@@ -18,7 +18,7 @@ public class InlineProjectConstantsTest {
     private static void ordinaryTables(InlineProjectConstants rule) {
         var builder = RuleBuilder.create();
         var source = RuleChecks.table(builder, 1, false);
-        var keyed = RuleChecks.table(builder, 1, true);
+        var keyed = RuleChecks.table(builder, 1, true, false);
         var plain = RuleChecks.table(builder, 1, false);
         var fOp = builder.genericProjectionOp("f", RelType.fromString("INTEGER", true));
         var before = builder.scan(source).scan(keyed)

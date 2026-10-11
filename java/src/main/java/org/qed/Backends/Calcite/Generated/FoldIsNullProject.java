@@ -58,7 +58,7 @@ public class FoldIsNullProject extends RelRule<FoldIsNullProject.Config> {
 		}
 		b.push(r_1);
 		b.project(List.<RexNode>of(b.literal(false), CalciteRuntime.field(b, 1, 1)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

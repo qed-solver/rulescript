@@ -17,8 +17,8 @@ public class PushSelectCondLeftIntoJoinLeftAndRightTest {
 
     private static void ordinaryTables(PushSelectCondLeftIntoJoinLeftAndRight rule) {
         var builder = RuleBuilder.create();
-        var left = RuleChecks.table(builder, 1, false);
-        var right = RuleChecks.table(builder, 1, false);
+        var left = RuleChecks.table(builder, 1, false, false);
+        var right = RuleChecks.table(builder, 1, false, false);
         var p = builder.genericPredicateOp("P", true);
         var before = builder.scan(left).scan(right)
                 .join(JoinRelType.LEFT, builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 0), builder.field(2, 1, 0)))

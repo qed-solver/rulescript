@@ -23,11 +23,11 @@ public class HoistSelectNotExistsTest {
         var five = builder.literal(5);
         var ten = builder.literal(10);
         var sub = builder.scan(inner).filter(RuleChecks.gt(builder, builder.field(0), 5)).build();
-        var before = builder.scan(outer).filter(builder.and(
-                        builder.call(SqlStdOperatorTable.NOT, RexSubQuery.exists(sub)),
-                        RuleChecks.gt(builder, builder.field(0), 10)))
-                .build();
         var plain = RuleChecks.ruleBuilder(builder);
+        var before = plain.scan(outer).filter(plain.and(
+                        plain.call(SqlStdOperatorTable.NOT, RexSubQuery.exists(sub)),
+                        RuleChecks.gt(plain, plain.field(0), 10)))
+                .build();
         var after = plain.scan(outer)
                 .scan(inner).filter(plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(0), five))
                 .join(JoinRelType.ANTI, plain.literal(true))

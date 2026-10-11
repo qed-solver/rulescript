@@ -32,7 +32,7 @@ public class HoistSelectNotExists extends RelRule<HoistSelectNotExists.Config> {
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalFilter r_0 = call.rel(0);
 		final RexNode e_0 = r_0.getCondition();
-		final List<RexNode> c_1 = RelOptUtil.conjunctions(e_0);
+		final List<RexNode> c_1 = CalciteRuntime.conjunctions(e_0);
 		if (!(c_1.size() == 2)) {
 			return;
 		}
@@ -79,7 +79,7 @@ public class HoistSelectNotExists extends RelRule<HoistSelectNotExists.Config> {
 		b.filter(CalciteRuntime.instantiate(sym_6, args_5, new RexNode[]{CalciteRuntime.field(b, 1, 0)}));
 		b.join(JoinRelType.ANTI, b.literal(true));
 		b.filter(CalciteRuntime.instantiate(sym_9, args_8, new RexNode[]{CalciteRuntime.field(b, 1, 0)}));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

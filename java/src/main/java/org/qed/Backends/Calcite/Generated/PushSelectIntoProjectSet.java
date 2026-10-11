@@ -32,7 +32,7 @@ public class PushSelectIntoProjectSet extends RelRule<PushSelectIntoProjectSet.C
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalFilter r_0 = call.rel(0);
 		final RexNode e_0 = r_0.getCondition();
-		final List<RexNode> c_1 = RelOptUtil.conjunctions(e_0);
+		final List<RexNode> c_1 = CalciteRuntime.conjunctions(e_0);
 		if (!(c_1.size() == 2)) {
 			return;
 		}
@@ -53,7 +53,7 @@ public class PushSelectIntoProjectSet extends RelRule<PushSelectIntoProjectSet.C
 			return;
 		}
 		final RexNode e_8 = r_1.getCondition();
-		final RexNode[] args_9 = new RexNode[]{CalciteRuntime.ref(0), CalciteRuntime.ref(0)};
+		final RexNode[] args_9 = new RexNode[]{CalciteRuntime.ref(0), CalciteRuntime.ref(1)};
 		final RexNode sym_10 = e_8;
 		if (!(CalciteRuntime.abstracts(sym_10, args_9))) {
 			return;
@@ -75,9 +75,9 @@ public class PushSelectIntoProjectSet extends RelRule<PushSelectIntoProjectSet.C
 		b.push(r_2);
 		b.filter(CalciteRuntime.instantiate(sym_4, args_3, new RexNode[]{CalciteRuntime.field(b, 1, 0)}));
 		b.push(r_3);
-		b.join(JoinRelType.INNER, CalciteRuntime.instantiate(sym_10, args_9, new RexNode[]{CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 0)}));
+		b.join(JoinRelType.INNER, CalciteRuntime.instantiate(sym_10, args_9, new RexNode[]{CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)}));
 		b.filter(CalciteRuntime.instantiate(sym_7, args_6, new RexNode[]{CalciteRuntime.field(b, 1, 1)}));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

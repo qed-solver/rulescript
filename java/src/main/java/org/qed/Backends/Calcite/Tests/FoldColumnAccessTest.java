@@ -18,20 +18,20 @@ public class FoldColumnAccessTest {
 
     private static void ordinaryTables(FoldColumnAccess rule) {
         var base = RuleBuilder.create();
-        var two = RuleChecks.table(base, 2, false);
+        var one = RuleChecks.table(base, 1, false);
         var b = RuleChecks.ruleBuilder(base);
-        var one = b.literal(1);
-        var before = b.scan(two)
-                .project(List.of(b.field(0), b.call(SqlStdOperatorTable.PLUS, b.field(1), one)), List.of(), true)
+        var plusOne = b.literal(1);
+        var before = b.scan(one)
+                .project(List.of(b.field(0), b.call(SqlStdOperatorTable.PLUS, b.field(0), plusOne)), List.of(), true)
                 .project(List.of(b.field(1)), List.of(), true)
                 .build();
-        var after = b.scan(two)
-                .project(List.of(b.call(SqlStdOperatorTable.PLUS, b.field(1), one)), List.of(), true)
+        var after = b.scan(one)
+                .project(List.of(b.call(SqlStdOperatorTable.PLUS, b.field(0), plusOne)), List.of(), true)
                 .build();
         RuleChecks.rewrites(rule, before, after);
 
-        var narrow = b.scan(two)
-                .project(List.of(b.field(0), b.call(SqlStdOperatorTable.PLUS, b.field(1), one)), List.of(), true)
+        var narrow = b.scan(one)
+                .project(List.of(b.field(0), b.call(SqlStdOperatorTable.PLUS, b.field(0), plusOne)), List.of(), true)
                 .project(List.of(b.field(0)), List.of(), true)
                 .build();
         RuleChecks.doesNotApply(rule, narrow);

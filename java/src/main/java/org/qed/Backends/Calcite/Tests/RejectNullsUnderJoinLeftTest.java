@@ -19,10 +19,12 @@ public class RejectNullsUnderJoinLeftTest {
         var builder = RuleBuilder.create();
         var l = RuleChecks.table(builder, 1, false);
         var r = RuleChecks.table(builder, 1, false);
-        var on = builder.call(SqlStdOperatorTable.EQUALS, builder.scan(l).scan(r).field(2, 0, 0),
-                builder.field(2, 1, 0));
-        var notNull = builder.call(SqlStdOperatorTable.IS_NOT_NULL, builder.field(2, 0, 0));
-        var before = builder.join(JoinRelType.INNER, builder.and(on, notNull)).build();
+        var raw = RuleChecks.ruleBuilder(builder);
+        var before = raw.scan(l).scan(r)
+                .join(JoinRelType.INNER, raw.and(
+                        raw.call(SqlStdOperatorTable.EQUALS, raw.field(2, 0, 0), raw.field(2, 1, 0)),
+                        raw.call(SqlStdOperatorTable.IS_NOT_NULL, raw.field(2, 0, 0))))
+                .build();
         var plain = RuleChecks.ruleBuilder(builder);
         var after = plain.scan(l).filter(plain.call(SqlStdOperatorTable.IS_NOT_NULL, plain.field(0)))
                 .scan(r)

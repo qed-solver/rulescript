@@ -36,7 +36,7 @@ public class SimplifyNotInSingleElement extends RelRule<SimplifyNotInSingleEleme
 			return;
 		}
 		final RexNode e_1 = ((RexCall) e_0).getOperands().get(0);
-		final List<RexNode> d_2 = RelOptUtil.disjunctions(e_1);
+		final List<RexNode> d_2 = CalciteRuntime.disjunctions(e_1);
 		if (!(d_2.size() == 1)) {
 			return;
 		}
@@ -64,7 +64,7 @@ public class SimplifyNotInSingleElement extends RelRule<SimplifyNotInSingleEleme
 		}
 		b.push(r_1);
 		b.filter(b.call(SqlStdOperatorTable.NOT_EQUALS, CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

@@ -51,7 +51,7 @@ public class FoldNullUnary extends RelRule<FoldNullUnary.Config> {
 		}
 		b.push(r_1);
 		b.project(b.getRexBuilder().makeNullLiteral(b.getTypeFactory().createSqlType(org.apache.calcite.sql.type.SqlTypeName.INTEGER)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

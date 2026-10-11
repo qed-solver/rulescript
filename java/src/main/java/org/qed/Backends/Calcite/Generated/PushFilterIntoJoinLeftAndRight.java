@@ -35,7 +35,7 @@ public class PushFilterIntoJoinLeftAndRight extends RelRule<PushFilterIntoJoinLe
 			return;
 		}
 		final RexNode e_0 = r_0.getCondition();
-		final List<RexNode> c_1 = RelOptUtil.conjunctions(e_0);
+		final List<RexNode> c_1 = CalciteRuntime.conjunctions(e_0);
 		if (!(c_1.size() == 3)) {
 			return;
 		}
@@ -100,7 +100,7 @@ public class PushFilterIntoJoinLeftAndRight extends RelRule<PushFilterIntoJoinLe
 		b.push(r_2);
 		b.filter(b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
 		b.join(JoinRelType.INNER, b.and(b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 2)), b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 2, 1), CalciteRuntime.field(b, 2, 3))));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

@@ -57,7 +57,7 @@ public class JoinToCorrelate extends RelRule<JoinToCorrelate.Config> {
 		b.push(r_1);
 		b.push(r_2);
 		CalciteRuntime.correlate(b, JoinRelType.INNER, ca_3 -> CalciteRuntime.instantiate(sym_2, args_1, ca_3));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

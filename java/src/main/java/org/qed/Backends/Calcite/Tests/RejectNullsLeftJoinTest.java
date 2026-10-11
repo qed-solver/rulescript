@@ -20,8 +20,8 @@ public class RejectNullsLeftJoinTest {
         var l = RuleChecks.table(base, 1, false);
         var r = RuleChecks.table(base, 1, false);
         var b = RuleChecks.ruleBuilder(base);
-        var on = RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0));
-        var before = b.scan(l).scan(r).join(JoinRelType.LEFT, on)
+        var before = b.scan(l).scan(r)
+                .join(JoinRelType.LEFT, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
                 .filter(b.isNotNull(b.field(1))).build();
         var plain = RuleChecks.ruleBuilder(base);
         var after = plain.scan(l).scan(r)

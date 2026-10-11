@@ -16,15 +16,15 @@ public class PushSelectIntoGroupByTest {
 
     private static void ordinaryTables(PushSelectIntoGroupBy rule) {
         var builder = RuleBuilder.create();
-        var table = RuleChecks.table(builder, 2, false);
+        var table = RuleChecks.table(builder, 2, false, false);
         var five = builder.literal(5);
         var hundred = builder.literal(100);
-        var before = builder.scan(table)
-                .aggregate(builder.groupKey(0), builder.aggregateCall(SqlStdOperatorTable.SUM, builder.field(1)))
-                .filter(builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), five),
-                        builder.call(SqlStdOperatorTable.LESS_THAN, builder.field(0), hundred))
-                .build();
         var plain = RuleChecks.ruleBuilder(builder);
+        var before = plain.scan(table)
+                .aggregate(plain.groupKey(0), plain.aggregateCall(SqlStdOperatorTable.SUM, plain.field(1)))
+                .filter(plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(0), five),
+                        plain.call(SqlStdOperatorTable.LESS_THAN, plain.field(0), hundred))
+                .build();
         var after = plain.scan(table)
                 .filter(plain.and(
                         plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(0), five),

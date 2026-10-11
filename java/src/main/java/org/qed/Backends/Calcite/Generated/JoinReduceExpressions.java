@@ -35,7 +35,7 @@ public class JoinReduceExpressions extends RelRule<JoinReduceExpressions.Config>
 			return;
 		}
 		final RexNode e_0 = r_0.getCondition();
-		final List<RexNode> c_1 = RelOptUtil.conjunctions(e_0);
+		final List<RexNode> c_1 = CalciteRuntime.conjunctions(e_0);
 		if (!(c_1.size() == 2)) {
 			return;
 		}
@@ -66,7 +66,7 @@ public class JoinReduceExpressions extends RelRule<JoinReduceExpressions.Config>
 		b.push(r_1);
 		b.push(r_2);
 		b.join(JoinRelType.INNER, b.literal(false));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

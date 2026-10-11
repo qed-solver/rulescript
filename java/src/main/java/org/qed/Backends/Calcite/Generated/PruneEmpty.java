@@ -45,7 +45,7 @@ public class PruneEmpty extends RelRule<PruneEmpty.Config> {
 			return;
 		}
 		b.values(r_1.getRowType());
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

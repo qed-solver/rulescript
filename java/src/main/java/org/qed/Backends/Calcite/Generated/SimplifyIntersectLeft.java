@@ -57,7 +57,7 @@ public class SimplifyIntersectLeft extends RelRule<SimplifyIntersectLeft.Config>
 		b.push(r_1);
 		b.push(r_2);
 		b.join(JoinRelType.SEMI, b.call(SqlStdOperatorTable.IS_NOT_DISTINCT_FROM, CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

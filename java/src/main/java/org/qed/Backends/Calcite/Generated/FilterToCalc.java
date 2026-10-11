@@ -47,7 +47,7 @@ public class FilterToCalc extends RelRule<FilterToCalc.Config> {
 		b.push(r_1);
 		b.filter(CalciteRuntime.instantiate(sym_2, args_1, new RexNode[]{CalciteRuntime.field(b, 1, 0)}));
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

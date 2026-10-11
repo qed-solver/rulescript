@@ -35,7 +35,7 @@ public class JoinPushThroughJoin extends RelRule<JoinPushThroughJoin.Config> {
 			return;
 		}
 		final RexNode e_0 = r_0.getCondition();
-		final List<RexNode> c_1 = RelOptUtil.conjunctions(e_0);
+		final List<RexNode> c_1 = CalciteRuntime.conjunctions(e_0);
 		if (!(c_1.size() == 2)) {
 			return;
 		}
@@ -56,7 +56,7 @@ public class JoinPushThroughJoin extends RelRule<JoinPushThroughJoin.Config> {
 			return;
 		}
 		final RexNode e_8 = r_1.getCondition();
-		final List<RexNode> c_9 = RelOptUtil.conjunctions(e_8);
+		final List<RexNode> c_9 = CalciteRuntime.conjunctions(e_8);
 		if (!(c_9.size() == 2)) {
 			return;
 		}
@@ -99,7 +99,7 @@ public class JoinPushThroughJoin extends RelRule<JoinPushThroughJoin.Config> {
 		b.push(r_3);
 		b.join(JoinRelType.INNER, b.and(CalciteRuntime.instantiate(sym_4, args_3, new RexNode[]{CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 2)}), CalciteRuntime.instantiate(sym_15, args_14, new RexNode[]{CalciteRuntime.field(b, 2, 2)})));
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 2), CalciteRuntime.field(b, 1, 1)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

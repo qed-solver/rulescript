@@ -91,7 +91,7 @@ public class MultiJoinOptimizeBushy extends RelRule<MultiJoinOptimizeBushy.Confi
 		b.push(r_6);
 		b.join(JoinRelType.INNER, b.literal(true));
 		b.join(JoinRelType.INNER, CalciteRuntime.instantiate(sym_2, args_1, new RexNode[]{CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1), CalciteRuntime.field(b, 2, 2), CalciteRuntime.field(b, 2, 3)}));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

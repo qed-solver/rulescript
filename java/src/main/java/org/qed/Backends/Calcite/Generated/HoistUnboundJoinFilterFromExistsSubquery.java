@@ -43,7 +43,7 @@ public class HoistUnboundJoinFilterFromExistsSubquery extends RelRule<HoistUnbou
 			return;
 		}
 		final RexNode e_1 = r_1000.getCondition();
-		final List<RexNode> c_2 = RelOptUtil.conjunctions(e_1);
+		final List<RexNode> c_2 = CalciteRuntime.conjunctions(e_1);
 		if (!(c_2.size() == 2)) {
 			return;
 		}
@@ -86,7 +86,7 @@ public class HoistUnboundJoinFilterFromExistsSubquery extends RelRule<HoistUnbou
 		b.join(JoinRelType.INNER, CalciteRuntime.instantiate(sym_8, args_7, new RexNode[]{CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)}));
 		final RelNode sub_9 = b.build();
 		b.filter(b.and(RexSubQuery.exists(sub_9), CalciteRuntime.instantiate(sym_5, args_4, new RexNode[]{})));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

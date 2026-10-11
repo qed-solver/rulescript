@@ -53,7 +53,7 @@ public class PruneExplainCols extends RelRule<PruneExplainCols.Config> {
 		b.push(r_1);
 		b.project(CalciteRuntime.field(b, 1, 0));
 		b.project(CalciteRuntime.instantiate(sym_2, args_1, new RexNode[]{CalciteRuntime.field(b, 1, 0)}));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

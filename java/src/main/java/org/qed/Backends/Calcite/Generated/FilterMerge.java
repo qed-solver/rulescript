@@ -53,7 +53,7 @@ public class FilterMerge extends RelRule<FilterMerge.Config> {
 		}
 		b.push(r_2);
 		b.filter(b.and(CalciteRuntime.instantiate(sym_5, args_4, new RexNode[]{CalciteRuntime.field(b, 1, 0)}), CalciteRuntime.instantiate(sym_2, args_1, new RexNode[]{CalciteRuntime.field(b, 1, 0)})));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

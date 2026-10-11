@@ -19,10 +19,11 @@ public class RemoveJoinNotNullConditionTest {
         var builder = RuleBuilder.create();
         var left = RuleChecks.table(builder, 1, false, false);
         var right = RuleChecks.table(builder, 1, false);
-        var before = builder.scan(left).scan(right)
-                .join(JoinRelType.LEFT, builder.and(
-                        builder.call(SqlStdOperatorTable.IS_NOT_NULL, builder.field(2, 0, 0)),
-                        builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 0), builder.field(2, 1, 0))))
+        var raw = RuleChecks.ruleBuilder(builder);
+        var before = raw.scan(left).scan(right)
+                .join(JoinRelType.LEFT, raw.call(SqlStdOperatorTable.AND,
+                        raw.call(SqlStdOperatorTable.IS_NOT_NULL, raw.field(2, 0, 0)),
+                        raw.call(SqlStdOperatorTable.EQUALS, raw.field(2, 0, 0), raw.field(2, 1, 0))))
                 .build();
         var plain = RuleChecks.ruleBuilder(builder);
         var after = plain.scan(left).scan(right)

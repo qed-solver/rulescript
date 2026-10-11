@@ -58,7 +58,7 @@ public class SimplifyIsNullCondition extends RelRule<SimplifyIsNullCondition.Con
 		}
 		b.push(r_2);
 		b.filter(b.literal(false));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

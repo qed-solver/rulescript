@@ -63,7 +63,7 @@ public class JoinConditionExpandIsNotDistinctFrom extends RelRule<JoinConditionE
 		b.push(r_1);
 		b.push(r_2);
 		b.join(JoinRelType.INNER, b.or(b.and(b.call(SqlStdOperatorTable.IS_NULL, CalciteRuntime.field(b, 2, 0)), b.call(SqlStdOperatorTable.IS_NULL, CalciteRuntime.field(b, 2, 1))), b.call(SqlStdOperatorTable.IS_TRUE, b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)))));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

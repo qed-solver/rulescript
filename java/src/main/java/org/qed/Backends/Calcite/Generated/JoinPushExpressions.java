@@ -35,7 +35,7 @@ public class JoinPushExpressions extends RelRule<JoinPushExpressions.Config> {
 			return;
 		}
 		final RexNode e_0 = r_0.getCondition();
-		final List<RexNode> c_1 = RelOptUtil.conjunctions(e_0);
+		final List<RexNode> c_1 = CalciteRuntime.conjunctions(e_0);
 		if (!(c_1.size() == 2)) {
 			return;
 		}
@@ -82,7 +82,7 @@ public class JoinPushExpressions extends RelRule<JoinPushExpressions.Config> {
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.instantiate(sym_9, args_8, new RexNode[]{CalciteRuntime.field(b, 1, 0)})));
 		b.join(JoinRelType.INNER, b.and(b.call(op_3, CalciteRuntime.field(b, 2, 1), CalciteRuntime.field(b, 2, 3)), CalciteRuntime.instantiate(sym_12, args_11, new RexNode[]{CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 2)})));
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 2)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

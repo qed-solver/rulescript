@@ -50,7 +50,7 @@ public class PruneValuesCols extends RelRule<PruneValuesCols.Config> {
 		}
 		b.values(new String[]{"c0", "c1"}, 1, 2);
 		b.project(List.<RexNode>of(CalciteRuntime.instantiate(sym_2, args_1, new RexNode[]{CalciteRuntime.field(b, 1, 0)}), CalciteRuntime.field(b, 1, 1)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

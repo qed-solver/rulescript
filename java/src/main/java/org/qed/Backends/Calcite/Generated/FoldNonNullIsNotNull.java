@@ -48,7 +48,7 @@ public class FoldNonNullIsNotNull extends RelRule<FoldNonNullIsNotNull.Config> {
 		}
 		b.push(r_1);
 		b.filter(b.literal(true));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

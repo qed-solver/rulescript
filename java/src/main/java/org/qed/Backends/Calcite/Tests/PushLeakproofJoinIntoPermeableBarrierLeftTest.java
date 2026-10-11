@@ -5,6 +5,8 @@ import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.PushLeakproofJoinIntoPermeableBarrierLeft;
 import org.qed.RuleBuilder;
 
+import java.util.List;
+
 public class PushLeakproofJoinIntoPermeableBarrierLeftTest {
 
     public static void runTest() {
@@ -20,7 +22,7 @@ public class PushLeakproofJoinIntoPermeableBarrierLeftTest {
         var l = RuleChecks.table(base, 2, false);
         var r = RuleChecks.table(base, 2, false);
         var b = RuleChecks.ruleBuilder(base);
-        var before = b.scan(l).project(b.field(0), b.field(1))
+        var before = b.scan(l).project(List.of(b.field(0), b.field(1)), List.of(), true)
                 .scan(r)
                 .join(JoinRelType.INNER, b.call(SqlStdOperatorTable.GREATER_THAN, b.field(2, 0, 0), b.field(2, 1, 0)))
                 .build();

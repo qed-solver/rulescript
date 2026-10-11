@@ -57,7 +57,7 @@ public class EliminateJoinNoColsRight extends RelRule<EliminateJoinNoColsRight.C
 		}
 		b.push(r_1);
 		b.filter(CalciteRuntime.instantiate(sym_2, args_1, new RexNode[]{CalciteRuntime.field(b, 1, 0)}));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

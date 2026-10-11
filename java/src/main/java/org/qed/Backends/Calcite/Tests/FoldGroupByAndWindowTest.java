@@ -17,24 +17,24 @@ public class FoldGroupByAndWindowTest {
 
     private static void ordinaryTables(FoldGroupByAndWindow rule) {
         var builder = RuleBuilder.create();
-        var table = RuleChecks.table(builder, 2, false);
-        var input = builder.scan(table).build();
-        var window = builder.push(input)
-                .aggregate(builder.groupKey(0), builder.aggregateCall(SqlStdOperatorTable.SUM, builder.field(1)))
-                .build();
-        var before = builder.push(input).push(window)
-                .join(JoinRelType.INNER, RuleChecks.eq(builder, builder.field(2, 0, 0), builder.field(2, 1, 0)))
-                .aggregate(builder.groupKey(0), builder.aggregateCall(SqlStdOperatorTable.SUM, builder.field(1)))
-                .build();
+        var table = RuleChecks.table(builder, 2, false, false);
         var plain = RuleChecks.ruleBuilder(builder);
+        var input = plain.scan(table).build();
+        var window = plain.push(input)
+                .aggregate(plain.groupKey(0), plain.aggregateCall(SqlStdOperatorTable.SUM, plain.field(1)))
+                .build();
+        var before = plain.push(input).push(window)
+                .join(JoinRelType.INNER, RuleChecks.eq(plain, plain.field(2, 0, 0), plain.field(2, 1, 0)))
+                .aggregate(plain.groupKey(0), plain.aggregateCall(SqlStdOperatorTable.SUM, plain.field(1)))
+                .build();
         var after = plain.scan(table)
                 .aggregate(plain.groupKey(0), plain.aggregateCall(SqlStdOperatorTable.SUM, plain.field(1)))
                 .build();
         RuleChecks.rewrites(rule, before, after);
 
-        var misJoined = builder.push(input).push(window)
-                .join(JoinRelType.INNER, RuleChecks.eq(builder, builder.field(2, 0, 1), builder.field(2, 1, 0)))
-                .aggregate(builder.groupKey(0), builder.aggregateCall(SqlStdOperatorTable.SUM, builder.field(1)))
+        var misJoined = plain.push(input).push(window)
+                .join(JoinRelType.INNER, RuleChecks.eq(plain, plain.field(2, 0, 1), plain.field(2, 1, 0)))
+                .aggregate(plain.groupKey(0), plain.aggregateCall(SqlStdOperatorTable.SUM, plain.field(1)))
                 .build();
         RuleChecks.doesNotApply(rule, misJoined);
     }

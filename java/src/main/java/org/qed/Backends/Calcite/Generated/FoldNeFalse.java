@@ -54,7 +54,7 @@ public class FoldNeFalse extends RelRule<FoldNeFalse.Config> {
 		}
 		b.push(r_1);
 		b.filter(CalciteRuntime.instantiate(sym_3, args_2, new RexNode[]{CalciteRuntime.field(b, 1, 0)}));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

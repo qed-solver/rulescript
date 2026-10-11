@@ -17,7 +17,7 @@ public class InlineConstVarTest {
     private static void ordinaryTables(InlineConstVar rule) {
         var builder = RuleBuilder.create();
         var source = RuleChecks.table(builder, 1, false);
-        var constant = RuleChecks.table(builder, 1, true);
+        var constant = RuleChecks.table(builder, 1, true, false);
         var before = builder.scan(source).scan(constant)
                 .join(JoinRelType.INNER, RuleChecks.eq(builder, builder.field(2, 0, 0), builder.field(2, 1, 0)))
                 .filter(RuleChecks.gt(builder, builder.field(0), 5))

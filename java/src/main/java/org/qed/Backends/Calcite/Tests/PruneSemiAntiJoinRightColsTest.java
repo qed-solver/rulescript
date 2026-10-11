@@ -19,7 +19,7 @@ public class PruneSemiAntiJoinRightColsTest {
         var base = RuleBuilder.create();
         var l = RuleChecks.table(base, 1, false);
         var r = RuleChecks.table(base, 2, false);
-        var narrow = RuleChecks.table(base, 2, false);
+        var single = RuleChecks.table(base, 1, false);
         var b = RuleChecks.ruleBuilder(base);
         var before = join(b, l, r, JoinRelType.ANTI).build();
         var after = b.scan(l).scan(r).project(b.field(0))
@@ -28,7 +28,7 @@ public class PruneSemiAntiJoinRightColsTest {
         RuleChecks.rewrites(rule, before, after);
 
         RuleChecks.doesNotApply(rule, join(b, l, r, JoinRelType.SEMI).build());
-        RuleChecks.doesNotApply(rule, join(b, l, narrow, JoinRelType.ANTI).build());
+        RuleChecks.doesNotApply(rule, join(b, l, single, JoinRelType.ANTI).build());
     }
 
     private static RelBuilder join(RelBuilder b, String left, String right, JoinRelType type) {

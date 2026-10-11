@@ -1,5 +1,6 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.FoldNotTrue;
 import org.qed.RuleBuilder;
@@ -17,10 +18,10 @@ public class FoldNotTrueTest {
     private static void notTrue(FoldNotTrue rule) {
         var builder = RuleBuilder.create();
         var table = RuleChecks.table(builder, 1, false);
-        var before = builder.scan(table)
-                .filter(builder.call(SqlStdOperatorTable.NOT, builder.literal(true)))
-                .build();
         var plain = RuleChecks.ruleBuilder(builder);
+        var rex = plain.getRexBuilder();
+        var scan = plain.scan(table).build();
+        var before = LogicalFilter.create(scan, rex.makeCall(SqlStdOperatorTable.NOT, rex.makeLiteral(true)));
         var after = plain.scan(table)
                 .filter(plain.literal(false))
                 .build();

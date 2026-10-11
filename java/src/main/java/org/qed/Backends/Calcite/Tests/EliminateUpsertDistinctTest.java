@@ -1,7 +1,11 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.logical.LogicalAggregate;
+import org.apache.calcite.util.ImmutableBitSet;
 import org.qed.RRuleInstances.EliminateUpsertDistinct;
 import org.qed.RuleBuilder;
+
+import java.util.List;
 
 public class EliminateUpsertDistinctTest {
 
@@ -17,9 +21,7 @@ public class EliminateUpsertDistinctTest {
         var builder = RuleBuilder.create();
         var keyed = RuleChecks.table(builder, 1, true, true);
         var plain = RuleChecks.table(builder, 1, false, true);
-        var before = builder.scan(keyed)
-                .aggregate(builder.groupKey(0))
-                .build();
+        var before = LogicalAggregate.create(builder.scan(keyed).build(), ImmutableBitSet.of(0), null, List.of());
         var rewritten = RuleChecks.ruleBuilder(builder);
         var after = rewritten.scan(keyed)
                 .project(rewritten.field(0))

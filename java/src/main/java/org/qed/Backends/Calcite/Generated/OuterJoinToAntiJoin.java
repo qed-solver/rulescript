@@ -74,7 +74,7 @@ public class OuterJoinToAntiJoin extends RelRule<OuterJoinToAntiJoin.Config> {
 		b.push(r_3);
 		b.push(r_4);
 		b.join(JoinRelType.ANTI, CalciteRuntime.instantiate(sym_5, args_4, new RexNode[]{CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)}));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

@@ -35,7 +35,7 @@ public class RemoveJoinNotNullCondition extends RelRule<RemoveJoinNotNullConditi
 			return;
 		}
 		final RexNode e_0 = r_0.getCondition();
-		final List<RexNode> c_1 = RelOptUtil.conjunctions(e_0);
+		final List<RexNode> c_1 = CalciteRuntime.conjunctions(e_0);
 		if (!(c_1.size() == 2)) {
 			return;
 		}
@@ -70,7 +70,7 @@ public class RemoveJoinNotNullCondition extends RelRule<RemoveJoinNotNullConditi
 		b.push(r_1);
 		b.push(r_2);
 		b.join(JoinRelType.LEFT, CalciteRuntime.instantiate(sym_6, args_5, new RexNode[]{CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)}));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

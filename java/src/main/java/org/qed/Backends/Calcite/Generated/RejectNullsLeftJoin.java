@@ -67,7 +67,7 @@ public class RejectNullsLeftJoin extends RelRule<RejectNullsLeftJoin.Config> {
 		b.push(r_3);
 		b.join(JoinRelType.INNER, CalciteRuntime.instantiate(sym_4, args_3, new RexNode[]{CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)}));
 		b.filter(b.call(SqlStdOperatorTable.IS_NOT_NULL, CalciteRuntime.field(b, 1, 1)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

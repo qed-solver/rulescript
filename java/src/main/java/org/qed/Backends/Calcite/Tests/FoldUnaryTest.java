@@ -1,5 +1,7 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.logical.LogicalFilter;
+import org.qed.Backends.Calcite.CalciteRuntime;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.FoldUnary;
 import org.qed.RuleBuilder;
@@ -16,14 +18,12 @@ public class FoldUnaryTest {
 
     private static void notTrue(FoldUnary rule) {
         var builder = RuleBuilder.create();
-        var table = RuleChecks.table(builder, 1, false);
-        var before = builder.scan(table)
-                .filter(builder.call(SqlStdOperatorTable.NOT, builder.literal(true)))
-                .build();
-        var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(table)
-                .filter(plain.literal(false))
-                .build();
+        var table = RuleChecks.table(builder, 1, false, false);
+        var plain = builder.transform(config -> CalciteRuntime.configure(config).withSimplifyValues(false));
+        var rex = plain.getRexBuilder();
+        var before = LogicalFilter.create(plain.scan(table).build(),
+                rex.makeCall(SqlStdOperatorTable.NOT, rex.makeLiteral(true)));
+        var after = LogicalFilter.create(plain.scan(table).build(), rex.makeLiteral(false));
         RuleChecks.rewrites(rule, before, after);
 
         var negated = builder.scan(table)

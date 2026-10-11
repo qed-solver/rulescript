@@ -58,7 +58,7 @@ public class RemoveNotNullCondition extends RelRule<RemoveNotNullCondition.Confi
 		}
 		b.push(r_2);
 		b.filter(CalciteRuntime.instantiate(sym_4, args_3, new RexNode[]{CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)}));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

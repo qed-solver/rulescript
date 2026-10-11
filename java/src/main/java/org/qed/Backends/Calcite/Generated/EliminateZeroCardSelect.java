@@ -52,7 +52,7 @@ public class EliminateZeroCardSelect extends RelRule<EliminateZeroCardSelect.Con
 			return;
 		}
 		b.values(r_2.getRowType());
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

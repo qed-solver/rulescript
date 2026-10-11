@@ -17,22 +17,22 @@ public class FoldEqFalseTest {
     private static void ordinaryTables(FoldEqFalse rule) {
         var builder = RuleBuilder.create();
         var table = RuleChecks.table(builder, 1, false);
-        var five = builder.literal(5);
-        var before = builder.scan(table)
-                .filter(builder.call(SqlStdOperatorTable.EQUALS,
-                        builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), five),
-                        builder.literal(false)))
-                .build();
         var plain = RuleChecks.ruleBuilder(builder);
+        var five = plain.literal(5);
+        var before = plain.scan(table)
+                .filter(plain.call(SqlStdOperatorTable.EQUALS,
+                        plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(0), five),
+                        plain.literal(false)))
+                .build();
         var after = plain.scan(table)
                 .filter(plain.not(plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(0), five)))
                 .build();
         RuleChecks.rewrites(rule, before, after);
 
-        var nearMiss = builder.scan(table)
-                .filter(builder.call(SqlStdOperatorTable.EQUALS,
-                        builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), five),
-                        builder.literal(true)))
+        var nearMiss = plain.scan(table)
+                .filter(plain.call(SqlStdOperatorTable.EQUALS,
+                        plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(0), five),
+                        plain.literal(true)))
                 .build();
         RuleChecks.doesNotApply(rule, nearMiss);
     }

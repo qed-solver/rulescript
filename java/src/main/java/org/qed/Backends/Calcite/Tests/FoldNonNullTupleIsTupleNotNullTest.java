@@ -19,14 +19,16 @@ public class FoldNonNullTupleIsTupleNotNullTest {
         var builder = RuleBuilder.create();
         var table = RuleChecks.table(builder, 2, false, false);
         var plain = RuleChecks.ruleBuilder(builder);
-        var notNull0 = plain.call(SqlStdOperatorTable.IS_NOT_NULL, plain.field(0));
-        var notNull1 = plain.call(SqlStdOperatorTable.IS_NOT_NULL, plain.field(1));
-        var condition = plain.getRexBuilder().makeCall(SqlStdOperatorTable.AND, notNull0, notNull1);
-        var before = LogicalFilter.create(plain.scan(table).build(), condition);
-        var after = plain.scan(table).filter(plain.literal(true)).build();
+        var rex = plain.getRexBuilder();
+        var source = plain.scan(table).build();
+        var notNull0 = rex.makeCall(SqlStdOperatorTable.IS_NOT_NULL, rex.makeInputRef(source, 0));
+        var notNull1 = rex.makeCall(SqlStdOperatorTable.IS_NOT_NULL, rex.makeInputRef(source, 1));
+        var condition = rex.makeCall(SqlStdOperatorTable.AND, notNull0, notNull1);
+        var before = LogicalFilter.create(source, condition);
+        var after = plain.push(source).filter(plain.literal(true)).build();
         RuleChecks.rewrites(rule, before, after);
 
-        var oneNull = LogicalFilter.create(plain.scan(table).build(), notNull0);
+        var oneNull = LogicalFilter.create(source, notNull0);
         RuleChecks.doesNotApply(rule, oneNull);
     }
 

@@ -43,7 +43,7 @@ public class FilterReduceExpressions extends RelRule<FilterReduceExpressions.Con
 			return;
 		}
 		b.values(r_1.getRowType());
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

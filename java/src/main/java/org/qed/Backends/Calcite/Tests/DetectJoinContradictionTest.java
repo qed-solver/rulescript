@@ -1,6 +1,15 @@
 package org.qed.Backends.Calcite.Tests;
 
+import java.util.List;
+import java.util.Set;
+import java.util.function.Function;
+
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.logical.LogicalJoin;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.tools.RelBuilder;
 import org.qed.RRuleInstances.DetectJoinContradiction;
 import org.qed.RuleBuilder;
 
@@ -14,33 +23,36 @@ public class DetectJoinContradictionTest {
         ordinaryTables(rule);
     }
 
+    private static RelNode join(RelBuilder b, String l, String r, JoinRelType type,
+                                Function<RelBuilder, RexNode> condition) {
+        b.scan(l).scan(r);
+        var cond = condition.apply(b);
+        var right = b.build();
+        var left = b.build();
+        return LogicalJoin.create(left, right, List.of(), cond, Set.of(), type);
+    }
+
     private static void ordinaryTables(DetectJoinContradiction rule) {
         var base = RuleBuilder.create();
         var l = RuleChecks.table(base, 1, false);
         var r = RuleChecks.table(base, 1, false);
         var b = RuleChecks.ruleBuilder(base);
 
-        b.scan(l).scan(r);
-        var before = b.join(JoinRelType.INNER, b.and(b.literal(false),
-                RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))).build();
-
-        b.scan(l).scan(r);
-        var after = b.join(JoinRelType.INNER, b.literal(false)).build();
+        var before = join(b, l, r, JoinRelType.INNER, x -> x.getRexBuilder().makeCall(SqlStdOperatorTable.AND,
+                x.literal(false), RuleChecks.eq(x, x.field(2, 0, 0), x.field(2, 1, 0))));
+        var after = join(b, l, r, JoinRelType.INNER, x -> x.literal(false));
         RuleChecks.rewrites(rule, before, after);
 
-        b.scan(l).scan(r);
-        var leftJoin = b.join(JoinRelType.LEFT, b.and(b.literal(false),
-                RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))).build();
+        var leftJoin = join(b, l, r, JoinRelType.LEFT, x -> x.getRexBuilder().makeCall(SqlStdOperatorTable.AND,
+                x.literal(false), RuleChecks.eq(x, x.field(2, 0, 0), x.field(2, 1, 0))));
         RuleChecks.doesNotApply(rule, leftJoin);
 
-        b.scan(l).scan(r);
-        var noContradiction = b.join(JoinRelType.INNER, b.and(
-                RuleChecks.gt(b, b.field(2, 0, 0), 5),
-                RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))).build();
+        var noContradiction = join(b, l, r, JoinRelType.INNER, x -> x.getRexBuilder().makeCall(SqlStdOperatorTable.AND,
+                RuleChecks.gt(x, x.field(2, 0, 0), 5),
+                RuleChecks.eq(x, x.field(2, 0, 0), x.field(2, 1, 0))));
         RuleChecks.doesNotApply(rule, noContradiction);
 
-        b.scan(l).scan(r);
-        var soleFalse = b.join(JoinRelType.INNER, b.literal(false)).build();
+        var soleFalse = join(b, l, r, JoinRelType.INNER, x -> x.literal(false));
         RuleChecks.doesNotApply(rule, soleFalse);
     }
 

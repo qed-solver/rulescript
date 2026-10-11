@@ -17,37 +17,34 @@ public class ExtractRedundantConjunctTest {
     private static void ordinaryTable(ExtractRedundantConjunct rule) {
         var builder = RuleBuilder.create();
         var table = RuleChecks.table(builder, 1, false);
-        var five = builder.literal(5);
-        var ten = builder.literal(10);
-        var seven = builder.literal(7);
-        var one = builder.literal(1);
-        var before = builder.scan(table)
-                .filter(builder.call(SqlStdOperatorTable.OR,
-                        builder.call(SqlStdOperatorTable.AND,
-                                builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), five),
-                                builder.call(SqlStdOperatorTable.LESS_THAN, builder.field(0), ten)),
-                        builder.call(SqlStdOperatorTable.AND,
-                                builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), five),
-                                builder.call(SqlStdOperatorTable.EQUALS, builder.field(0), seven))))
+        var raw = RuleChecks.ruleBuilder(builder);
+        var before = raw.scan(table)
+                .filter(raw.call(SqlStdOperatorTable.OR,
+                        raw.call(SqlStdOperatorTable.AND,
+                                raw.call(SqlStdOperatorTable.GREATER_THAN, raw.field(0), raw.literal(5)),
+                                raw.call(SqlStdOperatorTable.LESS_THAN, raw.field(0), raw.literal(10))),
+                        raw.call(SqlStdOperatorTable.AND,
+                                raw.call(SqlStdOperatorTable.GREATER_THAN, raw.field(0), raw.literal(5)),
+                                raw.call(SqlStdOperatorTable.EQUALS, raw.field(0), raw.literal(7)))))
                 .build();
         var plain = RuleChecks.ruleBuilder(builder);
-        var a = RuleChecks.gt(plain, plain.field(0), 5);
-        var after = plain.scan(table).filter(plain.and(
-                        a,
+        var after = plain.scan(table)
+                .filter(plain.and(
+                        RuleChecks.gt(plain, plain.field(0), 5),
                         plain.or(
-                                plain.call(SqlStdOperatorTable.LESS_THAN, plain.field(0), ten),
-                                plain.call(SqlStdOperatorTable.EQUALS, plain.field(0), seven))))
+                                plain.call(SqlStdOperatorTable.LESS_THAN, plain.field(0), plain.literal(10)),
+                                plain.call(SqlStdOperatorTable.EQUALS, plain.field(0), plain.literal(7)))))
                 .build();
         RuleChecks.rewrites(rule, before, after);
 
-        var nearMiss = builder.scan(table)
-                .filter(builder.call(SqlStdOperatorTable.OR,
-                        builder.call(SqlStdOperatorTable.AND,
-                                builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), five),
-                                builder.call(SqlStdOperatorTable.LESS_THAN, builder.field(0), ten)),
-                        builder.call(SqlStdOperatorTable.AND,
-                                builder.call(SqlStdOperatorTable.EQUALS, builder.field(0), seven),
-                                builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), one))))
+        var nearMiss = raw.scan(table)
+                .filter(raw.call(SqlStdOperatorTable.OR,
+                        raw.call(SqlStdOperatorTable.AND,
+                                raw.call(SqlStdOperatorTable.GREATER_THAN, raw.field(0), raw.literal(5)),
+                                raw.call(SqlStdOperatorTable.LESS_THAN, raw.field(0), raw.literal(10))),
+                        raw.call(SqlStdOperatorTable.AND,
+                                raw.call(SqlStdOperatorTable.EQUALS, raw.field(0), raw.literal(7)),
+                                raw.call(SqlStdOperatorTable.GREATER_THAN, raw.field(0), raw.literal(1)))))
                 .build();
         RuleChecks.doesNotApply(rule, nearMiss);
     }

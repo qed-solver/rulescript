@@ -19,7 +19,7 @@ public class PruneWindowOutputColsTest {
 
     private static void ordinaryTables(PruneWindowOutputCols rule) {
         var base = RuleBuilder.create();
-        var table = RuleChecks.table(base, 2, false);
+        var table = RuleChecks.table(base, 2, false, false);
         var plain = RuleChecks.ruleBuilder(base);
 
         var input = base.scan(table).build();

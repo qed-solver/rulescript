@@ -17,23 +17,19 @@ public class NormalizeNestedAndsTest {
     private static void ordinaryTables(NormalizeNestedAnds rule) {
         var builder = RuleBuilder.create();
         var table = RuleChecks.table(builder, 1, false);
-        var five = builder.literal(5);
-        var ten = builder.literal(10);
-        var seven = builder.literal(7);
-        var p = builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), five);
-        var q = builder.call(SqlStdOperatorTable.LESS_THAN, builder.field(0), ten);
-        var r = builder.call(SqlStdOperatorTable.NOT_EQUALS, builder.field(0), seven);
-        var before = builder.scan(table)
-                .filter(builder.and(p, builder.and(q, r)))
-                .build();
         var plain = RuleChecks.ruleBuilder(builder);
+        plain.scan(table);
+        var p = plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(0), plain.literal(5));
+        var q = plain.call(SqlStdOperatorTable.LESS_THAN, plain.field(0), plain.literal(10));
+        var r = plain.call(SqlStdOperatorTable.NOT_EQUALS, plain.field(0), plain.literal(7));
+        var before = plain.filter(plain.and(p, plain.and(q, r))).build();
         var after = plain.scan(table)
                 .filter(plain.and(plain.and(p, q), r))
                 .build();
         RuleChecks.rewrites(rule, before, after);
 
-        var twoConjuncts = builder.scan(table)
-                .filter(builder.and(p, q))
+        var twoConjuncts = plain.scan(table)
+                .filter(plain.and(p, q))
                 .build();
         RuleChecks.doesNotApply(rule, twoConjuncts);
     }

@@ -54,7 +54,7 @@ public class EliminateExistsZeroRows extends RelRule<EliminateExistsZeroRows.Con
 		}
 		b.push(r_1);
 		b.filter(b.literal(false));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

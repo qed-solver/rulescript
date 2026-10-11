@@ -71,7 +71,7 @@ public class ExtractJoinComparisons extends RelRule<ExtractJoinComparisons.Confi
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.instantiate(sym_7, args_6, new RexNode[]{CalciteRuntime.field(b, 1, 0)})));
 		b.join(JoinRelType.INNER, b.call(op_1, CalciteRuntime.field(b, 2, 1), CalciteRuntime.field(b, 2, 3)));
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 2)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

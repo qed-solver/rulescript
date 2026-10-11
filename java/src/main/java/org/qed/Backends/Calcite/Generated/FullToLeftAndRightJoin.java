@@ -68,7 +68,7 @@ public class FullToLeftAndRightJoin extends RelRule<FullToLeftAndRightJoin.Confi
 		b.join(JoinRelType.RIGHT, b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)));
 		b.filter(b.call(SqlStdOperatorTable.IS_NOT_TRUE, b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1))));
 		b.union(true, 2);
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

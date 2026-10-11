@@ -1,5 +1,6 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.SimplifyIsNullCondition;
 import org.qed.RuleBuilder;
@@ -18,19 +19,20 @@ public class SimplifyIsNullConditionTest {
         var base = RuleBuilder.create();
         var table = mixedTable(base);
         var b = RuleChecks.ruleBuilder(base);
-        var before = b.scan(table)
-                .filter(RuleChecks.gt(b, b.field(1), 5))
-                .filter(b.call(SqlStdOperatorTable.IS_NULL, b.field(0)))
-                .build();
-        var after = b.scan(table)
-                .filter(b.literal(false))
-                .build();
+        var scan = b.scan(table).build();
+        var rex = b.getRexBuilder();
+        var gt = rex.makeCall(SqlStdOperatorTable.GREATER_THAN, rex.makeInputRef(scan, 1), b.literal(5));
+        var before = LogicalFilter.create(LogicalFilter.create(scan, gt),
+                rex.makeCall(SqlStdOperatorTable.IS_NULL, rex.makeInputRef(scan, 0)));
+        var after = b.scan(table).filter(b.literal(false)).build();
         RuleChecks.rewrites(rule, before, after);
 
-        var nullableColumn = base.scan(table)
-                .filter(RuleChecks.gt(base, base.field(0), 5))
-                .filter(base.call(SqlStdOperatorTable.IS_NULL, base.field(1)))
-                .build();
+        var nullableScan = base.scan(table).build();
+        var nullableRex = base.getRexBuilder();
+        var nullableColumn = LogicalFilter.create(
+                LogicalFilter.create(nullableScan, nullableRex.makeCall(SqlStdOperatorTable.GREATER_THAN,
+                        nullableRex.makeInputRef(nullableScan, 0), base.literal(5))),
+                nullableRex.makeCall(SqlStdOperatorTable.IS_NULL, nullableRex.makeInputRef(nullableScan, 1)));
         RuleChecks.doesNotApply(rule, nullableColumn);
     }
 

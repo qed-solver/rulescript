@@ -32,7 +32,7 @@ public class FilterWindowTranspose extends RelRule<FilterWindowTranspose.Config>
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalFilter r_0 = call.rel(0);
 		final RexNode e_0 = r_0.getCondition();
-		final List<RexNode> c_1 = RelOptUtil.conjunctions(e_0);
+		final List<RexNode> c_1 = CalciteRuntime.conjunctions(e_0);
 		if (!(c_1.size() == 2)) {
 			return;
 		}
@@ -85,7 +85,7 @@ public class FilterWindowTranspose extends RelRule<FilterWindowTranspose.Config>
 		b.filter(CalciteRuntime.instantiate(sym_4, args_3, new RexNode[]{CalciteRuntime.field(b, 1, 0)}));
 		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_10.getAggregation(), false, null, a_10.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 1))));
 		b.filter(CalciteRuntime.instantiate(sym_7, args_6, new RexNode[]{CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)}));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

@@ -54,7 +54,7 @@ public class EliminateNot extends RelRule<EliminateNot.Config> {
 		}
 		b.push(r_1);
 		b.filter(CalciteRuntime.instantiate(sym_4, args_3, new RexNode[]{CalciteRuntime.field(b, 1, 0)}));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

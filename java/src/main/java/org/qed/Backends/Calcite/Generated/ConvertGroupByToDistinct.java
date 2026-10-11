@@ -62,7 +62,7 @@ public class ConvertGroupByToDistinct extends RelRule<ConvertGroupByToDistinct.C
 		b.push(r_1);
 		b.push(r_1);
 		b.intersect(false, 2);
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

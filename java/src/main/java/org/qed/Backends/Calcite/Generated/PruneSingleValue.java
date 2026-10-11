@@ -54,7 +54,7 @@ public class PruneSingleValue extends RelRule<PruneSingleValue.Config> {
 		b.push(r_1);
 		b.filter(CalciteRuntime.instantiate(sym_2, args_1, new RexNode[]{CalciteRuntime.field(b, 1, 0), b.literal(true)}));
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), b.literal(true)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

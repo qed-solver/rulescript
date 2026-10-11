@@ -45,7 +45,7 @@ public class UnionEliminator extends RelRule<UnionEliminator.Config> {
 			return;
 		}
 		b.push(r_1);
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

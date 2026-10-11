@@ -18,12 +18,12 @@ public class FoldNullUnaryTest {
     private static void nullOperand(FoldNullUnary rule) {
         var builder = RuleBuilder.create();
         var table = RuleChecks.table(builder, 1, false);
-        var nullInt = builder.getRexBuilder()
-                .makeNullLiteral(builder.getTypeFactory().createSqlType(SqlTypeName.INTEGER));
-        var before = builder.scan(table)
-                .project(builder.call(SqlStdOperatorTable.UNARY_MINUS, nullInt))
-                .build();
         var plain = RuleChecks.ruleBuilder(builder);
+        var nullInt = plain.getRexBuilder()
+                .makeNullLiteral(plain.getTypeFactory().createSqlType(SqlTypeName.INTEGER));
+        var before = plain.scan(table)
+                .project(plain.call(SqlStdOperatorTable.UNARY_MINUS, nullInt))
+                .build();
         var nullResult = plain.getRexBuilder()
                 .makeNullLiteral(plain.getTypeFactory().createSqlType(SqlTypeName.INTEGER));
         var after = plain.scan(table).project(nullResult).build();

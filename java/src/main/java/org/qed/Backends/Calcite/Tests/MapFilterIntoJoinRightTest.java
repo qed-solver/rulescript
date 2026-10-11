@@ -22,8 +22,8 @@ public class MapFilterIntoJoinRightTest {
 
     private static void ordinaryTables(MapFilterIntoJoinRight rule) {
         var base = RuleBuilder.create();
-        var l = RuleChecks.table(base, 1, false);
-        var r = RuleChecks.table(base, 1, false);
+        var l = RuleChecks.table(base, 1, false, false);
+        var r = RuleChecks.table(base, 1, false, false);
         var f = base.genericPredicateOp("mapped_conj", true);
         var b = RuleChecks.ruleBuilder(base);
 

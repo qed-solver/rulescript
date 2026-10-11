@@ -16,15 +16,15 @@ public class PushSelectIntoUnorderedDistinctOnTest {
 
     private static void ordinaryTables(PushSelectIntoUnorderedDistinctOn rule) {
         var builder = RuleBuilder.create();
-        var table = RuleChecks.table(builder, 2, false);
+        var table = RuleChecks.table(builder, 2, false, false);
         var five = builder.literal(5);
         var ten = builder.literal(10);
-        var before = builder.scan(table)
-                .aggregate(builder.groupKey(0, 1))
-                .filter(builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), five),
-                        builder.call(SqlStdOperatorTable.LESS_THAN, builder.field(1), ten))
-                .build();
         var plain = RuleChecks.ruleBuilder(builder);
+        var before = plain.scan(table)
+                .aggregate(plain.groupKey(0, 1))
+                .filter(plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(0), five),
+                        plain.call(SqlStdOperatorTable.LESS_THAN, plain.field(1), ten))
+                .build();
         var after = plain.scan(table)
                 .filter(plain.and(
                         plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(0), five),

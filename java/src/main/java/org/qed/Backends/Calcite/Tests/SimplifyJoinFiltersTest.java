@@ -19,9 +19,11 @@ public class SimplifyJoinFiltersTest {
         var builder = RuleBuilder.create();
         var l = RuleChecks.table(builder, 1, false);
         var r = RuleChecks.table(builder, 1, false);
-        var on = builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 0), builder.field(2, 1, 0));
-        var before = builder.scan(l).scan(r).join(JoinRelType.INNER,
-                builder.call(SqlStdOperatorTable.AND, on, builder.literal(true))).build();
+        var raw = RuleChecks.ruleBuilder(builder);
+        var before = raw.scan(l).scan(r).join(JoinRelType.INNER,
+                raw.call(SqlStdOperatorTable.AND,
+                        raw.call(SqlStdOperatorTable.EQUALS, raw.field(2, 0, 0), raw.field(2, 1, 0)),
+                        raw.literal(true))).build();
 
         var plain = RuleChecks.ruleBuilder(builder);
         var after = plain.scan(l).scan(r).join(JoinRelType.INNER,

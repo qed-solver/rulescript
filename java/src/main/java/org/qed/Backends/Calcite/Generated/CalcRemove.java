@@ -53,7 +53,7 @@ public class CalcRemove extends RelRule<CalcRemove.Config> {
 			return;
 		}
 		b.push(r_1);
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

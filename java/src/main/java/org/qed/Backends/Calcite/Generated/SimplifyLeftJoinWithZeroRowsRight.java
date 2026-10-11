@@ -59,7 +59,7 @@ public class SimplifyLeftJoinWithZeroRowsRight extends RelRule<SimplifyLeftJoinW
 		}
 		b.push(r_1);
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1), b.getRexBuilder().makeNullLiteral(r_2.getRowType().getFieldList().get(0).getType()), b.getRexBuilder().makeNullLiteral(r_2.getRowType().getFieldList().get(1).getType())));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

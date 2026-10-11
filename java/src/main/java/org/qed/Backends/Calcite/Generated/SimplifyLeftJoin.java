@@ -60,7 +60,7 @@ public class SimplifyLeftJoin extends RelRule<SimplifyLeftJoin.Config> {
 		b.push(r_1);
 		b.push(r_1);
 		b.join(JoinRelType.INNER, b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

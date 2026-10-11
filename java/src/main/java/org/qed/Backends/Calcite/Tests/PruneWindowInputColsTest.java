@@ -20,7 +20,7 @@ public class PruneWindowInputColsTest {
 
     private static void ordinaryTables(PruneWindowInputCols rule) {
         var base = RuleBuilder.create();
-        var t = RuleChecks.table(base, 3, false);
+        var t = RuleChecks.table(base, 3, false, false);
         var top = base.genericProjectionOp("Top", RelType.fromString("INTEGER", true));
         var w = base.genericAggregateOp("w", RelType.fromString("INTEGER", true));
         var plain = RuleChecks.ruleBuilder(base);

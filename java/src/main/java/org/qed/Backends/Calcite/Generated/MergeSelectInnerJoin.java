@@ -64,7 +64,7 @@ public class MergeSelectInnerJoin extends RelRule<MergeSelectInnerJoin.Config> {
 		b.push(r_2);
 		b.push(r_3);
 		b.join(JoinRelType.INNER, b.and(CalciteRuntime.instantiate(sym_5, args_4, new RexNode[]{CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)}), CalciteRuntime.instantiate(sym_2, args_1, new RexNode[]{CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)})));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

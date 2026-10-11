@@ -35,7 +35,7 @@ public class ExpandDisjunctionForTable extends RelRule<ExpandDisjunctionForTable
 			return;
 		}
 		final RexNode e_0 = r_0.getCondition();
-		final List<RexNode> c_1 = RelOptUtil.conjunctions(e_0);
+		final List<RexNode> c_1 = CalciteRuntime.conjunctions(e_0);
 		if (!(c_1.size() == 2)) {
 			return;
 		}
@@ -46,12 +46,12 @@ public class ExpandDisjunctionForTable extends RelRule<ExpandDisjunctionForTable
 			return;
 		}
 		final RexNode e_5 = c_1.get(1);
-		final List<RexNode> d_6 = RelOptUtil.disjunctions(e_5);
+		final List<RexNode> d_6 = CalciteRuntime.disjunctions(e_5);
 		if (!(d_6.size() == 2)) {
 			return;
 		}
 		final RexNode e_7 = d_6.get(0);
-		final List<RexNode> c_8 = RelOptUtil.conjunctions(e_7);
+		final List<RexNode> c_8 = CalciteRuntime.conjunctions(e_7);
 		if (!(c_8.size() == 2)) {
 			return;
 		}
@@ -68,7 +68,7 @@ public class ExpandDisjunctionForTable extends RelRule<ExpandDisjunctionForTable
 			return;
 		}
 		final RexNode e_15 = d_6.get(1);
-		final List<RexNode> c_16 = RelOptUtil.conjunctions(e_15);
+		final List<RexNode> c_16 = CalciteRuntime.conjunctions(e_15);
 		if (!(c_16.size() == 2)) {
 			return;
 		}
@@ -101,7 +101,7 @@ public class ExpandDisjunctionForTable extends RelRule<ExpandDisjunctionForTable
 		b.push(r_1);
 		b.push(r_2);
 		b.join(JoinRelType.INNER, b.and(b.and(CalciteRuntime.instantiate(sym_4, args_3, new RexNode[]{CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)}), b.or(b.and(CalciteRuntime.instantiate(sym_11, args_10, new RexNode[]{CalciteRuntime.field(b, 2, 0)}), CalciteRuntime.instantiate(sym_14, args_13, new RexNode[]{CalciteRuntime.field(b, 2, 1)})), b.and(CalciteRuntime.instantiate(sym_19, args_18, new RexNode[]{CalciteRuntime.field(b, 2, 0)}), CalciteRuntime.instantiate(sym_22, args_21, new RexNode[]{CalciteRuntime.field(b, 2, 1)})))), b.or(CalciteRuntime.instantiate(sym_11, args_10, new RexNode[]{CalciteRuntime.field(b, 2, 0)}), CalciteRuntime.instantiate(sym_19, args_18, new RexNode[]{CalciteRuntime.field(b, 2, 0)})), b.or(CalciteRuntime.instantiate(sym_14, args_13, new RexNode[]{CalciteRuntime.field(b, 2, 1)}), CalciteRuntime.instantiate(sym_22, args_21, new RexNode[]{CalciteRuntime.field(b, 2, 1)}))));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

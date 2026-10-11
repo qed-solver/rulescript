@@ -30,6 +30,47 @@ public final class CalciteRuntime {
         return config.withSimplify(false).withBloat(-1).withPruneInputOfAggregate(false);
     }
 
+    public static java.util.List<RexNode> conjunctions(RexNode node) {
+        return flatten(node, org.apache.calcite.sql.SqlKind.AND);
+    }
+
+    public static java.util.List<RexNode> disjunctions(RexNode node) {
+        return flatten(node, org.apache.calcite.sql.SqlKind.OR);
+    }
+
+    private static java.util.List<RexNode> flatten(RexNode node, org.apache.calcite.sql.SqlKind kind) {
+        if (node.getKind() != kind) {
+            return java.util.List.of(node);
+        }
+        final java.util.List<RexNode> out = new java.util.ArrayList<>();
+        for (RexNode operand : ((RexCall) node).getOperands()) {
+            out.addAll(flatten(operand, kind));
+        }
+        return out;
+    }
+
+    public static void transform(RelOptRuleCall call, RelBuilder b) {
+        var result = b.build();
+        var original = call.rel(0).getRowType();
+        var actual = result.getRowType();
+        if (!actual.equals(original) && actual.getFieldCount() == original.getFieldCount()) {
+            var sameSansNullability = true;
+            for (var i = 0; i < actual.getFieldCount(); i++) {
+                sameSansNullability &= SqlTypeUtil.equalSansNullability(b.getTypeFactory(),
+                        actual.getFieldList().get(i).getType(), original.getFieldList().get(i).getType());
+            }
+            if (sameSansNullability) {
+                b.push(result);
+                var fields = new java.util.ArrayList<RexNode>();
+                for (var i = 0; i < original.getFieldCount(); i++) {
+                    fields.add(b.getRexBuilder().makeCast(original.getFieldList().get(i).getType(), b.field(i), true));
+                }
+                result = b.project(fields, original.getFieldNames()).build();
+            }
+        }
+        call.transformTo(result);
+    }
+
     public static RelBuilder builder(RelOptRuleCall call) {
         return call.builder().transform(CalciteRuntime::configure);
     }
@@ -153,12 +194,19 @@ public final class CalciteRuntime {
             return false;
         }
         var previous = types.putIfAbsent(typeId, actual);
-        return previous == null || SqlTypeUtil.equalSansNullability(previous, actual);
+        return previous == null || sameType(previous, actual);
+    }
+
+    private static boolean sameType(RelDataType left, RelDataType right) {
+        if (left instanceof org.qed.RelType.VarType || right instanceof org.qed.RelType.VarType) {
+            return left.toString().equals(right.toString());
+        }
+        return SqlTypeUtil.equalSansNullability(left, right);
     }
 
     public static boolean hasBoundType(Map<String, RelDataType> types, String typeId, RexNode expr) {
         var bound = types.get(typeId);
-        return bound == null || SqlTypeUtil.equalSansNullability(bound, expr.getType());
+        return bound == null || sameType(bound, expr.getType());
     }
 
     public static boolean isLiteral(RexNode expr, Object value) {

@@ -2,6 +2,7 @@ package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.Backends.Calcite.CalciteRuntime;
 import org.qed.RRuleInstances.EliminateAggFilteredDistinctForKeys;
 import org.qed.RuleBuilder;
 
@@ -17,10 +18,10 @@ public class EliminateAggFilteredDistinctForKeysTest {
 
     private static void ordinaryTables(EliminateAggFilteredDistinctForKeys rule) {
         var base = RuleBuilder.create();
-        var keyed = RuleChecks.table(base, 1, true);
-        var plain = RuleChecks.table(base, 1, false);
-        var wide = RuleChecks.table(base, 2, true);
-        var b = RuleChecks.ruleBuilder(base);
+        var keyed = RuleChecks.table(base, 1, true, false);
+        var plain = RuleChecks.table(base, 1, false, false);
+        var wide = RuleChecks.table(base, 2, true, false);
+        var b = base.transform(c -> CalciteRuntime.configure(c).withRemoveRedundantDistinct(false));
         var before = b.scan(keyed)
                 .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.SUM, true, (RexNode) null, (String) null, b.field(0)))
                 .build();

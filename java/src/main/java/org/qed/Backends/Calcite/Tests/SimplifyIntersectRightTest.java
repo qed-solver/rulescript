@@ -17,8 +17,8 @@ public class SimplifyIntersectRightTest {
 
     private static void ordinaryTables(SimplifyIntersectRight rule) {
         var base = RuleBuilder.create();
-        var plain = RuleChecks.table(base, 1, false);
-        var unique = RuleChecks.table(base, 1, true);
+        var plain = RuleChecks.table(base, 1, false, false);
+        var unique = RuleChecks.table(base, 1, true, false);
         var b = RuleChecks.ruleBuilder(base);
         var before = b.scan(plain).scan(unique).intersect(false, 2).build();
         var after = b.scan(unique).scan(plain)

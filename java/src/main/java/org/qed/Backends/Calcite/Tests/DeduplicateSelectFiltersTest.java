@@ -1,6 +1,8 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.tools.RelBuilder;
 import org.qed.RRuleInstances.DeduplicateSelectFilters;
 import org.qed.RuleBuilder;
 
@@ -14,38 +16,44 @@ public class DeduplicateSelectFiltersTest {
         ordinaryTables(rule);
     }
 
+    private static RexNode gt5(RelBuilder b) {
+        return RuleChecks.gt(b, b.field(0), 5);
+    }
+
+    private static RexNode lt10(RelBuilder b) {
+        return b.call(SqlStdOperatorTable.LESS_THAN, b.field(0), b.literal(10));
+    }
+
+    private static RexNode gt7(RelBuilder b) {
+        return RuleChecks.gt(b, b.field(0), 7);
+    }
+
     private static void ordinaryTables(DeduplicateSelectFilters rule) {
-        var builder = RuleBuilder.create();
-        var table = RuleChecks.table(builder, 1, false);
-        var five = builder.literal(5);
-        var ten = builder.literal(10);
-        var seven = builder.literal(7);
-        var p = builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), five);
-        var q = builder.call(SqlStdOperatorTable.LESS_THAN, builder.field(0), ten);
-        var before = builder.scan(table)
-                .filter(p)
-                .filter(q)
-                .filter(p)
+        var base = RuleBuilder.create();
+        var table = RuleChecks.table(base, 1, false);
+        var b = RuleChecks.ruleBuilder(base);
+
+        var before = b.scan(table)
+                .filter(gt5(b))
+                .filter(lt10(b))
+                .filter(gt5(b))
                 .build();
-        var plain = RuleChecks.ruleBuilder(builder);
-        var pPlain = plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(0), five);
-        var qPlain = plain.call(SqlStdOperatorTable.LESS_THAN, plain.field(0), ten);
-        var after = plain.scan(table)
-                .filter(pPlain)
-                .filter(qPlain)
+        var after = b.scan(table)
+                .filter(gt5(b))
+                .filter(lt10(b))
                 .build();
         RuleChecks.rewrites(rule, before, after);
 
-        var twoFilters = builder.scan(table)
-                .filter(p)
-                .filter(q)
+        var twoFilters = b.scan(table)
+                .filter(gt5(b))
+                .filter(lt10(b))
                 .build();
         RuleChecks.doesNotApply(rule, twoFilters);
 
-        var differentThird = builder.scan(table)
-                .filter(p)
-                .filter(q)
-                .filter(builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), seven))
+        var differentThird = b.scan(table)
+                .filter(gt5(b))
+                .filter(lt10(b))
+                .filter(gt7(b))
                 .build();
         RuleChecks.doesNotApply(rule, differentThird);
     }

@@ -1,5 +1,6 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.FoldNonNullIsNull;
 import org.qed.RuleBuilder;
@@ -17,10 +18,11 @@ public class FoldNonNullIsNullTest {
     private static void nonNullColumns(FoldNonNullIsNull rule) {
         var builder = RuleBuilder.create();
         var table = RuleChecks.table(builder, 1, false, false);
-        var before = builder.scan(table)
-                .filter(builder.call(SqlStdOperatorTable.IS_NULL, builder.field(0)))
-                .build();
         var plain = RuleChecks.ruleBuilder(builder);
+        var source = plain.scan(table).build();
+        var rex = plain.getRexBuilder();
+        var before = LogicalFilter.create(source,
+                rex.makeCall(SqlStdOperatorTable.IS_NULL, rex.makeInputRef(source, 0)));
         var after = plain.scan(table).filter(plain.literal(false)).build();
         RuleChecks.rewrites(rule, before, after);
 

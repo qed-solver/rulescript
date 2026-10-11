@@ -54,7 +54,7 @@ public class FoldNullComparisonRight extends RelRule<FoldNullComparisonRight.Con
 		}
 		b.push(r_1);
 		b.filter(b.getRexBuilder().makeNullLiteral(b.getTypeFactory().createSqlType(org.apache.calcite.sql.type.SqlTypeName.BOOLEAN)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

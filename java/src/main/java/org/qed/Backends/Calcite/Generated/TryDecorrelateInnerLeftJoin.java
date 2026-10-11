@@ -76,7 +76,7 @@ public class TryDecorrelateInnerLeftJoin extends RelRule<TryDecorrelateInnerLeft
 		b.join(JoinRelType.INNER, CalciteRuntime.instantiate(sym_2, args_1, new RexNode[]{CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)}));
 		b.push(r_4);
 		b.join(JoinRelType.LEFT, CalciteRuntime.instantiate(sym_5, args_4, new RexNode[]{CalciteRuntime.field(b, 2, 1), CalciteRuntime.field(b, 2, 2)}));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

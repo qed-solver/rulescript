@@ -18,7 +18,7 @@ public class InlineJoinConstantsLeftTest {
     private static void ordinaryTables(InlineJoinConstantsLeft rule) {
         var builder = RuleBuilder.create();
         var source = RuleChecks.table(builder, 1, false);
-        var constant = RuleChecks.table(builder, 1, true);
+        var constant = RuleChecks.table(builder, 1, true, false);
         var right = RuleChecks.table(builder, 1, false);
         var before = builder.scan(source).scan(constant)
                 .join(JoinRelType.INNER, builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 0), builder.field(2, 1, 0)))

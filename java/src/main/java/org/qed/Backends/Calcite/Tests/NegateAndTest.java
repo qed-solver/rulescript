@@ -19,24 +19,22 @@ public class NegateAndTest {
         var table = RuleChecks.table(builder, 1, false);
         var five = builder.literal(5);
         var ten = builder.literal(10);
-        var greater = builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), five);
-        var less = builder.call(SqlStdOperatorTable.LESS_THAN, builder.field(0), ten);
-        var before = builder.scan(table)
-                .filter(builder.call(SqlStdOperatorTable.NOT,
-                        builder.call(SqlStdOperatorTable.AND, greater, less)))
-                .build();
         var plain = RuleChecks.ruleBuilder(builder);
+        var before = plain.scan(table)
+                .filter(plain.not(plain.and(
+                        plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(0), five),
+                        plain.call(SqlStdOperatorTable.LESS_THAN, plain.field(0), ten))))
+                .build();
         var after = plain.scan(table)
-                .filter(plain.call(SqlStdOperatorTable.OR,
-                        plain.call(SqlStdOperatorTable.NOT,
-                                plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(0), five)),
-                        plain.call(SqlStdOperatorTable.NOT,
-                                plain.call(SqlStdOperatorTable.LESS_THAN, plain.field(0), ten))))
+                .filter(plain.or(
+                        plain.not(plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(0), five)),
+                        plain.not(plain.call(SqlStdOperatorTable.LESS_THAN, plain.field(0), ten))))
                 .build();
         RuleChecks.rewrites(rule, before, after);
 
-        var single = builder.scan(table)
-                .filter(builder.call(SqlStdOperatorTable.NOT, greater)).build();
+        var single = plain.scan(table)
+                .filter(plain.not(plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(0), five)))
+                .build();
         RuleChecks.doesNotApply(rule, single);
     }
 

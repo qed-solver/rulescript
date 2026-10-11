@@ -1,5 +1,6 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.FoldNonNullIsNotNull;
 import org.qed.RuleBuilder;
@@ -19,14 +20,15 @@ public class FoldNonNullIsNotNullTest {
         var table = RuleChecks.table(builder, 1, false, false);
         var nullableTable = RuleChecks.table(builder, 1, false, true);
         var plain = RuleChecks.ruleBuilder(builder);
-        var before = builder.scan(table)
-                .filter(builder.call(SqlStdOperatorTable.IS_NOT_NULL, builder.field(0)))
-                .build();
+        var source = plain.scan(table).build();
+        var rex = plain.getRexBuilder();
+        var before = LogicalFilter.create(source,
+                rex.makeCall(SqlStdOperatorTable.IS_NOT_NULL, rex.makeInputRef(source, 0)));
         var after = plain.scan(table).filter(plain.literal(true)).build();
         RuleChecks.rewrites(rule, before, after);
 
-        var nullable = builder.scan(nullableTable)
-                .filter(builder.call(SqlStdOperatorTable.IS_NOT_NULL, builder.field(0)))
+        var nullable = plain.scan(nullableTable)
+                .filter(plain.call(SqlStdOperatorTable.IS_NOT_NULL, plain.field(0)))
                 .build();
         RuleChecks.doesNotApply(rule, nullable);
     }

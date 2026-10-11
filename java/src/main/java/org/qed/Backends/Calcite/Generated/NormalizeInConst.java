@@ -32,7 +32,7 @@ public class NormalizeInConst extends RelRule<NormalizeInConst.Config> {
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalFilter r_0 = call.rel(0);
 		final RexNode e_0 = r_0.getCondition();
-		final List<RexNode> d_1 = RelOptUtil.disjunctions(e_0);
+		final List<RexNode> d_1 = CalciteRuntime.disjunctions(e_0);
 		if (!(d_1.size() == 4)) {
 			return;
 		}
@@ -99,7 +99,7 @@ public class NormalizeInConst extends RelRule<NormalizeInConst.Config> {
 		}
 		b.push(r_1);
 		b.filter(b.or(b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)), b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 2))));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

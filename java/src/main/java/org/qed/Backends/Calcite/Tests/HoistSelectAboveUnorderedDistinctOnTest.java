@@ -16,7 +16,7 @@ public class HoistSelectAboveUnorderedDistinctOnTest {
 
     private static void ordinaryTables(HoistSelectAboveUnorderedDistinctOn rule) {
         var builder = RuleBuilder.create();
-        var table = RuleChecks.table(builder, 2, false);
+        var table = RuleChecks.table(builder, 2, false, false);
         var five = builder.literal(5);
         var before = builder.scan(table)
                 .filter(builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), five))

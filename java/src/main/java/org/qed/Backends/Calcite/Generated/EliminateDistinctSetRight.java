@@ -76,7 +76,7 @@ public class EliminateDistinctSetRight extends RelRule<EliminateDistinctSetRight
 		b.push(r_2);
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 2), CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
 		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1), CalciteRuntime.field(b, 1, 2)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

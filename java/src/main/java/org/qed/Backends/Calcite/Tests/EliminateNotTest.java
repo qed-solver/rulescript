@@ -17,20 +17,17 @@ public class EliminateNotTest {
     private static void doubleNegation(EliminateNot rule) {
         var builder = RuleBuilder.create();
         var table = RuleChecks.table(builder, 1, false);
-        var five = builder.literal(5);
-        var inner = builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), five);
-        var before = builder.scan(table)
-                .filter(builder.call(SqlStdOperatorTable.NOT,
-                        builder.call(SqlStdOperatorTable.NOT, inner)))
-                .build();
         var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(table)
-                .filter(RuleChecks.gt(plain, plain.field(0), 5))
-                .build();
+        plain.scan(table);
+        var inner = RuleChecks.gt(plain, plain.field(0), 5);
+        var before = plain.filter(plain.call(SqlStdOperatorTable.NOT,
+                plain.call(SqlStdOperatorTable.NOT, inner))).build();
+        plain.scan(table);
+        var after = plain.filter(inner).build();
         RuleChecks.rewrites(rule, before, after);
 
-        var single = builder.scan(table)
-                .filter(builder.call(SqlStdOperatorTable.NOT, inner)).build();
+        plain.scan(table);
+        var single = plain.filter(plain.call(SqlStdOperatorTable.NOT, inner)).build();
         RuleChecks.doesNotApply(rule, single);
     }
 

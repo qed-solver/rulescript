@@ -65,7 +65,7 @@ public class EliminateAggFilteredDistinctForKeys extends RelRule<EliminateAggFil
 		}
 		b.push(r_1);
 		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_2.getAggregation(), false, null, a_2.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 0))));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

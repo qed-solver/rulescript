@@ -71,7 +71,7 @@ public class EliminateJoinUnderGroupByLeft extends RelRule<EliminateJoinUnderGro
 		}
 		b.push(r_2);
 		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

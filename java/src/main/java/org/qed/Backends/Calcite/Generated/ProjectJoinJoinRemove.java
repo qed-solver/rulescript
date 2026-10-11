@@ -99,7 +99,7 @@ public class ProjectJoinJoinRemove extends RelRule<ProjectJoinJoinRemove.Config>
 		b.push(r_5);
 		b.join(JoinRelType.LEFT, b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)));
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

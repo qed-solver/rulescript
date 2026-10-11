@@ -1,5 +1,6 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.qed.RRuleInstances.FoldNullComparisonLeft;
@@ -19,14 +20,13 @@ public class FoldNullComparisonLeftTest {
         var builder = RuleBuilder.create();
         var table = RuleChecks.table(builder, 1, false);
         var plain = RuleChecks.ruleBuilder(builder);
-        var nullInt = plain.getRexBuilder()
-                .makeNullLiteral(plain.getTypeFactory().createSqlType(SqlTypeName.INTEGER));
-        var nullBool = plain.getRexBuilder()
-                .makeNullLiteral(plain.getTypeFactory().createSqlType(SqlTypeName.BOOLEAN));
-        var before = plain.scan(table)
-                .filter(plain.call(SqlStdOperatorTable.EQUALS, nullInt, plain.field(0)))
-                .build();
-        var after = plain.scan(table).filter(nullBool).build();
+        var rex = plain.getRexBuilder();
+        var nullInt = rex.makeNullLiteral(plain.getTypeFactory().createSqlType(SqlTypeName.INTEGER));
+        var nullBool = rex.makeNullLiteral(plain.getTypeFactory().createSqlType(SqlTypeName.BOOLEAN));
+        var scan = plain.scan(table).build();
+        var before = LogicalFilter.create(scan,
+                rex.makeCall(SqlStdOperatorTable.EQUALS, nullInt, rex.makeInputRef(scan, 0)));
+        var after = LogicalFilter.create(scan, nullBool);
         RuleChecks.rewrites(rule, before, after);
 
         var five = builder.literal(5);

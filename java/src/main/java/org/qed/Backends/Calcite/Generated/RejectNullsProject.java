@@ -66,7 +66,7 @@ public class RejectNullsProject extends RelRule<RejectNullsProject.Config> {
 		b.filter(b.call(SqlStdOperatorTable.IS_NOT_NULL, CalciteRuntime.field(b, 1, 0)));
 		b.project(List.<RexNode>of(b.call(SqlStdOperatorTable.UNARY_MINUS, CalciteRuntime.field(b, 1, 0)), CalciteRuntime.field(b, 1, 0)));
 		b.filter(b.call(SqlStdOperatorTable.IS_NOT_NULL, CalciteRuntime.field(b, 1, 0)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

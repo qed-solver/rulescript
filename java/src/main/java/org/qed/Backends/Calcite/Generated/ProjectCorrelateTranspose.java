@@ -76,7 +76,7 @@ public class ProjectCorrelateTranspose extends RelRule<ProjectCorrelateTranspose
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0)));
 		b.join(JoinRelType.INNER, b.literal(true));
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

@@ -72,7 +72,7 @@ public class ReduceNotNullGroupingCols extends RelRule<ReduceNotNullGroupingCols
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 0)));
 		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)));
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 0)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

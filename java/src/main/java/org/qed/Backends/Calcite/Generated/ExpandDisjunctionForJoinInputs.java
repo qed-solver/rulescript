@@ -35,12 +35,12 @@ public class ExpandDisjunctionForJoinInputs extends RelRule<ExpandDisjunctionFor
 			return;
 		}
 		final RexNode e_0 = r_0.getCondition();
-		final List<RexNode> d_1 = RelOptUtil.disjunctions(e_0);
+		final List<RexNode> d_1 = CalciteRuntime.disjunctions(e_0);
 		if (!(d_1.size() == 2)) {
 			return;
 		}
 		final RexNode e_2 = d_1.get(0);
-		final List<RexNode> c_3 = RelOptUtil.conjunctions(e_2);
+		final List<RexNode> c_3 = CalciteRuntime.conjunctions(e_2);
 		if (!(c_3.size() == 2)) {
 			return;
 		}
@@ -57,7 +57,7 @@ public class ExpandDisjunctionForJoinInputs extends RelRule<ExpandDisjunctionFor
 			return;
 		}
 		final RexNode e_10 = d_1.get(1);
-		final List<RexNode> c_11 = RelOptUtil.conjunctions(e_10);
+		final List<RexNode> c_11 = CalciteRuntime.conjunctions(e_10);
 		if (!(c_11.size() == 2)) {
 			return;
 		}
@@ -96,7 +96,7 @@ public class ExpandDisjunctionForJoinInputs extends RelRule<ExpandDisjunctionFor
 		b.push(r_1);
 		b.push(r_2);
 		b.join(JoinRelType.INNER, b.and(b.or(b.and(CalciteRuntime.instantiate(sym_6, args_5, new RexNode[]{CalciteRuntime.field(b, 2, 0)}), CalciteRuntime.instantiate(sym_9, args_8, new RexNode[]{CalciteRuntime.field(b, 2, 2)})), b.and(CalciteRuntime.instantiate(sym_14, args_13, new RexNode[]{CalciteRuntime.field(b, 2, 1)}), CalciteRuntime.instantiate(sym_17, args_16, new RexNode[]{CalciteRuntime.field(b, 2, 3)}))), b.or(CalciteRuntime.instantiate(sym_6, args_5, new RexNode[]{CalciteRuntime.field(b, 2, 0)}), CalciteRuntime.instantiate(sym_14, args_13, new RexNode[]{CalciteRuntime.field(b, 2, 1)})), b.or(CalciteRuntime.instantiate(sym_9, args_8, new RexNode[]{CalciteRuntime.field(b, 2, 2)}), CalciteRuntime.instantiate(sym_17, args_16, new RexNode[]{CalciteRuntime.field(b, 2, 3)}))));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

@@ -52,7 +52,7 @@ public class SimplifySameVarInequalities extends RelRule<SimplifySameVarInequali
 		}
 		b.push(r_1);
 		b.filter(b.and(b.call(SqlStdOperatorTable.IS_NULL, CalciteRuntime.field(b, 1, 0)), b.getRexBuilder().makeNullLiteral(b.getTypeFactory().createSqlType(org.apache.calcite.sql.type.SqlTypeName.INTEGER))));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

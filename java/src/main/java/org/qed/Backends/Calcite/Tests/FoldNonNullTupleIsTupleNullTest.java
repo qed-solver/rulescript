@@ -2,6 +2,7 @@ package org.qed.Backends.Calcite.Tests;
 
 import kala.collection.Seq;
 import kala.tuple.Tuple;
+import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.FoldNonNullTupleIsTupleNull;
 import org.qed.RelType;
@@ -27,24 +28,21 @@ public class FoldNonNullTupleIsTupleNullTest {
         var table = qedTable.getName();
         var bothNullable = RuleChecks.table(builder, 2, false, true);
         var plain = RuleChecks.ruleBuilder(builder);
-        var before = builder.scan(table)
-                .filter(builder.call(SqlStdOperatorTable.AND,
-                        builder.call(SqlStdOperatorTable.IS_NULL, builder.field(0)),
-                        builder.call(SqlStdOperatorTable.IS_NULL, builder.field(1))))
-                .build();
+        var rex = plain.getRexBuilder();
+        var scan = plain.scan(table).build();
+        var before = LogicalFilter.create(scan, rex.makeCall(SqlStdOperatorTable.AND,
+                rex.makeCall(SqlStdOperatorTable.IS_NULL, rex.makeInputRef(scan, 0)),
+                rex.makeCall(SqlStdOperatorTable.IS_NULL, rex.makeInputRef(scan, 1))));
         var after = plain.scan(table).filter(plain.literal(false)).build();
         RuleChecks.rewrites(rule, before, after);
 
-        var firstOnly = builder.scan(table)
-                .filter(builder.call(SqlStdOperatorTable.IS_NULL, builder.field(0)))
-                .build();
+        var firstOnly = LogicalFilter.create(scan, rex.makeCall(SqlStdOperatorTable.IS_NULL, rex.makeInputRef(scan, 0)));
         RuleChecks.doesNotApply(rule, firstOnly);
 
-        var nullableFirst = builder.scan(bothNullable)
-                .filter(builder.call(SqlStdOperatorTable.AND,
-                        builder.call(SqlStdOperatorTable.IS_NULL, builder.field(0)),
-                        builder.call(SqlStdOperatorTable.IS_NULL, builder.field(1))))
-                .build();
+        var nullScan = plain.scan(bothNullable).build();
+        var nullableFirst = LogicalFilter.create(nullScan, rex.makeCall(SqlStdOperatorTable.AND,
+                rex.makeCall(SqlStdOperatorTable.IS_NULL, rex.makeInputRef(nullScan, 0)),
+                rex.makeCall(SqlStdOperatorTable.IS_NULL, rex.makeInputRef(nullScan, 1))));
         RuleChecks.doesNotApply(rule, nullableFirst);
     }
 

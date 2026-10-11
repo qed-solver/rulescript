@@ -77,7 +77,7 @@ public class UnionMerge extends RelRule<UnionMerge.Config> {
 		b.push(r_4);
 		b.push(r_5);
 		b.union(true, 4);
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

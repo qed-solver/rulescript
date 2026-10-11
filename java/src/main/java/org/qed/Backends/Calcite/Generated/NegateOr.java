@@ -36,7 +36,7 @@ public class NegateOr extends RelRule<NegateOr.Config> {
 			return;
 		}
 		final RexNode e_1 = ((RexCall) e_0).getOperands().get(0);
-		final List<RexNode> d_2 = RelOptUtil.disjunctions(e_1);
+		final List<RexNode> d_2 = CalciteRuntime.disjunctions(e_1);
 		if (!(d_2.size() == 2)) {
 			return;
 		}
@@ -61,7 +61,7 @@ public class NegateOr extends RelRule<NegateOr.Config> {
 		}
 		b.push(r_1);
 		b.filter(b.and(b.not(CalciteRuntime.instantiate(sym_5, args_4, new RexNode[]{CalciteRuntime.field(b, 1, 0)})), b.not(CalciteRuntime.instantiate(sym_8, args_7, new RexNode[]{CalciteRuntime.field(b, 1, 0)}))));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

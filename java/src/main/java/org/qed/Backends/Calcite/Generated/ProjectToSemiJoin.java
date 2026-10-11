@@ -97,7 +97,7 @@ public class ProjectToSemiJoin extends RelRule<ProjectToSemiJoin.Config> {
 		b.push(r_4);
 		b.join(JoinRelType.SEMI, b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 3)));
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 1), CalciteRuntime.field(b, 1, 0)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

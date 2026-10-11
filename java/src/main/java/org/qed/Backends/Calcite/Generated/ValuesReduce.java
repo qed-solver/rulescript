@@ -47,7 +47,7 @@ public class ValuesReduce extends RelRule<ValuesReduce.Config> {
 			return;
 		}
 		b.values(new String[]{"c", "a"}, 3, 1, 6, 4);
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

@@ -66,7 +66,7 @@ public class EliminateExistsProject extends RelRule<EliminateExistsProject.Confi
 		b.push(r_1001);
 		final RelNode sub_4 = b.build();
 		b.filter(RexSubQuery.exists(sub_4));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

@@ -32,7 +32,7 @@ public class FoldComparisonWithAny extends RelRule<FoldComparisonWithAny.Config>
 		final Map<String, RelDataType> types = new HashMap<>();
 		final LogicalFilter r_0 = call.rel(0);
 		final RexNode e_0 = r_0.getCondition();
-		final List<RexNode> d_1 = RelOptUtil.disjunctions(e_0);
+		final List<RexNode> d_1 = CalciteRuntime.disjunctions(e_0);
 		if (!(d_1.size() == 2)) {
 			return;
 		}
@@ -69,7 +69,7 @@ public class FoldComparisonWithAny extends RelRule<FoldComparisonWithAny.Config>
 		}
 		b.push(r_1);
 		b.filter(b.literal(true));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

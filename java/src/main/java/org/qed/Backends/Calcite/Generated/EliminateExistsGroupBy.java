@@ -73,7 +73,7 @@ public class EliminateExistsGroupBy extends RelRule<EliminateExistsGroupBy.Confi
 		b.push(r_1);
 		b.push(r_4);
 		b.join(JoinRelType.SEMI, b.literal(true));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

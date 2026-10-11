@@ -47,7 +47,7 @@ public class MergeProjectWithValues extends RelRule<MergeProjectWithValues.Confi
 			return;
 		}
 		b.values(new String[]{"c0", "c1"}, 1, 3);
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

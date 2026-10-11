@@ -69,7 +69,7 @@ public class CommuteConst extends RelRule<CommuteConst.Config> {
 		b.push(r_3);
 		b.join(JoinRelType.INNER, b.literal(true));
 		b.filter(b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 1, 1), CalciteRuntime.field(b, 1, 0)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

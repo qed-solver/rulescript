@@ -20,15 +20,17 @@ public class FoldNullTupleIsTupleNotNullTest {
         var builder = RuleBuilder.create();
         var table = RuleChecks.table(builder, 1, false);
         var plain = RuleChecks.ruleBuilder(builder);
-        var nullInt = plain.getRexBuilder().makeNullLiteral(plain.getTypeFactory().createSqlType(SqlTypeName.INTEGER));
-        var notNullNull = plain.call(SqlStdOperatorTable.IS_NOT_NULL, nullInt);
-        var notNull0 = plain.call(SqlStdOperatorTable.IS_NOT_NULL, plain.field(0));
-        var condition = plain.getRexBuilder().makeCall(SqlStdOperatorTable.AND, notNullNull, notNull0);
-        var before = LogicalFilter.create(plain.scan(table).build(), condition);
+        var rex = plain.getRexBuilder();
+        var nullInt = rex.makeNullLiteral(plain.getTypeFactory().createSqlType(SqlTypeName.INTEGER));
+        var scan = plain.scan(table).build();
+        var notNullNull = rex.makeCall(SqlStdOperatorTable.IS_NOT_NULL, nullInt);
+        var notNull0 = rex.makeCall(SqlStdOperatorTable.IS_NOT_NULL, rex.makeInputRef(scan, 0));
+        var condition = rex.makeCall(SqlStdOperatorTable.AND, notNullNull, notNull0);
+        var before = LogicalFilter.create(scan, condition);
         var after = plain.scan(table).filter(plain.literal(false)).build();
         RuleChecks.rewrites(rule, before, after);
 
-        var noNullElement = LogicalFilter.create(plain.scan(table).build(), notNull0);
+        var noNullElement = LogicalFilter.create(scan, notNull0);
         RuleChecks.doesNotApply(rule, noNullElement);
     }
 

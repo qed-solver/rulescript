@@ -25,6 +25,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
+    private static final String ANY_RELATION = "RelNode";
+
     private RelRN afterRoot;
 
     @Override
@@ -77,7 +79,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         out.append("\t\tfinal Map<String, RelDataType> types = new HashMap<>();\n");
         onMatch.prelude.forEach(line -> out.append("\t\t").append(line).append("\n"));
         transform.body.forEach(line -> out.append("\t\t").append(line).append("\n"));
-        out.append("\t\tcall.transformTo(b.build());\n");
+        out.append("\t\tCalciteRuntime.transform(call, b);\n");
         out.append("\t}\n\n");
         out.append("\tpublic interface Config extends EmptyConfig {\n");
         out.append("\t\tConfig DEFAULT = new Config() {};\n\n");
@@ -93,7 +95,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
 
     @Override
     public Env onMatchScan(Env env, RelRN.Scan scan) {
-        var operand = env.operand("RelNode", Operand.Kind.ANY, scan);
+        var operand = env.operand(ANY_RELATION, Operand.Kind.ANY, scan);
         if (env.bindScan(scan.name(), operand.index)) {
             env.check("r_" + operand.index + ".getRowType().getFieldCount() == 1");
             bindColumn(env, operand, 0, scan.ty());
@@ -106,7 +108,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
 
     @Override
     public Env onMatchScanMany(Env env, RelRN.ScanMany scan) {
-        var operand = env.operand("RelNode", Operand.Kind.ANY, scan);
+        var operand = env.operand(ANY_RELATION, Operand.Kind.ANY, scan);
         if (env.bindScan(scan.name(), operand.index)) {
             env.check("r_" + operand.index + ".getRowType().getFieldCount() == " + scan.tys().size());
             for (var i = 0; i < scan.tys().size(); i++) {
@@ -335,7 +337,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         onMatch(env, pattern);
         if (env.inlineSource != null) {
             throw new UnsupportedConstructException("A pattern inside a subquery is not supported: "
-                    + pattern.getClass().getSimpleName());
+                    + pattern);
         }
         return env.last;
     }
@@ -474,7 +476,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         var components = custom.getClass().getRecordComponents();
         if (components == null || components.length != 1 || components[0].getType() != RelRN.class) {
             throw new UnsupportedConstructException("An EXISTS expression must hold exactly one relation: "
-                    + custom.getClass().getName());
+                    + custom);
         }
         try {
             var accessor = components[0].getAccessor();
@@ -517,14 +519,14 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     @Override
     public Env onMatchAnd(Env env, RexRN.And and) {
         var list = "c_" + env.ids++;
-        env.prelude.add("final List<RexNode> " + list + " = RelOptUtil.conjunctions(" + env.rex + ");");
+        env.prelude.add("final List<RexNode> " + list + " = CalciteRuntime.conjunctions(" + env.rex + ");");
         return matchList(env, list, flatten(and.sources(), RexRN.And.class));
     }
 
     @Override
     public Env onMatchOr(Env env, RexRN.Or or) {
         var list = "d_" + env.ids++;
-        env.prelude.add("final List<RexNode> " + list + " = RelOptUtil.disjunctions(" + env.rex + ");");
+        env.prelude.add("final List<RexNode> " + list + " = CalciteRuntime.disjunctions(" + env.rex + ");");
         return matchList(env, list, flatten(or.sources(), RexRN.Or.class));
     }
 
@@ -982,7 +984,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             var source = inlineSource;
             inlineSource = null;
             var operand = new Operand(nextInline++, type, kind, true);
-            if (!type.equals("RelNode")) {
+            if (!type.equals(ANY_RELATION)) {
                 check(source + " instanceof " + type);
             }
             prelude.add("final " + type + " r_" + operand.index + " = (" + type + ") " + source + ";");

@@ -19,10 +19,10 @@ public class SimplifySameVarInequalitiesTest {
         var builder = RuleBuilder.create();
         var table = RuleChecks.table(builder, 1, false);
         var five = builder.literal(5);
-        var before = builder.scan(table)
-                .filter(builder.call(SqlStdOperatorTable.NOT_EQUALS, builder.field(0), builder.field(0)))
-                .build();
         var plain = RuleChecks.ruleBuilder(builder);
+        var before = plain.scan(table)
+                .filter(plain.call(SqlStdOperatorTable.NOT_EQUALS, plain.field(0), plain.field(0)))
+                .build();
         var nullInt = plain.getRexBuilder().makeNullLiteral(plain.getTypeFactory().createSqlType(SqlTypeName.INTEGER));
         var after = plain.scan(table).filter(plain.and(
                         plain.call(SqlStdOperatorTable.IS_NULL, plain.field(0)),

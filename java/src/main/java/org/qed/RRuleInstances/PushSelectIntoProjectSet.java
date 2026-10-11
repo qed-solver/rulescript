@@ -33,7 +33,8 @@ public record PushSelectIntoProjectSet() implements RRule {
     static final SqlOperator qOp = RuleBuilder.create().genericPredicateOp("Q", true);
 
     // Join row: 0 = L, 1 = E.
-    static final RexRN cond = new RexRN.Pred(mOp, Seq.of(inner.field(0), emitted.field(0)));
+    static final RelRN pair = inner.join(JoinRelType.INNER, RexRN.trueLiteral(), emitted);
+    static final RexRN cond = new RexRN.Pred(mOp, Seq.of(pair.field(0), pair.field(1)));
     static final RelRN join = inner.join(JoinRelType.INNER, cond, emitted);
 
     // P bound to the input column: on the join output, column 0 is the

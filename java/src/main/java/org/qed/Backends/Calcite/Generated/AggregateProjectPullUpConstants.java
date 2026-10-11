@@ -80,7 +80,7 @@ public class AggregateProjectPullUpConstants extends RelRule<AggregateProjectPul
 		b.project(List.<RexNode>of(b.literal(true), CalciteRuntime.field(b, 1, 0)));
 		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 1)), b.aggregateCall((SqlAggFunction) a_3.getAggregation(), false, null, a_3.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 1))));
 		b.project(List.<RexNode>of(b.literal(true), CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

@@ -57,7 +57,7 @@ public class EliminateDistinct extends RelRule<EliminateDistinct.Config> {
 		}
 		b.push(r_1);
 		b.project(CalciteRuntime.field(b, 1, 0));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

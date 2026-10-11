@@ -1,5 +1,6 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.RemoveNotNullCondition;
 import org.qed.RuleBuilder;
@@ -19,10 +20,10 @@ public class RemoveNotNullConditionTest {
         var base = RuleBuilder.create();
         var table = RuleChecks.table(base, 2, false, false);
         var b = RuleChecks.ruleBuilder(base);
-        var before = b.scan(table)
-                .filter(RuleChecks.gt(b, b.field(1), 5))
-                .filter(b.call(SqlStdOperatorTable.IS_NOT_NULL, b.field(0)))
-                .build();
+        b.scan(table);
+        var greater = RuleChecks.gt(b, b.field(1), 5);
+        var notNull = b.call(SqlStdOperatorTable.IS_NOT_NULL, b.field(0));
+        var before = LogicalFilter.create(LogicalFilter.create(b.build(), greater), notNull);
         var after = b.scan(table)
                 .filter(RuleChecks.gt(b, b.field(1), 5))
                 .build();

@@ -70,7 +70,7 @@ public class EliminateJoinUnderProjectRight extends RelRule<EliminateJoinUnderPr
 		}
 		b.push(r_2);
 		b.project(CalciteRuntime.field(b, 1, 0));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

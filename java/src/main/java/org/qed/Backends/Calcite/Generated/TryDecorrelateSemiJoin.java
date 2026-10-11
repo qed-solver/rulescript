@@ -61,7 +61,7 @@ public class TryDecorrelateSemiJoin extends RelRule<TryDecorrelateSemiJoin.Confi
 		b.push(r_3);
 		CalciteRuntime.correlate(b, JoinRelType.INNER, ca_2 -> CalciteRuntime.instantiate(sym_1, ca_0, ca_2));
 		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

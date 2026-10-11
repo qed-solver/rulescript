@@ -3,6 +3,7 @@ package org.qed.Backends.Calcite.Tests;
 import java.util.List;
 
 import org.apache.calcite.rel.core.JoinRelType;
+import org.qed.Backends.Calcite.CalciteRuntime;
 import org.qed.RRuleInstances.EliminateJoinNoColsRight;
 import org.qed.RuleBuilder;
 
@@ -20,27 +21,28 @@ public class EliminateJoinNoColsRightTest {
         var builder = RuleBuilder.create();
         var table = RuleChecks.table(builder, 1, false);
         var plain = RuleChecks.ruleBuilder(builder);
-        var before = plain.scan(table)
+        var raw = builder.transform(config -> CalciteRuntime.configure(config).withSimplifyValues(false));
+        var before = raw.scan(table)
                 .values(new String[]{"_r"}, true)
                 .project(List.of(), List.of(), true)
-                .join(JoinRelType.INNER, RuleChecks.gt(plain, plain.field(2, 0, 0), 5))
+                .join(JoinRelType.INNER, RuleChecks.gt(raw, raw.field(2, 0, 0), 5))
                 .build();
         var after = plain.scan(table)
                 .filter(RuleChecks.gt(plain, plain.field(0), 5))
                 .build();
         RuleChecks.rewrites(rule, before, after);
 
-        var manyRows = plain.scan(table)
+        var manyRows = raw.scan(table)
                 .values(new String[]{"_r"}, true, false)
                 .project(List.of(), List.of(), true)
-                .join(JoinRelType.INNER, RuleChecks.gt(plain, plain.field(2, 0, 0), 5))
+                .join(JoinRelType.INNER, RuleChecks.gt(raw, raw.field(2, 0, 0), 5))
                 .build();
         RuleChecks.doesNotApply(rule, manyRows);
 
-        var leftJoin = plain.scan(table)
+        var leftJoin = raw.scan(table)
                 .values(new String[]{"_r"}, true)
                 .project(List.of(), List.of(), true)
-                .join(JoinRelType.LEFT, RuleChecks.gt(plain, plain.field(2, 0, 0), 5))
+                .join(JoinRelType.LEFT, RuleChecks.gt(raw, raw.field(2, 0, 0), 5))
                 .build();
         RuleChecks.doesNotApply(rule, leftJoin);
     }

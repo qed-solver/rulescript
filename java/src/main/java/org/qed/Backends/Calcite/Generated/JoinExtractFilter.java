@@ -58,7 +58,7 @@ public class JoinExtractFilter extends RelRule<JoinExtractFilter.Config> {
 		b.push(r_2);
 		b.join(JoinRelType.INNER, b.literal(true));
 		b.filter(CalciteRuntime.instantiate(sym_2, args_1, new RexNode[]{CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)}));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

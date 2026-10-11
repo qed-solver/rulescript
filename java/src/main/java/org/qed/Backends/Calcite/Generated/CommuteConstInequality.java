@@ -69,7 +69,7 @@ public class CommuteConstInequality extends RelRule<CommuteConstInequality.Confi
 		b.push(r_3);
 		b.join(JoinRelType.INNER, b.literal(true));
 		b.filter(b.call(SqlStdOperatorTable.GREATER_THAN, CalciteRuntime.field(b, 1, 1), CalciteRuntime.field(b, 1, 0)));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

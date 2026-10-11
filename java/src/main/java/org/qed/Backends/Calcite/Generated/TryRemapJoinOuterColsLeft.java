@@ -64,7 +64,7 @@ public class TryRemapJoinOuterColsLeft extends RelRule<TryRemapJoinOuterColsLeft
 		b.push(r_4);
 		CalciteRuntime.correlate(b, JoinRelType.INNER, ca_4 -> b.call(SqlStdOperatorTable.EQUALS, ca_4));
 		b.filter(CalciteRuntime.instantiate(sym_2, args_1, new RexNode[]{CalciteRuntime.field(b, 1, 1)}));
-		call.transformTo(b.build());
+		CalciteRuntime.transform(call, b);
 	}
 
 	public interface Config extends EmptyConfig {

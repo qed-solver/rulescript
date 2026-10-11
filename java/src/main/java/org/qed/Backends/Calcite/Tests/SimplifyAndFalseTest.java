@@ -1,5 +1,6 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.SimplifyAndFalse;
 import org.qed.RuleBuilder;
@@ -18,9 +19,10 @@ public class SimplifyAndFalseTest {
         var base = RuleBuilder.create();
         var table = RuleChecks.table(base, 1, false);
         var b = RuleChecks.ruleBuilder(base);
-        var before = b.scan(table)
-                .filter(b.call(SqlStdOperatorTable.AND, RuleChecks.gt(b, b.field(0), 5), b.literal(false)))
-                .build();
+        b.scan(table);
+        var predicate = RuleChecks.gt(b, b.field(0), 5);
+        var conjunction = b.call(SqlStdOperatorTable.AND, predicate, b.literal(false));
+        var before = LogicalFilter.create(b.build(), conjunction);
         var after = b.scan(table).filter(b.literal(false)).build();
         RuleChecks.rewrites(rule, before, after);
 

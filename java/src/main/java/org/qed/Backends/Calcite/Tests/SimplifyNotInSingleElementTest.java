@@ -17,11 +17,11 @@ public class SimplifyNotInSingleElementTest {
     private static void singleElementNotIn(SimplifyNotInSingleElement rule) {
         var builder = RuleBuilder.create();
         var table = RuleChecks.table(builder, 2, false);
-        var before = builder.scan(table)
-                .filter(builder.call(SqlStdOperatorTable.NOT,
-                        builder.call(SqlStdOperatorTable.EQUALS, builder.field(0), builder.field(1))))
-                .build();
         var plain = RuleChecks.ruleBuilder(builder);
+        var before = plain.scan(table)
+                .filter(plain.call(SqlStdOperatorTable.NOT,
+                        plain.call(SqlStdOperatorTable.EQUALS, plain.field(0), plain.field(1))))
+                .build();
         var after = plain.scan(table)
                 .filter(plain.call(SqlStdOperatorTable.NOT_EQUALS, plain.field(0), plain.field(1)))
                 .build();
