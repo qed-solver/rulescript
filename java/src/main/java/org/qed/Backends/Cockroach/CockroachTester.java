@@ -12,10 +12,10 @@ import java.util.Arrays;
 import java.util.Set;
 
 public class CockroachTester {
-    public static final String RULE_PACKAGE = "org.qed.Backends.Cockroach.Rules";
+    public static final String RULE_PACKAGE = "org.qed.RRuleInstances";
 
     public static Path rulePath =
-            ProjectPaths.baseDir().resolve("src/main/java/org/qed/Backends/Cockroach/Rules");
+            ProjectPaths.baseDir().resolve("src/main/java/org/qed/RRuleInstances");
     public static Path generatedPath =
             ProjectPaths.baseDir().resolve("src/main/java/org/qed/Backends/Cockroach/Generated");
 

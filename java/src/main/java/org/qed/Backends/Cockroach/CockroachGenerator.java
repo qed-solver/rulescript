@@ -506,7 +506,7 @@ public final class CockroachGenerator {
             }
             case "and", "and_scalar" -> {
                 expr.put("op", "and_scalar");
-                if (expr.withArray("args").size() != 2) {
+                if (expr.withArray("args").size() < 2) {
                     throw new UnsupportedOperationException("Unsupported scalar and arity: " + expr.withArray("args").size());
                 }
                 for (var arg : expr.withArray("args")) {
@@ -526,10 +526,10 @@ public final class CockroachGenerator {
             case "scalar" -> {
                 var operator = expr.path("operator").asText();
                 if (!Set.of("=", "<>", "<", "<=", ">", ">=", "IS NOT DISTINCT FROM",
-                        "IS NULL", "IS NOT NULL", "IS NOT FALSE", "-").contains(operator)) {
+                        "IS NULL", "IS NOT NULL", "IS NOT FALSE", "IS TRUE", "IS NOT TRUE", "-").contains(operator)) {
                     throw new UnsupportedOperationException("Unsupported concrete predicate operator: " + operator);
                 }
-                int arity = Set.of("IS NULL", "IS NOT NULL", "IS NOT FALSE", "-").contains(operator) ? 1 : 2;
+                int arity = Set.of("IS NULL", "IS NOT NULL", "IS NOT FALSE", "IS TRUE", "IS NOT TRUE", "-").contains(operator) ? 1 : 2;
                 if (expr.withArray("args").size() != arity) {
                     throw new UnsupportedOperationException("Unsupported scalar arity for " + operator + ": "
                             + expr.withArray("args").size());
@@ -677,9 +677,12 @@ public final class CockroachGenerator {
                 node.set("left", rel(corr.left(), tagged));
                 node.set("right", rel(corr.right(), tagged));
             }
-            case RelRN.Union union -> set(node, "union", union.all(), union.sources(), tagged);
-            case RelRN.Intersect intersect -> set(node, "intersect", intersect.all(), intersect.sources(), tagged);
-            case RelRN.Minus minus -> set(node, "except", minus.all(), minus.sources(), tagged);
+            case RelRN.Union union -> set(node, "union", union.all(), union.sources(), tagged,
+                    sources -> new RelRN.Union(union.all(), sources));
+            case RelRN.Intersect intersect -> set(node, "intersect", intersect.all(), intersect.sources(), tagged,
+                    sources -> new RelRN.Intersect(intersect.all(), sources));
+            case RelRN.Minus minus -> set(node, "except", minus.all(), minus.sources(), tagged,
+                    sources -> new RelRN.Minus(minus.all(), sources));
             case RelRN.Aggregate aggregate -> {
                 node.put("op", "aggregate");
                 var groups = MAPPER.createArrayNode();
@@ -721,9 +724,19 @@ public final class CockroachGenerator {
         return node;
     }
 
-    private void set(ObjectNode node, String type, boolean all, Seq<RelRN> sources, boolean tagged) {
-        if (sources.size() != 2) {
-            throw new UnsupportedOperationException("Unsupported set operation arity: " + sources.size());
+    private void set(ObjectNode node, String type, boolean all, Seq<RelRN> sources, boolean tagged,
+                     java.util.function.Function<Seq<RelRN>, RelRN> make) {
+        if (sources.size() == 1) {
+            node.setAll(rel(sources.get(0), tagged));
+            return;
+        }
+        if (sources.size() > 2) {
+            var left = make.apply(sources.take(sources.size() - 1));
+            node.setAll(rel(make.apply(Seq.of(left, sources.get(sources.size() - 1))), tagged));
+            return;
+        }
+        if (sources.isEmpty()) {
+            throw new UnsupportedOperationException("Unsupported set operation arity: 0");
         }
         node.put("op", "set");
         node.put("type", type);
@@ -814,7 +827,11 @@ public final class CockroachGenerator {
                 }
             }
             default -> {
-                if (rex.semantics() instanceof org.apache.calcite.rex.RexSubQuery subquery &&
+                if (rex.semantics() instanceof org.apache.calcite.rex.RexInputRef ref) {
+                    node.put("op", "field");
+                    node.put("ordinal", ref.getIndex());
+                    node.put("of", id(context));
+                } else if (rex.semantics() instanceof org.apache.calcite.rex.RexSubQuery subquery &&
                         subquery.getKind() == org.apache.calcite.sql.SqlKind.EXISTS) {
                     var components = rex.getClass().getRecordComponents();
                     if (components == null || components.length != 1 ||

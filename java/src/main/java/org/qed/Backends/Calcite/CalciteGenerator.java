@@ -5,6 +5,9 @@ import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Values;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
+import org.apache.calcite.rex.RexSubQuery;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.CodeGenerator;
@@ -113,8 +116,13 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         return env.done(operand);
     }
 
+    private static String typeId(RelDataType type) {
+        return type.toString().split("[: ]")[0];
+    }
+
     private void bindColumn(Env env, Operand operand, int ordinal, RelType.VarType type) {
-        var id = type.toString().split("[: ]")[0];
+        var id = typeId(type);
+        env.boundTypes.add(id);
         env.check("CalciteRuntime.bindColumn(types, " + literal(id) + ", " + type.isNullable() + ", r_"
                 + operand.index + ", " + ordinal + ")");
     }
@@ -123,7 +131,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     public Env onMatchFilter(Env env, RelRN.Filter filter) {
         var operand = env.operand("LogicalFilter", Operand.Kind.INPUTS, filter);
         matchRex(env, filter.cond(), "r_" + operand.index + ".getCondition()");
-        operand.kids.add(matchChild(env, filter.source()));
+        operand.kids.add(matchChild(env, operand, "getInput()", filter.source()));
         return env.done(operand);
     }
 
@@ -132,7 +140,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         var operand = env.operand("LogicalProject", Operand.Kind.INPUTS, project);
         env.check("r_" + operand.index + ".getProjects().size() == 1");
         matchRex(env, project.map(), "r_" + operand.index + ".getProjects().get(0)");
-        operand.kids.add(matchChild(env, project.source()));
+        operand.kids.add(matchChild(env, operand, "getInput()", project.source()));
         return env.done(operand);
     }
 
@@ -143,7 +151,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         for (var i = 0; i < project.exprs().size(); i++) {
             matchRex(env, project.exprs().get(i), "r_" + operand.index + ".getProjects().get(" + i + ")");
         }
-        operand.kids.add(matchChild(env, project.source()));
+        operand.kids.add(matchChild(env, operand, "getInput()", project.source()));
         return env.done(operand);
     }
 
@@ -166,8 +174,8 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         var operand = env.operand("LogicalJoin", Operand.Kind.INPUTS, pattern);
         env.check("r_" + operand.index + ".getJoinType() == JoinRelType." + type.name());
         matchRex(env, cond, "r_" + operand.index + ".getCondition()");
-        operand.kids.add(matchChild(env, left));
-        operand.kids.add(matchChild(env, right));
+        operand.kids.add(matchChild(env, operand, "getLeft()", left));
+        operand.kids.add(matchChild(env, operand, "getRight()", right));
         return env.done(operand);
     }
 
@@ -190,8 +198,8 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         var operand = env.operand(cls, Operand.Kind.INPUTS, pattern);
         env.check("r_" + operand.index + ".all == " + all);
         env.check("r_" + operand.index + ".getInputs().size() == " + sources.size());
-        for (var source : sources) {
-            operand.kids.add(matchChild(env, source));
+        for (var i = 0; i < sources.size(); i++) {
+            operand.kids.add(matchChild(env, operand, "getInputs().get(" + i + ")", sources.get(i)));
         }
         return env.done(operand);
     }
@@ -203,12 +211,21 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         env.check("r_" + operand.index + ".getRowType().getFieldCount() == "
                 + empty.sourceType().semantics().getRowType().getFieldCount());
         env.rels.putIfAbsent(empty.sourceType(), operand.index);
+        var columns = empty.sourceType() instanceof RelRN.ScanMany many ? many.tys()
+                : empty.sourceType() instanceof RelRN.Scan one ? Seq.of(one.ty()) : Seq.<RelType.VarType>empty();
+        for (var i = 0; i < columns.size(); i++) {
+            env.emptyTypes.putIfAbsent(typeId(columns.get(i)), "r_" + operand.index + ".getRowType().getFieldList().get("
+                    + i + ").getType()");
+        }
         return env.done(operand);
     }
 
     @Override
     public Env onMatchCorrelate(Env env, RelRN.Correlate correlate) {
         var operand = env.operand("LogicalCorrelate", Operand.Kind.INPUTS, correlate);
+        if (operand.inline) {
+            throw new UnsupportedConstructException("A correlate inside a subquery is not supported");
+        }
         operand.kids.add(matchChild(env, correlate.left()));
         var filter = env.hidden("LogicalFilter", Operand.Kind.INPUTS);
         env.check("r_" + operand.index + ".getJoinType() == JoinRelType." + correlate.ty().name());
@@ -234,6 +251,9 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         var operand = env.operand("LogicalAggregate", Operand.Kind.INPUTS, aggregate);
         var lowered = aggregate.groupSet().anyMatch(e -> !isColumn(e))
                 || aggregate.aggCalls().anyMatch(c -> c.operands().anyMatch(e -> !isColumn(e)));
+        if (lowered && operand.inline) {
+            throw new UnsupportedConstructException("An aggregate with computed keys inside a subquery is not supported");
+        }
         var project = lowered ? env.hidden("LogicalProject", Operand.Kind.INPUTS) : null;
         var resolve = (java.util.function.Function<String, String>) column -> lowered
                 ? "r_" + project.index + ".getProjects().get(" + column + ")"
@@ -275,7 +295,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             operand.kids.add(project);
             project.kids.add(matchChild(env, aggregate.source()));
         } else {
-            operand.kids.add(matchChild(env, aggregate.source()));
+            operand.kids.add(matchChild(env, operand, "getInput()", aggregate.source()));
         }
         return env.done(operand);
     }
@@ -305,6 +325,18 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
 
     private Operand matchChild(Env env, RelRN pattern) {
         onMatch(env, pattern);
+        return env.last;
+    }
+
+    private Operand matchChild(Env env, Operand parent, String accessor, RelRN pattern) {
+        if (parent.inline) {
+            env.inlineSource = "r_" + parent.index + "." + accessor;
+        }
+        onMatch(env, pattern);
+        if (env.inlineSource != null) {
+            throw new UnsupportedConstructException("A pattern inside a subquery is not supported: "
+                    + pattern.getClass().getSimpleName());
+        }
         return env.last;
     }
 
@@ -418,10 +450,53 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
 
     @Override
     public Env onMatchCustom(Env env, RexRN custom) {
-        if (custom.semantics() instanceof RexInputRef ref) {
+        var semantics = custom.semantics();
+        if (semantics instanceof RexInputRef ref) {
             return matchRef(env, ref.getIndex());
         }
+        if (semantics instanceof RexLiteral literal) {
+            return matchLiteral(env, literal);
+        }
+        if (semantics instanceof RexSubQuery subQuery && subQuery.getKind() == SqlKind.EXISTS) {
+            env.check(env.rex + " instanceof RexSubQuery && ((RexSubQuery) " + env.rex
+                    + ").getKind() == org.apache.calcite.sql.SqlKind.EXISTS");
+            env.inlineSource = "((RexSubQuery) " + env.rex + ").rel";
+            onMatch(env, subQueryBody(custom));
+            if (env.inlineSource != null) {
+                throw new UnsupportedConstructException("The relation inside EXISTS is not supported");
+            }
+            return env;
+        }
         return unimplementedOnMatch(env, custom);
+    }
+
+    private static RelRN subQueryBody(RexRN custom) {
+        var components = custom.getClass().getRecordComponents();
+        if (components == null || components.length != 1 || components[0].getType() != RelRN.class) {
+            throw new UnsupportedConstructException("An EXISTS expression must hold exactly one relation: "
+                    + custom.getClass().getName());
+        }
+        try {
+            var accessor = components[0].getAccessor();
+            accessor.setAccessible(true);
+            return (RelRN) accessor.invoke(custom);
+        } catch (ReflectiveOperationException e) {
+            throw new UnsupportedConstructException("The relation inside EXISTS is not accessible: " + e);
+        }
+    }
+
+    private Env matchLiteral(Env env, RexLiteral literal) {
+        if (literal.isNull()) {
+            var type = literal.getType();
+            var typeCheck = type instanceof RelType.VarType
+                    ? "CalciteRuntime.hasBoundType(types, " + literal(typeId(type)) + ", " + env.rex + ")"
+                    : env.rex + ".getType().getSqlTypeName() == org.apache.calcite.sql.type.SqlTypeName."
+                    + type.getSqlTypeName().name();
+            env.check("RexUtil.isNullLiteral(" + env.rex + ", true) && " + typeCheck);
+            return env;
+        }
+        env.check("CalciteRuntime.isLiteral(" + env.rex + ", " + javaValue(literal) + ")");
+        return env;
     }
 
     @Override
@@ -709,10 +784,42 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
 
     @Override
     public Env transformCustom(Env env, RexRN custom) {
-        if (custom.semantics() instanceof RexInputRef ref) {
+        var semantics = custom.semantics();
+        if (semantics instanceof RexInputRef ref) {
             return emit(env, "CalciteRuntime.field(b, " + env.inputs + ", " + ref.getIndex() + ")");
         }
+        if (semantics instanceof RexLiteral literal) {
+            if (literal.isNull()) {
+                return emit(env, "b.getRexBuilder().makeNullLiteral(" + typeReference(env, literal.getType()) + ")");
+            }
+            return emit(env, "b.literal(" + javaValue(literal) + ")");
+        }
+        if (semantics instanceof RexSubQuery subQuery && subQuery.getKind() == SqlKind.EXISTS) {
+            var inputs = env.inputs;
+            transform(env, subQueryBody(custom));
+            env.inputs = inputs;
+            var sub = "sub_" + env.ids++;
+            env.body.add("final RelNode " + sub + " = b.build();");
+            return emit(env, "RexSubQuery.exists(" + sub + ")");
+        }
         return unimplementedTransform(env, custom);
+    }
+
+    private static String typeReference(Env env, RelDataType type) {
+        if (!(type instanceof RelType.VarType)) {
+            return "b.getTypeFactory().createSqlType(org.apache.calcite.sql.type.SqlTypeName."
+                    + type.getSqlTypeName().name() + ")";
+        }
+        var id = typeId(type);
+        if (env.boundTypes.contains(id)) {
+            return "types.get(" + literal(id) + ")";
+        }
+        var reference = env.emptyTypes.get(id);
+        if (reference == null) {
+            throw new UnsupportedConstructException("The type " + id + " is introduced by the rewrite but not bound "
+                    + "by the matched pattern");
+        }
+        return reference;
     }
 
     @Override
@@ -817,11 +924,13 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         final String type;
         final Kind kind;
         final List<Operand> kids = new ArrayList<>();
+        final boolean inline;
 
-        Operand(int index, String type, Kind kind) {
+        Operand(int index, String type, Kind kind, boolean inline) {
             this.index = index;
             this.type = type;
             this.kind = kind;
+            this.inline = inline;
         }
 
         String render() {
@@ -850,6 +959,10 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         final Map<String, Integer> scans = new HashMap<>();
         final Map<String, Symbol> symbols = new HashMap<>();
         final Map<String, String> aggregates = new HashMap<>();
+        final java.util.Set<String> boundTypes = new java.util.HashSet<>();
+        final Map<String, String> emptyTypes = new HashMap<>();
+        int nextInline = 1000;
+        String inlineSource;
         String rex;
         String out;
         int inputs = 1;
@@ -861,8 +974,18 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         }
 
         Operand hidden(String type, Operand.Kind kind) {
-            var operand = new Operand(nextOperand++, type, kind);
-            prelude.add("final " + type + " r_" + operand.index + " = call.rel(" + operand.index + ");");
+            if (inlineSource == null) {
+                var operand = new Operand(nextOperand++, type, kind, false);
+                prelude.add("final " + type + " r_" + operand.index + " = call.rel(" + operand.index + ");");
+                return operand;
+            }
+            var source = inlineSource;
+            inlineSource = null;
+            var operand = new Operand(nextInline++, type, kind, true);
+            if (!type.equals("RelNode")) {
+                check(source + " instanceof " + type);
+            }
+            prelude.add("final " + type + " r_" + operand.index + " = (" + type + ") " + source + ";");
             return operand;
         }
 

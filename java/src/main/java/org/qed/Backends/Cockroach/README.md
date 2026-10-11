@@ -30,3 +30,15 @@ Then:
 ```
 
 The first generates, copies into CockroachDB and runs the tests (`-f` filters them); the last only generates the listed rules.
+
+## Use in a CockroachDB server
+
+Build CockroachDB after `setup-cockroach.sh` (`cd vendor/cockroach && ./dev build cockroach-short`), then start it with the
+generated rules loaded:
+
+```sh
+COCKROACH_RULESCRIPT_DIR=<path to Generated/> ./cockroach-short demo
+```
+
+Every query is then optimized with the rules (they run as `ExternalNormalizeRule`, which can be switched off with
+`SET disable_optimizer_rules`). `./scripts/demo-cockroach.sh` builds the server and prints plans with the rules off and on.

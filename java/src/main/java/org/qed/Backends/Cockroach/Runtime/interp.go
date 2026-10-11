@@ -724,6 +724,22 @@ func flattenScalarOr(e opt.ScalarExpr, out *[]opt.ScalarExpr) bool {
 	return lok && rok && flattenScalarOr(left, out) && flattenScalarOr(right, out)
 }
 
+func unaryIs(name string) (operator, right opt.Operator, ok bool) {
+	switch name {
+	case "IS NULL":
+		return opt.IsOp, opt.NullOp, true
+	case "IS NOT NULL":
+		return opt.IsNotOp, opt.NullOp, true
+	case "IS NOT FALSE":
+		return opt.IsNotOp, opt.FalseOp, true
+	case "IS TRUE":
+		return opt.IsOp, opt.TrueOp, true
+	case "IS NOT TRUE":
+		return opt.IsNotOp, opt.TrueOp, true
+	}
+	return 0, 0, false
+}
+
 func scalarOperator(name string) opt.Operator {
 	switch name {
 	case "=":
@@ -811,8 +827,20 @@ func (s *state) matchScalar(p *Rex, e opt.ScalarExpr) bool {
 		right, rok := e.Child(1).(opt.ScalarExpr)
 		return lok && rok && s.matchScalar(p.Args[0], left) && s.matchScalar(p.Args[1], right)
 	case "and_scalar":
-		if e.Op() != opt.AndOp || len(p.Args) != 2 || e.ChildCount() != 2 {
+		if e.Op() != opt.AndOp || len(p.Args) < 2 || e.ChildCount() != 2 {
 			return false
+		}
+		if len(p.Args) > 2 {
+			var leaves []opt.ScalarExpr
+			if !flattenScalarAnd(e, &leaves) || len(leaves) != len(p.Args) {
+				return false
+			}
+			for i, arg := range p.Args {
+				if !s.matchScalar(arg, leaves[i]) {
+					return false
+				}
+			}
+			return true
 		}
 		left, lok := e.Child(0).(opt.ScalarExpr)
 		right, rok := e.Child(1).(opt.ScalarExpr)
@@ -832,17 +860,9 @@ func (s *state) matchScalar(p *Rex, e opt.ScalarExpr) bool {
 		left, lok := e.Child(0).(opt.ScalarExpr)
 		return lok && s.matchScalar(p.Args[0], left) && s.matchScalar(p.Args[1], tuple.Elems[0])
 	case "scalar":
-		if p.Operator == "IS NULL" || p.Operator == "IS NOT NULL" || p.Operator == "IS NOT FALSE" {
+		if operator, right, ok := unaryIs(p.Operator); ok {
 			if len(p.Args) != 1 || e.ChildCount() != 2 {
 				return false
-			}
-			operator := opt.IsOp
-			right := opt.NullOp
-			if p.Operator != "IS NULL" {
-				operator = opt.IsNotOp
-			}
-			if p.Operator == "IS NOT FALSE" {
-				right = opt.FalseOp
 			}
 			left, ok := e.Child(0).(opt.ScalarExpr)
 			return e.Op() == operator && e.Child(1).Op() == right && ok && s.matchScalar(p.Args[0], left)
@@ -1414,10 +1434,14 @@ func (s *state) buildScalar(p *Rex) opt.ScalarExpr {
 		}
 		return out
 	case "and_scalar":
-		if len(p.Args) != 2 {
+		if len(p.Args) < 2 {
 			panic(abort{})
 		}
-		return s.f.ConstructAnd(s.buildScalar(p.Args[0]), s.buildScalar(p.Args[1]))
+		out := s.f.ConstructAnd(s.buildScalar(p.Args[0]), s.buildScalar(p.Args[1]))
+		for _, arg := range p.Args[2:] {
+			out = s.f.ConstructAnd(out, s.buildScalar(arg))
+		}
+		return out
 	case "in_single", "not_in_single":
 		if len(p.Args) != 2 {
 			panic(abort{})
@@ -1449,19 +1473,24 @@ func (s *state) buildScalar(p *Rex) opt.ScalarExpr {
 			}
 			return s.f.ConstructUnaryMinus(s.buildScalar(p.Args[0]))
 		}
-		if p.Operator == "IS NULL" || p.Operator == "IS NOT NULL" || p.Operator == "IS NOT FALSE" {
+		if operator, right, ok := unaryIs(p.Operator); ok {
 			if len(p.Args) != 1 {
 				panic(abort{})
 			}
 			left := s.buildScalar(p.Args[0])
-			switch p.Operator {
-			case "IS NULL":
-				return s.f.ConstructIs(left, memo.NullSingleton)
-			case "IS NOT NULL":
-				return s.f.ConstructIsNot(left, memo.NullSingleton)
-			case "IS NOT FALSE":
-				return s.f.ConstructIsNot(left, s.f.ConstructFalse())
+			var rhs opt.ScalarExpr
+			switch right {
+			case opt.NullOp:
+				rhs = memo.NullSingleton
+			case opt.TrueOp:
+				rhs = s.f.ConstructTrue()
+			default:
+				rhs = s.f.ConstructFalse()
 			}
+			if operator == opt.IsOp {
+				return s.f.ConstructIs(left, rhs)
+			}
+			return s.f.ConstructIsNot(left, rhs)
 		}
 		if len(p.Args) != 2 {
 			panic(abort{})

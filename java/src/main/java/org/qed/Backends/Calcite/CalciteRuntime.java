@@ -156,6 +156,16 @@ public final class CalciteRuntime {
         return previous == null || SqlTypeUtil.equalSansNullability(previous, actual);
     }
 
+    public static boolean hasBoundType(Map<String, RelDataType> types, String typeId, RexNode expr) {
+        var bound = types.get(typeId);
+        return bound == null || SqlTypeUtil.equalSansNullability(bound, expr.getType());
+    }
+
+    public static boolean isLiteral(RexNode expr, Object value) {
+        return expr instanceof org.apache.calcite.rex.RexLiteral literal && !literal.isNull()
+                && value.equals(literal.getValueAs(value.getClass()));
+    }
+
     public static boolean isUnique(RelOptRuleCall call, RelNode rel, int ordinal) {
         return Boolean.TRUE.equals(call.getMetadataQuery().areColumnsUnique(rel, ImmutableBitSet.of(ordinal)));
     }

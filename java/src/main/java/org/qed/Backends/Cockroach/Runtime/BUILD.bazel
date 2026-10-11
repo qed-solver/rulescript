@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "interp.go",
         "install.go",
+        "register.go",
         "rule.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/rulescript",
@@ -15,6 +16,7 @@ go_library(
         "//pkg/sql/opt/norm",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util/envutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

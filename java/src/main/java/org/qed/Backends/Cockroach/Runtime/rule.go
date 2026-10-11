@@ -192,8 +192,8 @@ func (x *Rex) check() error {
 		}
 		return nil
 	case "and_scalar":
-		if len(x.Args) != 2 {
-			return fmt.Errorf("and_scalar needs two arguments, got %d", len(x.Args))
+		if len(x.Args) < 2 {
+			return fmt.Errorf("and_scalar needs at least two arguments, got %d", len(x.Args))
 		}
 		for _, a := range x.Args {
 			if err := a.check(); err != nil {
@@ -215,7 +215,7 @@ func (x *Rex) check() error {
 		arity := 2
 		switch x.Operator {
 		case "=", "<>", "<", "<=", ">", ">=", "IS NOT DISTINCT FROM":
-		case "IS NULL", "IS NOT NULL", "IS NOT FALSE", "-":
+		case "IS NULL", "IS NOT NULL", "IS NOT FALSE", "IS TRUE", "IS NOT TRUE", "-":
 			arity = 1
 		default:
 			return fmt.Errorf("unsupported scalar operator %q", x.Operator)

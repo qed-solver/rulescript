@@ -33,6 +33,10 @@ elif ! git -C "$COCKROACH_DIR" apply --reverse --check "$patch" 2>/dev/null; the
     exit 1
 fi
 
+backend="$here/src/main/java/org/qed/Backends/Cockroach"
+mkdir -p "$COCKROACH_DIR/pkg/sql/opt/rulescript"
+cp "$backend"/Runtime/*.go "$backend"/Runtime/BUILD.bazel "$COCKROACH_DIR/pkg/sql/opt/rulescript/"
+
 tmp="$(dirname "$COCKROACH_DIR")/bazel-tmp"
 mkdir -p "$tmp"
 for line in "test --test_tmpdir=$tmp" "build --config=dev" "build --config=nolintonbuild"; do

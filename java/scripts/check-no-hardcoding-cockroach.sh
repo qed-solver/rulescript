@@ -4,7 +4,7 @@ set -u
 cd "$(dirname "$0")/.."
 
 COCKROACH_JAVA=src/main/java/org/qed/Backends/Cockroach
-RULES_DIR=$COCKROACH_JAVA/Rules
+RULES_DIR=src/main/java/org/qed/RRuleInstances
 GO_DIR=$COCKROACH_JAVA/Runtime
 status=0
 
