@@ -1,0 +1,94 @@
+{
+  "name" : "InlineSelectConstants",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "g",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r2"
+      } ]
+    },
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r2"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r2"
+        } ]
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "Source",
+        "id" : "r0",
+        "arity" : 1
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "Const",
+        "unique" : true,
+        "arity" : 1,
+        "non_null" : [ 0 ],
+        "id" : "r1"
+      },
+      "id" : "r2"
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "g",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r2"
+      } ]
+    },
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r2"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r2"
+        } ]
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "Source",
+        "id" : "r0",
+        "arity" : 1
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "Const",
+        "unique" : true,
+        "arity" : 1,
+        "non_null" : [ 0 ],
+        "id" : "r1"
+      },
+      "id" : "r2"
+    },
+    "id" : "r4"
+  }
+}

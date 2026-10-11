@@ -1,0 +1,72 @@
+{
+  "name" : "MergeSelectInnerJoin",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "above_filter",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r2" ]
+      } ]
+    },
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "pred",
+        "name" : "on",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r2" ]
+        } ]
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "L",
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "R",
+        "id" : "r1"
+      },
+      "id" : "r2"
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "on",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r4" ]
+        } ]
+      }, {
+        "op" : "pred",
+        "name" : "above_filter",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r4" ]
+        } ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "R",
+      "id" : "r1"
+    },
+    "id" : "r4"
+  }
+}

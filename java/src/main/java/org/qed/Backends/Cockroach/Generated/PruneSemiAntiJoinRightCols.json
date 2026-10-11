@@ -1,0 +1,73 @@
+{
+  "name" : "PruneSemiAntiJoinRightCols",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "anti",
+    "cond" : {
+      "op" : "pred",
+      "name" : "C",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r2"
+      }, {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r2"
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "id" : "r0",
+      "arity" : 1
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "R",
+      "arity" : 2,
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "anti",
+    "cond" : {
+      "op" : "pred",
+      "name" : "C",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r4"
+      }, {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r4"
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "id" : "r0",
+      "arity" : 1
+    },
+    "right" : {
+      "op" : "project",
+      "exprs" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r1"
+      } ],
+      "input" : {
+        "op" : "scan",
+        "name" : "R",
+        "arity" : 2,
+        "id" : "r1"
+      },
+      "id" : "r3"
+    },
+    "id" : "r4"
+  }
+}

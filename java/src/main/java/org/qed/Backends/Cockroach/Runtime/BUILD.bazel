@@ -1,0 +1,43 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "rulescript",
+    srcs = [
+        "interp.go",
+        "install.go",
+        "rule.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/rulescript",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "rulescript_test",
+    size = "small",
+    srcs = glob(["*_test.go"]),
+    data = glob(["testdata/**"]),
+    deps = [
+        ":rulescript",
+        "//pkg/settings/cluster",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/optbuilder",
+        "//pkg/sql/opt/testutils/testcat",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/catconstants",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/testutils/datapathutils",
+        "//pkg/util/buildutil",
+    ],
+)

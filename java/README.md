@@ -38,7 +38,7 @@ public record FilterMerge() implements RRule {
 }
 ```
 
-RuleScript supports two styles of backend integration:
+RuleScript supports three styles of backend integration:
 
 **Code-generation backends** translate `RRule` definitions into engine-specific artifacts. Run the corresponding generator to produce files under each backend's `Generated/` directory:
 
@@ -48,6 +48,8 @@ RuleScript supports two styles of backend integration:
 
 For `FilterMerge` this produces:
 - `src/main/java/org/qed/Backends/Calcite/Generated/FilterMerge.java` — Apache Calcite rule
+
+**Interpreted backends** — rules are translated to a JSON rule format that an interpreter inside the engine applies. See [CockroachDB](src/main/java/org/qed/Backends/Cockroach/README.md).
 
 **Native runtime backend** — rules are defined and applied directly through backend integration. See the [Datafusion backend](../README.md) for details.
 

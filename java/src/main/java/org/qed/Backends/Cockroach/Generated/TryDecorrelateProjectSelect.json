@@ -1,0 +1,118 @@
+{
+  "name" : "TryDecorrelateProjectSelect",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "left",
+    "cond" : {
+      "op" : "pred",
+      "name" : "on_cond",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r4" ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "id" : "r0",
+      "arity" : 1
+    },
+    "right" : {
+      "op" : "project",
+      "exprs" : [ {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r2"
+      } ],
+      "input" : {
+        "op" : "filter",
+        "cond" : {
+          "op" : "pred",
+          "name" : "select_filter",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r1"
+          } ]
+        },
+        "input" : {
+          "op" : "scan",
+          "name" : "R",
+          "arity" : 2,
+          "id" : "r1"
+        },
+        "id" : "r2"
+      },
+      "id" : "r3"
+    },
+    "id" : "r4"
+  },
+  "to" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r6"
+    }, {
+      "op" : "field",
+      "ordinal" : 2,
+      "of" : "r6"
+    } ],
+    "input" : {
+      "op" : "join",
+      "type" : "left",
+      "cond" : {
+        "op" : "and",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "on_cond",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r6"
+          }, {
+            "op" : "field",
+            "ordinal" : 2,
+            "of" : "r6"
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "select_filter",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r6"
+          } ]
+        } ]
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "L",
+        "id" : "r0",
+        "arity" : 1
+      },
+      "right" : {
+        "op" : "project",
+        "exprs" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r1"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r1"
+        } ],
+        "input" : {
+          "op" : "scan",
+          "name" : "R",
+          "arity" : 2,
+          "id" : "r1"
+        },
+        "id" : "r5"
+      },
+      "id" : "r6"
+    },
+    "id" : "r7"
+  }
+}

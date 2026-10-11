@@ -1,0 +1,61 @@
+{
+  "name" : "SimplifyLeftJoinWithZeroRowsRight",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "left",
+    "cond" : {
+      "op" : "pred",
+      "name" : "join",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r2" ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "Left",
+      "arity" : 2,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "empty",
+      "arity" : 2,
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r0"
+    }, {
+      "op" : "null",
+      "type" : "same_as",
+      "refs" : [ {
+        "of" : "r1",
+        "ordinal" : 0
+      } ]
+    }, {
+      "op" : "null",
+      "type" : "same_as",
+      "refs" : [ {
+        "of" : "r1",
+        "ordinal" : 1
+      } ]
+    } ],
+    "input" : {
+      "op" : "scan",
+      "name" : "Left",
+      "arity" : 2,
+      "id" : "r0"
+    },
+    "id" : "r3"
+  }
+}

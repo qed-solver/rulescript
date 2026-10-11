@@ -1,0 +1,70 @@
+{
+  "name" : "HoistSelectAboveUnorderedDistinctOn",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "aggregate",
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r0"
+    } ],
+    "aggs" : [ ],
+    "input" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "pred",
+        "name" : "hoisted_filter",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "Input",
+        "arity" : 2,
+        "non_null" : [ 0, 1 ],
+        "id" : "r0"
+      },
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "hoisted_filter",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0" ]
+      } ]
+    },
+    "input" : {
+      "op" : "aggregate",
+      "groups" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r0"
+      } ],
+      "aggs" : [ ],
+      "input" : {
+        "op" : "scan",
+        "name" : "Input",
+        "arity" : 2,
+        "non_null" : [ 0, 1 ],
+        "id" : "r0"
+      },
+      "id" : "r3"
+    },
+    "id" : "r4"
+  }
+}

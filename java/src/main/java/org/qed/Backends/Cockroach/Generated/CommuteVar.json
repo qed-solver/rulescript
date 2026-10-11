@@ -1,0 +1,56 @@
+{
+  "name" : "CommuteVar",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "scalar",
+      "operator" : "=",
+      "args" : [ {
+        "op" : "proj",
+        "name" : "e",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ]
+      }, {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ]
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "T",
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "scalar",
+      "operator" : "=",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      }, {
+        "op" : "proj",
+        "name" : "e",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ]
+      } ]
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "T",
+      "id" : "r0"
+    },
+    "id" : "r2"
+  }
+}

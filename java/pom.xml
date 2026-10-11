@@ -39,6 +39,12 @@
                         </configuration>
                     </execution>
                     <execution>
+                        <id>cockroach-codegen</id>
+                        <configuration>
+                            <mainClass>org.qed.Backends.Cockroach.CockroachTester</mainClass>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>qed-parser-main</id>
                         <configuration>
                             <mainClass>org.qed.Main</mainClass>

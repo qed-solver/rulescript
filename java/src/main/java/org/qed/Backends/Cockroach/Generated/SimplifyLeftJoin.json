@@ -1,0 +1,68 @@
+{
+  "name" : "SimplifyLeftJoin",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "left",
+    "cond" : {
+      "op" : "scalar",
+      "operator" : "=",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r1"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r1"
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "T",
+      "arity" : 1,
+      "non_null" : [ 0 ],
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "T",
+      "arity" : 1,
+      "non_null" : [ 0 ],
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "scalar",
+      "operator" : "=",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r2"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r2"
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "T",
+      "arity" : 1,
+      "non_null" : [ 0 ],
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "T",
+      "arity" : 1,
+      "non_null" : [ 0 ],
+      "id" : "r0"
+    },
+    "id" : "r2"
+  }
+}

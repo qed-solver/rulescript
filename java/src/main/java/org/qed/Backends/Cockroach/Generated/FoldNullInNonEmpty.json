@@ -1,0 +1,68 @@
+{
+  "name" : "FoldNullInNonEmpty",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "or",
+      "args" : [ {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "null",
+          "type" : "same_as",
+          "refs" : [ {
+            "of" : "r0",
+            "ordinal" : 0
+          }, {
+            "of" : "r0",
+            "ordinal" : 1
+          } ]
+        }, {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ]
+      }, {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "null",
+          "type" : "same_as",
+          "refs" : [ {
+            "of" : "r0",
+            "ordinal" : 0
+          }, {
+            "of" : "r0",
+            "ordinal" : 1
+          } ]
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        } ]
+      } ]
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 2,
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "null",
+      "type" : "bool"
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 2,
+      "id" : "r0"
+    },
+    "id" : "r2"
+  }
+}

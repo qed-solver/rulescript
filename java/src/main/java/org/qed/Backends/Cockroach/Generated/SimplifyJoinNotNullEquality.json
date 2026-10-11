@@ -1,0 +1,92 @@
+{
+  "name" : "SimplifyJoinNotNullEquality",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "scalar",
+        "operator" : "IS NOT FALSE",
+        "args" : [ {
+          "op" : "scalar",
+          "operator" : "=",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r2"
+          }, {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r2"
+          } ]
+        } ]
+      }, {
+        "op" : "pred",
+        "name" : "rest",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r2" ]
+        } ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "arity" : 1,
+      "non_null" : [ 0 ],
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "R",
+      "arity" : 1,
+      "non_null" : [ 0 ],
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r3"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r3"
+        } ]
+      }, {
+        "op" : "pred",
+        "name" : "rest",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r3" ]
+        } ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "arity" : 1,
+      "non_null" : [ 0 ],
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "R",
+      "arity" : 1,
+      "non_null" : [ 0 ],
+      "id" : "r1"
+    },
+    "id" : "r3"
+  }
+}
