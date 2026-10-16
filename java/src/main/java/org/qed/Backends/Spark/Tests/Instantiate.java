@@ -50,10 +50,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
-/**
- * Builds a concrete Catalyst plan out of a rule's "from" pattern: relations become random integer relations and every
- * uninterpreted symbol becomes a concrete deterministic expression over the columns it reads.
- */
 final class Instantiate {
     static final class Unsupported extends RuntimeException {
         Unsupported(String message) {
@@ -258,7 +254,6 @@ final class Instantiate {
         }
     }
 
-    /** A relation whose first column is a key: a grouping of the relation on that column. */
     private LogicalPlan unique(LocalRelation relation) {
         var attrs = Catalyst.<Attribute>list(relation.output());
         var items = new ArrayList<NamedExpression>();

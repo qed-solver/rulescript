@@ -9,10 +9,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * The generated rules inside a real session: they are injected through SparkSessionExtensions (the way
- * {@code spark.sql.extensions} would load them) and fire on the plans of SQL queries during optimization.
- */
 class EndToEndTest {
     private static SparkSession session(String... rules) {
         SparkSession.clearActiveSession();
@@ -20,7 +16,7 @@ class EndToEndTest {
         return SparkSession.builder().master("local[1]").appName("rulescript-e2e")
                 .config("spark.ui.enabled", "false")
                 .config("spark.sql.adaptive.enabled", "false")
-                // Spark's own rules would do the same rewrites; leave them out so that the injected rule is the one at work.
+
                 .config("spark.sql.optimizer.excludedRules",
                         String.join(",", "org.apache.spark.sql.catalyst.optimizer.CombineFilters",
                                 "org.apache.spark.sql.catalyst.optimizer.CollapseProject",

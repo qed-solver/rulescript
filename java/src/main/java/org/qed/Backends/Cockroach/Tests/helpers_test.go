@@ -162,8 +162,6 @@ func (e *env) expectRewrite(rule *rulescript.Rule, before, want memo.RelExpr) {
 	}
 }
 
-// expectRewriteUpToFreshColumns is expectRewrite for rewrites that introduce computed columns, whose IDs cannot be
-// known in advance.
 func (e *env) expectRewriteUpToFreshColumns(rule *rulescript.Rule, before, want memo.RelExpr) {
 	e.t.Helper()
 	got, ok := rule.Apply(&e.f, before)

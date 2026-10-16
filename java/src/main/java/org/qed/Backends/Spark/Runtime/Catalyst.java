@@ -59,7 +59,6 @@ final class Catalyst {
         return changed ? e.withNewChildren(Catalyst.<Expression>seq(updated)) : e;
     }
 
-    /** A copy of the plan whose output columns have new ids, so that it can sit next to the original in a join. */
     static LogicalPlan fresh(LogicalPlan plan) {
         return fresh(plan, new java.util.HashMap<>());
     }
@@ -107,7 +106,6 @@ final class Catalyst {
                 Option.<org.apache.spark.sql.catalyst.plans.logical.AggregateHint>empty());
     }
 
-    /** The expression with OuterReference(a) replaced by a, which is how patterns see the columns of the outer query. */
     static Expression stripOuter(Expression e) {
         if (e instanceof org.apache.spark.sql.catalyst.expressions.OuterReference o) {
             return o.e().toAttribute();
@@ -123,7 +121,6 @@ final class Catalyst {
         return changed ? e.withNewChildren(Catalyst.<Expression>seq(updated)) : e;
     }
 
-    /** The expression with the given outer columns wrapped as OuterReference, collecting the ones it uses. */
     static Expression wrapOuter(Expression e, Map<ExprId, Attribute> outer, List<Attribute> used) {
         if (e instanceof AttributeReference a && outer.containsKey(a.exprId())) {
             if (used.stream().noneMatch(u -> u.exprId().equals(a.exprId()))) {

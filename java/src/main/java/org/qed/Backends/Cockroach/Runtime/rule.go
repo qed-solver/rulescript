@@ -115,7 +115,7 @@ func (r *Rel) check() error {
 		return r.Input.check()
 	case "aggregate":
 		for _, g := range r.Groups {
-			if g.Op != "field" && g.Op != "group_key" {
+			if g.Op != "field" && g.Op != "group_key" && g.Op != "int" {
 				return fmt.Errorf("unsupported grouping key %q", g.Op)
 			}
 			if err := g.check(); err != nil {
@@ -231,6 +231,8 @@ func (x *Rex) check() error {
 		case "IS NULL", "IS NOT NULL", "IS NOT FALSE", "IS TRUE", "IS NOT TRUE":
 			arity = 1
 		case "+":
+		case "if":
+			arity = 3
 		case "-":
 			if len(x.Args) == 1 {
 				arity = 1

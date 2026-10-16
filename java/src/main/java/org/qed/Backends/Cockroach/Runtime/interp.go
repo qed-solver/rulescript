@@ -969,6 +969,15 @@ func (s *state) matchScalar(p *Rex, e opt.ScalarExpr) bool {
 		left, lok := e.Child(0).(opt.ScalarExpr)
 		return lok && s.matchScalar(p.Args[0], left) && s.matchScalar(p.Args[1], tuple.Elems[0])
 	case "scalar":
+		if p.Operator == "if" {
+			c, ok := e.(*memo.CaseExpr)
+			if !ok || len(p.Args) != 3 || c.Input.Op() != opt.TrueOp || len(c.Whens) != 1 {
+				return false
+			}
+			when := c.Whens[0].(*memo.WhenExpr)
+			return s.matchScalar(p.Args[0], when.Condition) && s.matchScalar(p.Args[1], when.Value) &&
+				s.matchScalar(p.Args[2], c.OrElse)
+		}
 		if operator, right, ok := unaryIs(p.Operator); ok {
 			if len(p.Args) != 1 || e.ChildCount() != 2 {
 				return false
@@ -1008,6 +1017,20 @@ func (s *state) boundProjArgs(args []*Rex) ([]opt.ScalarExpr, bool) {
 	return elems, true
 }
 
+func (s *state) findScalar(p *Rex, e opt.ScalarExpr) opt.ScalarExpr {
+	if s.matchScalar(p, e) {
+		return e
+	}
+	for i := 0; i < e.ChildCount(); i++ {
+		if child, ok := e.Child(i).(opt.ScalarExpr); ok {
+			if found := s.findScalar(p, child); found != nil {
+				return found
+			}
+		}
+	}
+	return nil
+}
+
 func usedColumnsExcept(e opt.Expr, skip []opt.ScalarExpr) opt.ColSet {
 	for _, s := range skip {
 		if e == opt.Expr(s) {
@@ -1043,6 +1066,17 @@ func (s *state) replaceElems(e opt.ScalarExpr, from, to []opt.ScalarExpr) opt.Sc
 func (s *state) matchProjection(p *Rex, item *memo.ProjectionsItem) bool {
 	if p.Op != "proj" {
 		return false
+	}
+	if len(p.Args) == 1 && p.Args[0].Op == "scalar" {
+		inside := s.findScalar(p.Args[0], item.Element)
+		if inside == nil {
+			return false
+		}
+		if _, dup := s.projs[p.Name]; dup || !usedColumnsExcept(item.Element, []opt.ScalarExpr{inside}).Empty() {
+			return false
+		}
+		s.projs[p.Name] = &projBinding{elem: item.Element, col: item.Col, argElems: []opt.ScalarExpr{inside}}
+		return true
 	}
 	if elems, nested := s.boundProjArgs(p.Args); nested {
 		if _, dup := s.projs[p.Name]; dup || !usedColumnsExcept(item.Element, elems).Empty() {
@@ -1082,6 +1116,9 @@ func (s *state) matchBoundScalar(
 ) bool {
 	args, ok := s.matchArgs(p.Args)
 	if !ok || !usedColumns(elem).SubsetOf(opt.MakeColSet(args...)) {
+		return false
+	}
+	if p.Scalar != nil && !s.matchScalar(p.Scalar, elem) {
 		return false
 	}
 	if previous, dup := bindings[p.Name]; dup {
@@ -1379,6 +1416,10 @@ func (s *state) buildRel(p *Rel) memo.RelExpr {
 				item := s.buildBoundScalar(key, s.groups)
 				col = item.Col
 				keyItems = append(keyItems, item)
+			case "int":
+				elem := s.buildScalar(key)
+				col = s.f.Metadata().AddColumn("computed", elem.DataType())
+				keyItems = append(keyItems, s.f.ConstructProjectionsItem(elem, col))
 			default:
 				panic(abort{})
 			}
@@ -1745,11 +1786,21 @@ func (s *state) buildScalar(p *Rex) opt.ScalarExpr {
 			panic(abort{})
 		}
 		args := s.buildArgs(p.Args)
+		if b.argElems != nil {
+			return s.replaceElems(b.elem, b.argElems, args)
+		}
 		if s.isIdentity(b.args, args) {
 			return b.elem
 		}
 		return s.substitute(b.elem, b.args, args)
 	case "scalar":
+		if p.Operator == "if" {
+			if len(p.Args) != 3 {
+				panic(abort{})
+			}
+			when := s.f.ConstructWhen(s.buildScalar(p.Args[0]), s.buildScalar(p.Args[1]))
+			return s.f.ConstructCase(memo.TrueSingleton, memo.ScalarListExpr{when}, s.buildScalar(p.Args[2]))
+		}
 		if p.Operator == "-" && len(p.Args) == 1 {
 			return s.f.ConstructUnaryMinus(s.buildScalar(p.Args[0]))
 		}

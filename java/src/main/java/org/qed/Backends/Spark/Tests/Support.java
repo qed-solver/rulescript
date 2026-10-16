@@ -16,7 +16,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-/** A shared local session and helpers to build and run logical plans. */
 final class Support {
     private Support() { }
 
@@ -42,7 +41,6 @@ final class Support {
                 NamedExpression$.MODULE$.newExprId(), Catalyst.<String>seq(List.of()));
     }
 
-    /** A relation of integer columns with random rows (NULLs only in nullable columns). */
     static LocalRelation relation(String name, int arity, List<Integer> nonNull, Random random) {
         var attrs = new ArrayList<Attribute>();
         for (int i = 0; i < arity; i++) {
@@ -59,7 +57,6 @@ final class Support {
         return new LocalRelation(Catalyst.seq(attrs), Catalyst.seq(rows), false, Match.noStream());
     }
 
-    /** The rows of a plan as sorted strings, so that bags can be compared. */
     static List<String> run(LogicalPlan plan) {
         var rows = org.apache.spark.sql.classic.Dataset$.MODULE$
                 .ofRows((org.apache.spark.sql.classic.SparkSession) session(), plan).collectAsList();

@@ -17,7 +17,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-/** A RuleScript rule, interpreted over Catalyst logical plans. */
 public final class RuleScriptRule extends Rule<LogicalPlan> {
     private final String name;
     private final JsonNode from;
@@ -62,13 +61,11 @@ public final class RuleScriptRule extends Rule<LogicalPlan> {
         return result == null ? withChildren : result;
     }
 
-    /** The rewrite of one node, or null when the rule does not apply to it or leaves it as it is. */
     public LogicalPlan rewritten(LogicalPlan node) {
         var result = rewrite(node);
         return result == null || result.fastEquals(node) ? null : result;
     }
 
-    /** Whether the rule applies to the node, even when Catalyst represents the rewritten plan as the original. */
     public boolean matches(LogicalPlan node) {
         return rewrite(node) != null;
     }
@@ -88,7 +85,6 @@ public final class RuleScriptRule extends Rule<LogicalPlan> {
         }
     }
 
-    /** Keeps the output of the rewritten node as the parents of the original node expect it. */
     private LogicalPlan restoreOutput(LogicalPlan old, LogicalPlan neu, Match match) {
         var oldCols = match.cols(from.path("id").asText());
         var newCols = match.cols(to.path("id").asText());

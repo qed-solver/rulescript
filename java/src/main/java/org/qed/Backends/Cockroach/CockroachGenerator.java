@@ -32,6 +32,7 @@ import java.util.List;
 
 public final class CockroachGenerator {
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final String CASE_OPERATOR = "CASE";
 
     private final Map<String, String> ids = new LinkedHashMap<>();
     private final Map<String, List<TypeRef>> typeRefs = new LinkedHashMap<>();
@@ -80,9 +81,11 @@ public final class CockroachGenerator {
         var matchedEmptyIds = new HashSet<String>();
         collectEmptyIds(from, matchedEmptyIds);
         checkNewEmpty(to, true, matchedEmptyIds);
+        literalKeys = 0;
         computedKeys(from, true);
         computedKeys(to, false);
         var preds = new LinkedHashMap<String, PredicatePattern>();
+        activePreds = preds;
         var projs = new HashSet<String>();
         var groups = new HashSet<String>();
         var aggs = new HashSet<String>();
@@ -104,6 +107,9 @@ public final class CockroachGenerator {
         return node;
     }
 
+    private static Map<String, PredicatePattern> activePreds = new LinkedHashMap<>();
+    private static int literalKeys;
+
     private static void computedKeys(JsonNode node, boolean from) {
         if (node == null) {
             return;
@@ -115,9 +121,18 @@ public final class CockroachGenerator {
                 }
             }
             for (var agg : node.withArray("aggs")) {
-                for (var arg : agg.withArray("args")) {
+                var args = agg.withArray("args");
+                for (int i = 0; i < args.size(); i++) {
+                    var arg = (ObjectNode) args.get(i);
                     if (arg.path("op").asText().equals("proj")) {
-                        ((ObjectNode) arg).put("op", "group_key");
+                        arg.put("op", "group_key");
+                    } else if (Set.of("int", "true", "false").contains(arg.path("op").asText())) {
+                        var literal = arg.deepCopy();
+                        arg.removeAll();
+                        arg.put("op", "group_key");
+                        arg.put("name", "literal" + literalKeys++);
+                        arg.putArray("args");
+                        arg.set("scalar", literal);
                     }
                 }
             }
@@ -493,7 +508,7 @@ public final class CockroachGenerator {
             case "aggregate" -> {
                 for (var group : rel.withArray("groups")) {
                     switch (group.path("op").asText()) {
-                        case "field" -> { }
+                        case "field", "int" -> { }
                         case "group_key" -> {
                             var name = group.path("name").asText();
                             if (from && !groups.add(name)) {
@@ -643,6 +658,15 @@ public final class CockroachGenerator {
             }
             case "scalar" -> {
                 var operator = expr.path("operator").asText();
+                if (operator.equals("if")) {
+                    if (expr.withArray("args").size() != 3) {
+                        throw new UnsupportedOperationException("Unsupported if arity: " + expr.withArray("args").size());
+                    }
+                    for (var arg : expr.withArray("args")) {
+                        checkScalar((ObjectNode) arg, from, preds, projs);
+                    }
+                    return;
+                }
                 if (!Set.of("=", "<>", "<", "<=", ">", ">=", "IS NOT DISTINCT FROM",
                         "IS NULL", "IS NOT NULL", "IS NOT FALSE", "IS TRUE", "IS NOT TRUE", "-", "+").contains(operator)) {
                     throw new UnsupportedOperationException("Unsupported concrete operator: " + operator);
@@ -733,6 +757,12 @@ public final class CockroachGenerator {
                     if (!symbol.path("op").asText().equals("agg")) {
                         throw new UnsupportedOperationException("Unsupported symbol argument: group_key");
                     }
+                }
+                case "scalar" -> {
+                    if (!symbol.path("op").asText().equals("proj")) {
+                        throw new UnsupportedOperationException("Unsupported symbol argument: scalar");
+                    }
+                    checkScalar((ObjectNode) arg, from, activePreds, projs);
                 }
                 case "proj" -> {
                     if (from && !symbol.path("op").asText().equals("pred") && !symbol.path("op").asText().equals("proj")) {
@@ -930,6 +960,12 @@ public final class CockroachGenerator {
                     node.put("operator", "-");
                     var args = node.putArray("args");
                     proj.sources().forEach(s -> args.add(rex(s, tagged, context)));
+                } else if (proj.operator() instanceof org.qed.RuleBuilder.QedFunction
+                        && proj.operator().getName().equals(CASE_OPERATOR) && proj.sources().size() == 3) {
+                    node.put("op", "scalar");
+                    node.put("operator", "if");
+                    var args = node.putArray("args");
+                    proj.sources().forEach(s -> args.add(rex(s, tagged, context)));
                 } else if (!(proj.operator() instanceof org.qed.RuleBuilder.QedFunction)) {
                     node.put("op", "scalar");
                     node.put("operator", proj.operator().getName());
@@ -1045,7 +1081,8 @@ public final class CockroachGenerator {
                                 + literal.getType());
                     }
                 } else if (rex.semantics() instanceof org.apache.calcite.rex.RexLiteral literal
-                        && literal.getType().getSqlTypeName() == org.apache.calcite.sql.type.SqlTypeName.INTEGER) {
+                        && (literal.getType().getSqlTypeName() == org.apache.calcite.sql.type.SqlTypeName.INTEGER
+                        || literal.getType().getSqlTypeName() == org.apache.calcite.sql.type.SqlTypeName.BIGINT)) {
                     node.put("op", "int");
                     node.put("value", literal.getValueAs(Integer.class));
                 } else {

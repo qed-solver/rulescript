@@ -4,7 +4,6 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 backend="$here/src/main/java/org/qed/Backends/Spark"
 
-# Spark 4 runs on JDK 17 or 21 (JDK 25 works too, with a warning from Hadoop).
 if [ -z "${SPARK_JAVA_HOME:-}" ]; then
     for candidate in /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home /usr/lib/jvm/java-21-openjdk-amd64; do
         if [ -x "$candidate/bin/java" ]; then

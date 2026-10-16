@@ -14,10 +14,6 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-/**
- * Runs every generated rule on concrete plans built from its own pattern: the rule must fire, keep the output of the
- * node it rewrites, and produce a plan that returns the same rows as the original on random data.
- */
 class GenericRulesTest {
     private static final int INSTANCES = 6;
 

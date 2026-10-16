@@ -7,22 +7,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * The output columns of the relations of a pattern. An expression refers to the relations it is evaluated over, so while
- * the expressions of a node are handled, the inputs of that node take precedence over the last relation with the
- * same name, which matters when a relation occurs more than once.
- */
 final class Scope {
     private final Map<String, List<Attribute>> global = new HashMap<>();
     private final List<Map<String, List<Attribute>>> nested = new ArrayList<>();
     private final Map<String, Map<String, List<Attribute>>> inner = new HashMap<>();
 
-    /** Remembers the inputs of a node, which expressions over the node may still refer to (the sides of a join). */
     void remember(String id, Map<String, List<Attribute>> inputs) {
         inner.put(id, inputs);
     }
 
-    /** The scope of an expression over the node: its columns, and the inputs it remembers. */
     Map<String, List<Attribute>> input(String id) {
         var scope = new HashMap<String, List<Attribute>>();
         if (inner.containsKey(id)) {
@@ -81,14 +74,12 @@ final class Scope {
         return null;
     }
 
-    /** The scope inside a subquery: the columns of the enclosing row, which the subquery refers to as outer. */
     static Map<String, List<Attribute>> subquery(List<Attribute> outer) {
         var inputs = new HashMap<String, List<Attribute>>();
         inputs.put(OUTER, outer);
         return inputs;
     }
 
-    /** The scope of a correlation condition: the columns of the left (outer) side and of the right (local) side. */
     static Map<String, List<Attribute>> correlated(List<Attribute> outer, List<Attribute> local) {
         var inputs = subquery(outer);
         inputs.put(LOCAL, local);
@@ -109,7 +100,6 @@ final class Scope {
         return left + "," + right;
     }
 
-    /** The scope of an expression over one input. */
     static Map<String, List<Attribute>> over(String id, List<Attribute> columns) {
         var inputs = new HashMap<String, List<Attribute>>();
         inputs.put(id, columns);
@@ -117,7 +107,6 @@ final class Scope {
         return inputs;
     }
 
-    /** The scope of an expression over two inputs, whose columns are those of the left followed by the right. */
     static Map<String, List<Attribute>> over(String left, List<Attribute> leftColumns, String right,
                                              List<Attribute> rightColumns) {
         var inputs = new HashMap<String, List<Attribute>>();

@@ -191,11 +191,6 @@ public final class RuleChecks {
 
     public record Correlated(org.apache.calcite.rex.RexNode condition, org.apache.calcite.rel.core.CorrelationId id) {}
 
-    /**
-     * The EXISTS form of {@code x = ANY (sub)} ({@code negated == false}) or of {@code NOT (x = ANY (sub))}
-     * ({@code negated == true}, which also keeps the sub rows whose comparison is unknown), correlated on the first
-     * column of {@code outer}.
-     */
     public static Correlated anyAsExists(org.apache.calcite.tools.RelBuilder b,
                                          org.apache.calcite.rel.type.RelDataType outer,
                                          org.apache.calcite.rel.RelNode sub, boolean negated) {

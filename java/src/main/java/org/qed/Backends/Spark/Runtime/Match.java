@@ -66,7 +66,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** One attempt to rewrite a plan: matches the "from" pattern, then builds the "to" pattern from the bindings. */
 final class Match {
     static final class Abort extends RuntimeException {
         Abort() {
@@ -74,7 +73,6 @@ final class Match {
         }
     }
 
-    /** What an uninterpreted symbol matched: a body over parameters, and the alias it was projected as. */
     record Binding(List<Attribute> params, Expression body, Alias alias) { }
 
     private record Pending(JsonNode pattern, Expression expr, Map<String, Binding> bindings, Alias alias) { }
@@ -102,8 +100,6 @@ final class Match {
         }
         return found;
     }
-
-    // ------------------------------------------------------------------------------------------ matching
 
     boolean rel(JsonNode p, LogicalPlan e) {
         var id = p.path("id").asText();
@@ -445,7 +441,6 @@ final class Match {
         return true;
     }
 
-    /** The input of a DISTINCT, whether still a Distinct or already the Aggregate it is replaced with. */
     private static LogicalPlan distinctChild(LogicalPlan e) {
         if (e instanceof org.apache.spark.sql.catalyst.plans.logical.Distinct d) {
             return d.child();
@@ -515,8 +510,6 @@ final class Match {
         };
     }
 
-    // ------------------------------------------------------------------------------------------ expressions
-
     static boolean isColumn(JsonNode pattern) {
         var op = pattern.path("op").asText();
         return op.equals("field") || op.equals("joinfield") || op.equals("input") || op.equals("outer")
@@ -529,7 +522,6 @@ final class Match {
         return attrs.get(0);
     }
 
-    /** Resolves field, joinfield and row arguments to attributes; returns false for nested expressions. */
     private boolean args(Iterable<JsonNode> args, List<Attribute> out) {
         for (var arg : args) {
             switch (arg.path("op").asText()) {
@@ -585,7 +577,6 @@ final class Match {
         return bind(p.path("name").asText(), bindings, new Binding(attrs, e, alias), attrs);
     }
 
-    /** Records the binding of a symbol, or checks a repeated occurrence against the first one. */
     private boolean bind(String name, Map<String, Binding> bindings, Binding binding, List<Attribute> over) {
         var previous = bindings.get(name);
         if (previous == null) {
@@ -599,10 +590,6 @@ final class Match {
                 .equals(binding.body());
     }
 
-    /**
-     * Resolves the uses of a symbol on the value of other symbols, P(D(x)): the expression is split into a context
-     * over the value of D (a hole) and the columns it reads directly.
-     */
     boolean resolve() {
         for (var use : pending) {
             if (!resolve(use)) {
@@ -712,7 +699,6 @@ final class Match {
         return null;
     }
 
-    /** The largest subtree of the expression that reads only the given columns. */
     private static Expression largest(Expression e, List<Attribute> over) {
         var allowed = new HashSet<ExprId>();
         over.forEach(a -> allowed.add(a.exprId()));
@@ -878,8 +864,6 @@ final class Match {
             }
         };
     }
-
-    // ------------------------------------------------------------------------------------------ building
 
     LogicalPlan build(JsonNode t) {
         var id = t.path("id").asText();
@@ -1251,7 +1235,6 @@ final class Match {
         return found != null ? found : projs.get(name);
     }
 
-    /** Instantiates a symbol over the arguments it is applied to in the target. */
     private Expression symbol(JsonNode p, Binding binding) {
         if (binding == null) {
             throw new Abort();

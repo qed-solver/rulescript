@@ -1,0 +1,72 @@
+{
+  "name" : "RewriteDistinctAggregates",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "aggregate",
+    "groups" : [ ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "count",
+      "distinct" : true,
+      "args" : [ {
+        "op" : "group_key",
+        "name" : "literal0",
+        "args" : [ ],
+        "scalar" : {
+          "op" : "int",
+          "value" : 0
+        }
+      } ]
+    } ],
+    "input" : {
+      "op" : "scan",
+      "name" : "Child",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "groups" : [ ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "count",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "int",
+        "value" : 0
+      } ]
+    } ],
+    "input" : {
+      "op" : "aggregate",
+      "groups" : [ {
+        "op" : "int",
+        "value" : 0
+      }, {
+        "op" : "int",
+        "value" : 0
+      } ],
+      "aggs" : [ ],
+      "input" : {
+        "op" : "project",
+        "exprs" : [ {
+          "op" : "int",
+          "value" : 0
+        }, {
+          "op" : "int",
+          "value" : 0
+        } ],
+        "input" : {
+          "op" : "scan",
+          "name" : "Child",
+          "arity" : 1,
+          "id" : "r0"
+        },
+        "id" : "r2"
+      },
+      "id" : "r3"
+    },
+    "id" : "r4"
+  }
+}

@@ -12,11 +12,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 
-/**
- * Installs RuleScript rules into a Spark session. Set {@code spark.sql.extensions} to this class and point the
- * environment variable {@code RULESCRIPT_DIR} (or the system property {@code rulescript.dir}) at a directory of
- * generated {@code *.json} rules; every rule becomes an optimizer rule of the session.
- */
 public final class RuleScriptExtensions extends AbstractFunction1<SparkSessionExtensions, BoxedUnit>
         implements Function1<SparkSessionExtensions, BoxedUnit> {
     @Override
