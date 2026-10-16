@@ -80,7 +80,6 @@ public final class CockroachGenerator {
         var matchedEmptyIds = new HashSet<String>();
         collectEmptyIds(from, matchedEmptyIds);
         checkNewEmpty(to, true, matchedEmptyIds);
-        checkProjectionItems(from, new HashSet<>());
         var preds = new LinkedHashMap<String, PredicatePattern>();
         var projs = new HashSet<String>();
         var groups = new HashSet<String>();
@@ -101,23 +100,6 @@ public final class CockroachGenerator {
         node.set("from", from);
         node.set("to", to);
         return node;
-    }
-
-    // A projection symbol binds one computed column, so it cannot be the item of two matched Projects.
-    private static void checkProjectionItems(JsonNode node, Set<String> seen) {
-        if (node.isObject()) {
-            if (node.path("op").asText().equals("project")) {
-                for (var expr : node.withArray("exprs")) {
-                    if (expr.path("op").asText().equals("proj") && !seen.add(expr.path("name").asText())) {
-                        throw new UnsupportedOperationException("Unsupported repeated projection symbol: "
-                                + expr.path("name").asText());
-                    }
-                }
-            }
-            node.elements().forEachRemaining(child -> checkProjectionItems(child, seen));
-        } else if (node.isArray()) {
-            node.elements().forEachRemaining(child -> checkProjectionItems(child, seen));
-        }
     }
 
     private static void collectValues(ObjectNode rel, List<ObjectNode> found) {
@@ -343,8 +325,6 @@ public final class CockroachGenerator {
         }
     }
 
-    // A concrete Project that replaces a matched Project keeps its output columns; one that does not replace any
-    // gets fresh columns.
     private static void checkConcreteProjectMappings(ObjectNode rel, boolean root, ObjectNode from,
                                                      Set<String> matchedIds, List<ObjectNode> replaced) {
         switch (rel.path("op").asText()) {
@@ -669,7 +649,6 @@ public final class CockroachGenerator {
         }
     }
 
-    // The runtime accepts a repeated symbol only when it reads the same columns, whichever relation they come from.
     private static boolean sameArguments(JsonNode left, JsonNode right) {
         if (left.isObject() && right.isObject()) {
             var names = new HashSet<String>();
@@ -1023,9 +1002,6 @@ public final class CockroachGenerator {
         return node;
     }
 
-    // A custom relation that is not part of the DSL is generated from the relational tree of its semantics(). The
-    // relations and expressions it holds (its record components) are the slots: a subtree equal to a slot is
-    // generated as that relation, everything else is generated structurally.
     private record Lift(List<RelRN> rels) { }
 
     private final Map<org.apache.calcite.rel.core.CorrelationId, RelNode> correlations = new HashMap<>();

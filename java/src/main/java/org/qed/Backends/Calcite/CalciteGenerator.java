@@ -747,9 +747,6 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         return env;
     }
 
-    // A custom relation that is not part of the DSL is generated from the relational tree of its semantics(). The
-    // relations it holds (its record components) are the slots: a subtree equal to a slot is matched or built as that
-    // relation, everything else is matched and built structurally.
 
     private static Seq<RelRN> slots(RelRN custom) {
         var found = new ArrayList<RelRN>();

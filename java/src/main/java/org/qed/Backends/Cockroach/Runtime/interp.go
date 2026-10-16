@@ -116,6 +116,24 @@ type projBinding struct {
 	args     []opt.ColumnID
 	argElems []opt.ScalarExpr
 	distinct bool
+	others   []*projBinding
+}
+
+func (b *projBinding) occurrence(args []opt.ScalarExpr) *projBinding {
+	for _, c := range append([]*projBinding{b}, b.others...) {
+		if len(c.args) != len(args) || len(args) == 0 {
+			continue
+		}
+		same := true
+		for i, a := range args {
+			v, ok := a.(*memo.VariableExpr)
+			same = same && ok && v.Col == c.args[i]
+		}
+		if same {
+			return c
+		}
+	}
+	return b
 }
 
 type state struct {
@@ -1026,10 +1044,21 @@ func (s *state) matchProjection(p *Rex, item *memo.ProjectionsItem) bool {
 		return false
 	}
 	if previous, dup := s.projs[p.Name]; dup {
-		if previous.col != 0 || previous.elem != item.Element || !sameColumns(previous.args, args) {
+		if previous.col == 0 && previous.elem == item.Element && sameColumns(previous.args, args) {
+			previous.col = item.Col
+			return true
+		}
+		if previous.col == 0 || len(previous.args) != len(args) || previous.args == nil {
 			return false
 		}
-		previous.col = item.Col
+		replacements := make([]opt.ScalarExpr, len(args))
+		for i, c := range args {
+			replacements[i] = s.f.ConstructVariable(c)
+		}
+		if s.substitute(previous.elem, previous.args, replacements) != item.Element {
+			return false
+		}
+		previous.others = append(previous.others, &projBinding{elem: item.Element, col: item.Col, args: args})
 		return true
 	}
 	s.projs[p.Name] = &projBinding{elem: item.Element, col: item.Col, args: args}
@@ -1152,7 +1181,6 @@ func (s *state) buildRel(p *Rel) memo.RelExpr {
 					break
 				}
 			}
-			// Otherwise prefer the occurrence that the rewritten root still outputs.
 			for i, candidate := range occurrences {
 				if chosen < 0 && candidate.Relational().OutputCols.SubsetOf(opt.MakeColSet(s.rootCols...)) {
 					chosen = i
@@ -1622,7 +1650,6 @@ func (s *state) buildScalar(p *Rex) opt.ScalarExpr {
 			if s.any == nil {
 				panic(abort{})
 			}
-			// An EXISTS built from a matched ANY keeps the subquery private of the ANY, like ConvertSubToExistsPrivate.
 			col := s.f.Metadata().AddColumn("exists", types.Bool)
 			private := memo.ExistsPrivate{LazyEvalProjectionCol: col, SubqueryPrivate: *s.any}
 			return s.f.ConstructExists(s.buildRel(p.Input), &private)
@@ -1768,6 +1795,10 @@ func (s *state) buildProjection(p *Rex) memo.ProjectionsItem {
 	args := s.buildArgs(p.Args)
 	if b.argElems != nil {
 		return s.f.ConstructProjectionsItem(s.replaceElems(b.elem, b.argElems, args), b.col)
+	}
+	b = b.occurrence(args)
+	if b.col == 0 {
+		b.col = s.f.Metadata().AddColumn("computed", b.elem.DataType())
 	}
 	if s.isIdentity(b.args, args) {
 		return s.f.ConstructProjectionsItem(b.elem, b.col)
