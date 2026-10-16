@@ -2,7 +2,16 @@ package org.qed.Backends.Calcite;
 
 import kala.collection.Seq;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.plan.RelOptTable;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.core.Values;
+import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rel.logical.LogicalJoin;
+import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.rex.RexCorrelVariable;
+import org.apache.calcite.rex.RexFieldAccess;
+import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexSubQuery;
@@ -326,7 +335,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             env.check("CalciteRuntime.sameValues(call, r_" + operand.index + ", " + valuesArguments(values) + ")");
             return env.done(operand);
         }
-        return unimplementedOnMatch(env, custom);
+        return matchNode(env, custom.semantics(), slots(custom), custom);
     }
 
     private Operand matchChild(Env env, RelRN pattern) {
@@ -734,7 +743,265 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             env.body.add("b.values(" + valuesArguments(values) + ");");
             return env;
         }
-        return unimplementedTransform(env, custom);
+        transformNode(env, custom.semantics(), slots(custom));
+        return env;
+    }
+
+    // A custom relation that is not part of the DSL is generated from the relational tree of its semantics(). The
+    // relations it holds (its record components) are the slots: a subtree equal to a slot is matched or built as that
+    // relation, everything else is matched and built structurally.
+
+    private static Seq<RelRN> slots(RelRN custom) {
+        var found = new ArrayList<RelRN>();
+        var components = custom.getClass().getRecordComponents();
+        if (components != null) {
+            for (var component : components) {
+                if (!RelRN.class.isAssignableFrom(component.getType())) {
+                    continue;
+                }
+                try {
+                    var accessor = component.getAccessor();
+                    accessor.setAccessible(true);
+                    found.add((RelRN) accessor.invoke(custom));
+                } catch (ReflectiveOperationException e) {
+                    throw new UnsupportedConstructException("A relation of " + custom + " is not accessible: " + e);
+                }
+            }
+        }
+        return Seq.from(found);
+    }
+
+    private static RelRN slotOf(RelNode node, Seq<RelRN> slots) {
+        for (var slot : slots) {
+            if (slot.semantics().deepEquals(node)) {
+                return slot;
+            }
+        }
+        return null;
+    }
+
+    private Env matchNode(Env env, RelNode node, Seq<RelRN> slots, RelRN key) {
+        var slot = slotOf(node, slots);
+        if (slot != null) {
+            return onMatch(env, slot);
+        }
+        if (node instanceof TableScan scan) {
+            return matchConcreteScan(env, scan, key);
+        }
+        if (node instanceof LogicalFilter filter) {
+            var operand = open(env, "LogicalFilter", key);
+            env.check("r_" + operand.index + ".getVariablesSet().size() == " + filter.getVariablesSet().size());
+            matchRexNode(env, filter.getCondition(), "r_" + operand.index + ".getCondition()", slots);
+            operand.kids.add(matchNodeChild(env, operand, "getInput()", filter.getInput(), slots));
+            return env.done(operand);
+        }
+        if (node instanceof LogicalJoin join) {
+            var operand = open(env, "LogicalJoin", key);
+            env.check("r_" + operand.index + ".getJoinType() == JoinRelType." + join.getJoinType().name());
+            env.check("r_" + operand.index + ".getVariablesSet().size() == " + join.getVariablesSet().size());
+            matchRexNode(env, join.getCondition(), "r_" + operand.index + ".getCondition()", slots);
+            operand.kids.add(matchNodeChild(env, operand, "getLeft()", join.getLeft(), slots));
+            operand.kids.add(matchNodeChild(env, operand, "getRight()", join.getRight(), slots));
+            return env.done(operand);
+        }
+        throw new UnsupportedConstructException("A custom relation containing " + node.getRelTypeName()
+                + " is not supported");
+    }
+
+    private Operand open(Env env, String type, RelRN key) {
+        return key == null ? env.hidden(type, Operand.Kind.INPUTS) : env.operand(type, Operand.Kind.INPUTS, key);
+    }
+
+    private Operand matchNodeChild(Env env, Operand parent, String accessor, RelNode node, Seq<RelRN> slots) {
+        if (parent.inline) {
+            env.inlineSource = "r_" + parent.index + "." + accessor;
+        }
+        matchNode(env, node, slots, null);
+        if (env.inlineSource != null) {
+            throw new UnsupportedConstructException("A pattern inside a subquery is not supported: " + node);
+        }
+        return env.last;
+    }
+
+    private Env matchConcreteScan(Env env, TableScan scan, RelRN key) {
+        var operand = key == null ? env.hidden(ANY_RELATION, Operand.Kind.ANY)
+                : env.operand(ANY_RELATION, Operand.Kind.ANY, key);
+        if (env.bindScan(tableName(scan), operand.index)) {
+            var columns = scan.getRowType().getFieldList();
+            env.check("r_" + operand.index + ".getRowType().getFieldCount() == " + columns.size());
+            for (var i = 0; i < columns.size(); i++) {
+                var type = columns.get(i).getType();
+                if (type instanceof RelType.VarType variable) {
+                    bindColumn(env, operand, i, variable);
+                    continue;
+                }
+                env.check("r_" + operand.index + ".getRowType().getFieldList().get(" + i
+                        + ").getType().getSqlTypeName() == org.apache.calcite.sql.type.SqlTypeName."
+                        + type.getSqlTypeName().name());
+                if (!type.isNullable() && env.operands.containsKey(operand.index)) {
+                    env.prefilter(operand, "!r_" + operand.index + ".getRowType().getFieldList().get(" + i
+                            + ").getType().isNullable()");
+                }
+            }
+        }
+        return env.done(operand);
+    }
+
+    private static String tableName(TableScan scan) {
+        RelOptTable table = scan.getTable();
+        return table.getQualifiedName().get(table.getQualifiedName().size() - 1);
+    }
+
+    private void matchRexNode(Env env, RexNode node, String expr, Seq<RelRN> slots) {
+        var saved = env.rex;
+        var local = "e_" + env.ids++;
+        env.prelude.add("final RexNode " + local + " = " + expr + ";");
+        env.rex = local;
+        matchRexNode(env, node, slots);
+        env.rex = saved;
+    }
+
+    private void matchRexNode(Env env, RexNode node, Seq<RelRN> slots) {
+        var expr = env.rex;
+        switch (node) {
+            case RexInputRef ref -> matchRef(env, ref.getIndex());
+            case RexLiteral literal -> matchLiteral(env, literal);
+            case RexFieldAccess access when access.getReferenceExpr() instanceof RexCorrelVariable ->
+                    env.check(expr + " instanceof RexFieldAccess && ((RexFieldAccess) " + expr
+                            + ").getReferenceExpr() instanceof RexCorrelVariable && ((RexFieldAccess) " + expr
+                            + ").getField().getIndex() == " + access.getField().getIndex());
+            case RexSubQuery subQuery -> {
+                env.check(expr + " instanceof RexSubQuery && ((RexSubQuery) " + expr
+                        + ").getKind() == org.apache.calcite.sql.SqlKind." + subQuery.getKind().name()
+                        + " && ((RexSubQuery) " + expr + ").getOperands().size() == " + subQuery.getOperands().size());
+                for (var i = 0; i < subQuery.getOperands().size(); i++) {
+                    matchRexNode(env, subQuery.getOperands().get(i), "((RexSubQuery) " + expr + ").getOperands().get("
+                            + i + ")", slots);
+                }
+                env.inlineSource = "((RexSubQuery) " + expr + ").rel";
+                matchNode(env, subQuery.rel, slots, null);
+                if (env.inlineSource != null) {
+                    throw new UnsupportedConstructException("The relation inside a subquery is not supported");
+                }
+            }
+            case RexCall call -> {
+                env.check(expr + " instanceof RexCall && ((RexCall) " + expr + ").getOperator() == "
+                        + operatorReference(call.getOperator()) + " && ((RexCall) " + expr
+                        + ").getOperands().size() == " + call.getOperands().size());
+                for (var i = 0; i < call.getOperands().size(); i++) {
+                    matchRexNode(env, call.getOperands().get(i), "((RexCall) " + expr + ").getOperands().get(" + i
+                            + ")", slots);
+                }
+            }
+            default -> throw new UnsupportedConstructException("The expression " + node + " is not supported in a "
+                    + "custom relation");
+        }
+    }
+
+    private void transformNode(Env env, RelNode node, Seq<RelRN> slots) {
+        var slot = slotOf(node, slots);
+        if (slot != null) {
+            transform(env, slot);
+            return;
+        }
+        if (node instanceof TableScan scan) {
+            pushScan(env, tableName(scan));
+            return;
+        }
+        if (node instanceof LogicalFilter filter) {
+            transformNode(env, filter.getInput(), slots);
+            var variables = declareCorrelations(env, filter.getVariablesSet(), "b.peek().getRowType()");
+            var condition = "cond_" + env.ids++;
+            var expression = rexNode(env, filter.getCondition(), 1, slots);
+            env.body.add("final RexNode " + condition + " = " + expression + ";");
+            env.body.add("b.push(LogicalFilter.create(b.build(), " + condition + variables + "));");
+            return;
+        }
+        if (node instanceof LogicalJoin join) {
+            transformNode(env, join.getLeft(), slots);
+            transformNode(env, join.getRight(), slots);
+            var variables = declareCorrelations(env, join.getVariablesSet(),
+                    "b.getTypeFactory().createJoinType(b.peek(1).getRowType(), b.peek().getRowType())");
+            var condition = "cond_" + env.ids++;
+            var expression = rexNode(env, join.getCondition(), 2, slots);
+            env.body.add("final RexNode " + condition + " = " + expression + ";");
+            var right = "right_" + env.ids++;
+            var left = "left_" + env.ids++;
+            env.body.add("final RelNode " + right + " = b.build();");
+            env.body.add("final RelNode " + left + " = b.build();");
+            env.body.add("b.push(LogicalJoin.create(" + left + ", " + right + ", List.of(), " + condition
+                    + ", " + (variables.isEmpty() ? "com.google.common.collect.ImmutableSet.of()"
+                    : variables.substring(2)) + ", JoinRelType." + join.getJoinType().name() + "));");
+            return;
+        }
+        throw new UnsupportedConstructException("A custom relation containing " + node.getRelTypeName()
+                + " is not supported");
+    }
+
+    private String declareCorrelations(Env env, java.util.Set<org.apache.calcite.rel.core.CorrelationId> ids,
+                                       String rowType) {
+        if (ids.isEmpty()) {
+            return "";
+        }
+        var names = new ArrayList<String>();
+        for (var id : ids) {
+            var number = env.ids++;
+            env.body.add("final org.apache.calcite.rel.core.CorrelationId cor_" + number
+                    + " = b.getCluster().createCorrel();");
+            env.body.add("final RexNode cv_" + number + " = b.getRexBuilder().makeCorrel(" + rowType + ", cor_"
+                    + number + ");");
+            env.correlations.put(id, "cv_" + number);
+            names.add("cor_" + number);
+        }
+        return ", com.google.common.collect.ImmutableSet.of(" + String.join(", ", names) + ")";
+    }
+
+    private String rexNode(Env env, RexNode node, int inputs, Seq<RelRN> slots) {
+        switch (node) {
+            case RexInputRef ref -> {
+                return "CalciteRuntime.field(b, " + inputs + ", " + ref.getIndex() + ")";
+            }
+            case RexLiteral literal -> {
+                if (literal.isNull()) {
+                    return "b.getRexBuilder().makeNullLiteral(" + typeReference(env, literal.getType()) + ")";
+                }
+                return "b.literal(" + javaValue(literal) + ")";
+            }
+            case RexFieldAccess access when access.getReferenceExpr() instanceof RexCorrelVariable variable -> {
+                var reference = env.correlations.get(variable.id);
+                if (reference == null) {
+                    throw new UnsupportedConstructException("A correlation variable is used outside its scope");
+                }
+                return "b.getRexBuilder().makeFieldAccess(" + reference + ", " + access.getField().getIndex() + ")";
+            }
+            case RexSubQuery subQuery -> {
+                var operands = new ArrayList<String>();
+                for (var operand : subQuery.getOperands()) {
+                    operands.add(rexNode(env, operand, inputs, slots));
+                }
+                transformNode(env, subQuery.rel, slots);
+                var sub = "sub_" + env.ids++;
+                env.body.add("final RelNode " + sub + " = b.build();");
+                return switch (subQuery.getKind()) {
+                    case EXISTS -> "RexSubQuery.exists(" + sub + ")";
+                    case SCALAR_QUERY -> "RexSubQuery.scalar(" + sub + ")";
+                    case IN -> "RexSubQuery.in(" + sub + ", com.google.common.collect.ImmutableList.<RexNode>of("
+                            + String.join(", ", operands) + "))";
+                    default -> throw new UnsupportedConstructException("The subquery " + subQuery.getKind()
+                            + " is not supported");
+                };
+            }
+            case RexCall call -> {
+                var operands = new ArrayList<String>();
+                for (var operand : call.getOperands()) {
+                    operands.add(rexNode(env, operand, inputs, slots));
+                }
+                return "b.call(" + operatorReference(call.getOperator())
+                        + (operands.isEmpty() ? "" : ", " + String.join(", ", operands)) + ")";
+            }
+            default -> throw new UnsupportedConstructException("The expression " + node + " is not supported in a "
+                    + "custom relation");
+        }
     }
 
     private String rex(Env env, int inputs, RexRN target) {
@@ -968,6 +1235,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         final Map<String, Integer> scans = new HashMap<>();
         final Map<String, Symbol> symbols = new HashMap<>();
         final Map<String, String> aggregates = new HashMap<>();
+        final Map<org.apache.calcite.rel.core.CorrelationId, String> correlations = new HashMap<>();
         final java.util.Set<String> boundTypes = new java.util.HashSet<>();
         final Map<String, String> emptyTypes = new HashMap<>();
         int nextInline = 1000;

@@ -1,0 +1,76 @@
+{
+  "name" : "TryRemapSelectOuterCols",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "scalar",
+      "operator" : "=",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r0"
+      } ]
+    },
+    "input" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "pred",
+        "name" : "h",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "Input",
+        "arity" : 3,
+        "id" : "r0"
+      },
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "scalar",
+      "operator" : "=",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r0"
+      } ]
+    },
+    "input" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "pred",
+        "name" : "h",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "Input",
+        "arity" : 3,
+        "id" : "r0"
+      },
+      "id" : "r3"
+    },
+    "id" : "r4"
+  }
+}

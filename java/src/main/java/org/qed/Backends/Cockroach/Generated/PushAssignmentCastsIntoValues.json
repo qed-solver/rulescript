@@ -1,0 +1,53 @@
+{
+  "name" : "PushAssignmentCastsIntoValues",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "cast",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ]
+    }, {
+      "op" : "true"
+    } ],
+    "input" : {
+      "op" : "scan",
+      "name" : "Values",
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r2"
+    }, {
+      "op" : "true"
+    } ],
+    "input" : {
+      "op" : "project",
+      "exprs" : [ {
+        "op" : "proj",
+        "name" : "cast",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ]
+      } ],
+      "input" : {
+        "op" : "scan",
+        "name" : "Values",
+        "id" : "r0"
+      },
+      "id" : "r2"
+    },
+    "id" : "r3"
+  }
+}

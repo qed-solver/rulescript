@@ -1,0 +1,96 @@
+{
+  "name" : "UnionToValues",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "set",
+    "type" : "union",
+    "all" : true,
+    "left" : {
+      "op" : "set",
+      "type" : "union",
+      "all" : true,
+      "left" : {
+        "op" : "values",
+        "rows" : [ [ {
+          "op" : "int",
+          "value" : 1
+        }, {
+          "op" : "int",
+          "value" : 2
+        } ], [ {
+          "op" : "int",
+          "value" : 3
+        }, {
+          "op" : "int",
+          "value" : 4
+        } ] ],
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "values",
+        "rows" : [ [ {
+          "op" : "int",
+          "value" : 3
+        }, {
+          "op" : "int",
+          "value" : 4
+        } ], [ {
+          "op" : "int",
+          "value" : 5
+        }, {
+          "op" : "int",
+          "value" : 6
+        } ] ],
+        "id" : "r1"
+      },
+      "id" : "r2"
+    },
+    "right" : {
+      "op" : "values",
+      "rows" : [ [ {
+        "op" : "int",
+        "value" : 7
+      }, {
+        "op" : "int",
+        "value" : 8
+      } ] ],
+      "id" : "r3"
+    },
+    "id" : "r4"
+  },
+  "to" : {
+    "op" : "values",
+    "rows" : [ [ {
+      "op" : "int",
+      "value" : 1
+    }, {
+      "op" : "int",
+      "value" : 2
+    } ], [ {
+      "op" : "int",
+      "value" : 3
+    }, {
+      "op" : "int",
+      "value" : 4
+    } ], [ {
+      "op" : "int",
+      "value" : 3
+    }, {
+      "op" : "int",
+      "value" : 4
+    } ], [ {
+      "op" : "int",
+      "value" : 5
+    }, {
+      "op" : "int",
+      "value" : 6
+    } ], [ {
+      "op" : "int",
+      "value" : 7
+    }, {
+      "op" : "int",
+      "value" : 8
+    } ] ],
+    "id" : "r5"
+  }
+}

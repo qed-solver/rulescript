@@ -188,4 +188,30 @@ public final class RuleChecks {
                 org.apache.calcite.rel.logical.LogicalFilter.create(right, cond.apply(arguments)), List.of(), id,
                 org.apache.calcite.util.ImmutableBitSet.range(left.getRowType().getFieldCount()), type);
     }
+
+    public record Correlated(org.apache.calcite.rex.RexNode condition, org.apache.calcite.rel.core.CorrelationId id) {}
+
+    /**
+     * The EXISTS form of {@code x = ANY (sub)} ({@code negated == false}) or of {@code NOT (x = ANY (sub))}
+     * ({@code negated == true}, which also keeps the sub rows whose comparison is unknown), correlated on the first
+     * column of {@code outer}.
+     */
+    public static Correlated anyAsExists(org.apache.calcite.tools.RelBuilder b,
+                                         org.apache.calcite.rel.type.RelDataType outer,
+                                         org.apache.calcite.rel.RelNode sub, boolean negated) {
+        var rexBuilder = b.getRexBuilder();
+        var id = b.getCluster().createCorrel();
+        var corr = rexBuilder.makeCorrel(outer, id);
+        var matched = (org.apache.calcite.rex.RexNode) rexBuilder.makeCall(
+                org.apache.calcite.sql.fun.SqlStdOperatorTable.EQUALS, rexBuilder.makeFieldAccess(corr, 0),
+                rexBuilder.makeInputRef(sub.getRowType().getFieldList().get(0).getType(), 0));
+        if (negated) {
+            matched = rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.OR, matched,
+                    rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.IS_NULL, matched));
+        }
+        var exists = (org.apache.calcite.rex.RexNode) org.apache.calcite.rex.RexSubQuery.exists(
+                org.apache.calcite.rel.logical.LogicalFilter.create(sub, matched));
+        return new Correlated(negated
+                ? rexBuilder.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.NOT, exists) : exists, id);
+    }
 }

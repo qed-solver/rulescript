@@ -50,6 +50,8 @@ type Rex struct {
 	Rels     []string  `json:"rels"`
 	Args     []*Rex    `json:"args"`
 	Arg      *Rex      `json:"arg"`
+	Scalar   *Rex      `json:"scalar"`
+	Cmp      string    `json:"cmp"`
 	Input    *Rel      `json:"input"`
 	Distinct bool      `json:"distinct"`
 }
@@ -179,6 +181,17 @@ func (x *Rex) check() error {
 			return errors.New("exists needs relational input")
 		}
 		return x.Input.check()
+	case "any":
+		if x.Input == nil {
+			return errors.New("any needs relational input")
+		}
+		if x.Cmp != "=" {
+			return fmt.Errorf("unsupported quantified comparison %q", x.Cmp)
+		}
+		if err := x.Scalar.check(); err != nil {
+			return err
+		}
+		return x.Input.check()
 	case "not":
 		return x.Arg.check()
 	case "or":
@@ -215,8 +228,13 @@ func (x *Rex) check() error {
 		arity := 2
 		switch x.Operator {
 		case "=", "<>", "<", "<=", ">", ">=", "IS NOT DISTINCT FROM":
-		case "IS NULL", "IS NOT NULL", "IS NOT FALSE", "IS TRUE", "IS NOT TRUE", "-":
+		case "IS NULL", "IS NOT NULL", "IS NOT FALSE", "IS TRUE", "IS NOT TRUE":
 			arity = 1
+		case "+":
+		case "-":
+			if len(x.Args) == 1 {
+				arity = 1
+			}
 		default:
 			return fmt.Errorf("unsupported scalar operator %q", x.Operator)
 		}

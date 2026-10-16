@@ -1,0 +1,56 @@
+{
+  "name" : "AggregateExpandWithinDistinct",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "aggregate",
+    "groups" : [ ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "count",
+      "distinct" : true,
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ]
+    } ],
+    "input" : {
+      "op" : "scan",
+      "name" : "Child",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "groups" : [ ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "count",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r2"
+      } ]
+    } ],
+    "input" : {
+      "op" : "aggregate",
+      "groups" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ],
+      "aggs" : [ ],
+      "input" : {
+        "op" : "scan",
+        "name" : "Child",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "id" : "r2"
+    },
+    "id" : "r3"
+  }
+}

@@ -49,8 +49,8 @@ func (r *Rule) Apply(f *norm.Factory, e memo.RelExpr) (result memo.RelExpr, ok b
 	s.rootCols = append([]opt.ColumnID{}, s.cols[r.From.ID]...)
 	r.To.countScans(s.toScanCounts)
 	out := s.buildRel(r.To)
-	if (r.From.Op == "set" || r.To.Op == "set" || s.repeatedScans) &&
-		!out.Relational().OutputCols.Equals(e.Relational().OutputCols) {
+	if !out.Relational().OutputCols.Equals(e.Relational().OutputCols) &&
+		(r.From.Op == "set" || r.To.Op == "set" || s.repeatedScans || len(s.cols[r.To.ID]) == len(s.cols[r.From.ID])) {
 		out = s.renameOutput(out, s.cols[r.To.ID], s.cols[r.From.ID])
 	}
 	if !out.Relational().OutputCols.Equals(e.Relational().OutputCols) || out == e {
@@ -142,6 +142,7 @@ type state struct {
 	join            *memo.JoinPrivate
 	set             *memo.SetPrivate
 	exists          *memo.ExistsPrivate
+	any             *memo.SubqueryPrivate
 }
 
 func (r *Rel) countScans(counts map[string]int) {
@@ -406,7 +407,7 @@ func (s *state) matchRel(p *Rel, e memo.RelExpr) bool {
 				}
 				out[i] = proj.Projections[item].Col
 				item++
-			case "proj", "scalar", "true", "false", "null", "int":
+			case "proj", "scalar", "true", "false", "null", "int", "and_scalar", "or", "not", "in_single", "not_in_single", "exists", "any":
 				if item >= len(proj.Projections) {
 					return false
 				}
@@ -664,7 +665,7 @@ func (s *state) matchCond(p *Rex, filters memo.FiltersExpr) bool {
 	switch p.Op {
 	case "true":
 		return len(filters) == 0
-	case "false", "null", "scalar", "not", "or", "and_scalar", "in_single", "not_in_single", "exists":
+	case "false", "null", "scalar", "not", "or", "and_scalar", "in_single", "not_in_single", "exists", "any", "field":
 		return len(filters) == 1 && s.matchScalar(p, filters[0].Condition)
 	case "and":
 		if len(filters) == 1 && filters[0].Condition.Op() == opt.AndOp {
@@ -728,11 +729,22 @@ func (s *state) matchCond(p *Rex, filters memo.FiltersExpr) bool {
 			return false
 		}
 		if previous, dup := s.preds[p.Name]; dup {
-			if !sameColumns(previous.args, args) || len(previous.filters) != len(filters) {
+			if len(previous.args) != len(args) || len(previous.filters) != len(filters) {
 				return false
 			}
+			same := sameColumns(previous.args, args)
+			var replacements []opt.ScalarExpr
+			if !same {
+				for _, c := range args {
+					replacements = append(replacements, s.f.ConstructVariable(c))
+				}
+			}
 			for i := range filters {
-				if previous.filters[i].Condition != filters[i].Condition {
+				expected := previous.filters[i].Condition
+				if !same {
+					expected = s.substitute(expected, previous.args, replacements)
+				}
+				if expected != filters[i].Condition {
 					return false
 				}
 			}
@@ -792,7 +804,7 @@ func unaryIs(name string) (operator, right opt.Operator, ok bool) {
 	return 0, 0, false
 }
 
-func scalarOperator(name string) opt.Operator {
+func scalarOperator(name string, args int) opt.Operator {
 	switch name {
 	case "=":
 		return opt.EqOp
@@ -809,7 +821,12 @@ func scalarOperator(name string) opt.Operator {
 	case "IS NOT DISTINCT FROM":
 		return opt.IsOp
 	case "-":
+		if args == 2 {
+			return opt.MinusOp
+		}
 		return opt.UnaryMinusOp
+	case "+":
+		return opt.PlusOp
 	}
 	panic(abort{})
 }
@@ -825,6 +842,16 @@ func (s *state) matchScalar(p *Rex, e opt.ScalarExpr) bool {
 			return false
 		}
 		s.exists = &ex.ExistsPrivate
+		return true
+	case "any":
+		an, ok := e.(*memo.AnyExpr)
+		if !ok || an.Cmp != opt.EqOp || !s.matchRel(p.Input, an.Input) || !s.matchScalar(p.Scalar, an.Scalar) {
+			return false
+		}
+		if s.any != nil && !reflect.DeepEqual(*s.any, an.SubqueryPrivate) {
+			return false
+		}
+		s.any = &an.SubqueryPrivate
 		return true
 	case "field", "joinfield":
 		cols, ok := s.matchArgs([]*Rex{p})
@@ -919,7 +946,7 @@ func (s *state) matchScalar(p *Rex, e opt.ScalarExpr) bool {
 			left, ok := e.Child(0).(opt.ScalarExpr)
 			return e.Op() == operator && e.Child(1).Op() == right && ok && s.matchScalar(p.Args[0], left)
 		}
-		if e.Op() != scalarOperator(p.Operator) || e.ChildCount() != len(p.Args) {
+		if e.Op() != scalarOperator(p.Operator, len(p.Args)) || e.ChildCount() != len(p.Args) {
 			return false
 		}
 		for i, arg := range p.Args {
@@ -1118,11 +1145,21 @@ func (s *state) buildRel(p *Rel) memo.RelExpr {
 		}
 		index := s.buildOccurrence[p.Name]
 		if s.toScanCounts[p.Name] == 1 && len(occurrences) > 1 {
+			chosen := -1
 			for i, candidate := range occurrences {
 				if sameColumns(candidate.Relational().OutputCols.ToList(), s.rootCols) {
-					index = i
+					chosen = i
 					break
 				}
+			}
+			// Otherwise prefer the occurrence that the rewritten root still outputs.
+			for i, candidate := range occurrences {
+				if chosen < 0 && candidate.Relational().OutputCols.SubsetOf(opt.MakeColSet(s.rootCols...)) {
+					chosen = i
+				}
+			}
+			if chosen >= 0 {
+				index = chosen
 			}
 		}
 		if index >= len(occurrences) {
@@ -1252,15 +1289,25 @@ func (s *state) buildRel(p *Rel) memo.RelExpr {
 				item := s.buildProjection(e)
 				items = append(items, item)
 				out[i] = item.Col
-			case "scalar", "true", "false", "null", "int":
+			case "scalar", "true", "false", "null", "int", "and_scalar", "or", "not", "in_single", "not_in_single", "exists", "any":
 				cols, ok := s.cols[p.ID]
 				if !ok && p.ID == s.outputProjectID {
 					cols = s.rootCols
 				}
-				if i >= len(cols) {
+				if !ok && p.ReuseColsOf != "" {
+					cols = s.cols[p.ReuseColsOf]
+				}
+				elem := s.buildScalar(e)
+				var col opt.ColumnID
+				switch {
+				case i < len(cols):
+					col = cols[i]
+				case p.ID != s.outputProjectID && p.ReuseColsOf == "":
+					col = s.f.Metadata().AddColumn("computed", elem.DataType())
+				default:
 					panic(abort{})
 				}
-				item := s.f.ConstructProjectionsItem(s.buildScalar(e), cols[i])
+				item := s.f.ConstructProjectionsItem(elem, col)
 				items = append(items, item)
 				out[i] = item.Col
 			default:
@@ -1520,7 +1567,7 @@ func (s *state) buildCond(p *Rex) memo.FiltersExpr {
 	switch p.Op {
 	case "true":
 		return nil
-	case "false", "null", "scalar", "not", "or", "and_scalar", "in_single", "not_in_single", "exists":
+	case "false", "null", "scalar", "not", "or", "and_scalar", "in_single", "not_in_single", "exists", "any", "field":
 		return memo.FiltersExpr{s.f.ConstructFiltersItem(s.buildScalar(p))}
 	case "and":
 		var out memo.FiltersExpr
@@ -1572,10 +1619,22 @@ func (s *state) buildScalar(p *Rex) opt.ScalarExpr {
 	switch p.Op {
 	case "exists":
 		if s.exists == nil {
-			panic(abort{})
+			if s.any == nil {
+				panic(abort{})
+			}
+			// An EXISTS built from a matched ANY keeps the subquery private of the ANY, like ConvertSubToExistsPrivate.
+			col := s.f.Metadata().AddColumn("exists", types.Bool)
+			private := memo.ExistsPrivate{LazyEvalProjectionCol: col, SubqueryPrivate: *s.any}
+			return s.f.ConstructExists(s.buildRel(p.Input), &private)
 		}
 		private := *s.exists
 		return s.f.ConstructExists(s.buildRel(p.Input), &private)
+	case "any":
+		private := memo.SubqueryPrivate{Cmp: opt.EqOp}
+		if s.any != nil {
+			private = *s.any
+		}
+		return s.f.ConstructAny(s.buildRel(p.Input), s.buildScalar(p.Scalar), &private)
 	case "field", "joinfield":
 		args := s.buildArgs([]*Rex{p})
 		if len(args) != 1 {
@@ -1648,10 +1707,7 @@ func (s *state) buildScalar(p *Rex) opt.ScalarExpr {
 		}
 		return s.substitute(b.elem, b.args, args)
 	case "scalar":
-		if p.Operator == "-" {
-			if len(p.Args) != 1 {
-				panic(abort{})
-			}
+		if p.Operator == "-" && len(p.Args) == 1 {
 			return s.f.ConstructUnaryMinus(s.buildScalar(p.Args[0]))
 		}
 		if operator, right, ok := unaryIs(p.Operator); ok {
@@ -1692,6 +1748,10 @@ func (s *state) buildScalar(p *Rex) opt.ScalarExpr {
 			return s.f.ConstructGe(left, right)
 		case "IS NOT DISTINCT FROM":
 			return s.f.ConstructIs(left, right)
+		case "+":
+			return s.f.ConstructPlus(left, right)
+		case "-":
+			return s.f.ConstructMinus(left, right)
 		}
 	}
 	panic(abort{})

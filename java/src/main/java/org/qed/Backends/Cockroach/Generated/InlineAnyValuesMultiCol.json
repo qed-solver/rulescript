@@ -1,0 +1,135 @@
+{
+  "name" : "InlineAnyValuesMultiCol",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "semi",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r2"
+        }, {
+          "op" : "field",
+          "ordinal" : 2,
+          "of" : "r2"
+        } ]
+      }, {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r2"
+        }, {
+          "op" : "field",
+          "ordinal" : 3,
+          "of" : "r2"
+        } ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "S",
+      "arity" : 2,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "set",
+      "type" : "union",
+      "all" : true,
+      "left" : {
+        "op" : "values",
+        "rows" : [ [ {
+          "op" : "int",
+          "value" : 1
+        }, {
+          "op" : "int",
+          "value" : 2
+        } ] ],
+        "id" : "r3"
+      },
+      "right" : {
+        "op" : "values",
+        "rows" : [ [ {
+          "op" : "int",
+          "value" : 3
+        }, {
+          "op" : "int",
+          "value" : 4
+        } ] ],
+        "id" : "r4"
+      },
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "or",
+      "args" : [ {
+        "op" : "and_scalar",
+        "args" : [ {
+          "op" : "scalar",
+          "operator" : "=",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r0"
+          }, {
+            "op" : "int",
+            "value" : 1
+          } ]
+        }, {
+          "op" : "scalar",
+          "operator" : "=",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r0"
+          }, {
+            "op" : "int",
+            "value" : 2
+          } ]
+        } ]
+      }, {
+        "op" : "and_scalar",
+        "args" : [ {
+          "op" : "scalar",
+          "operator" : "=",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r0"
+          }, {
+            "op" : "int",
+            "value" : 3
+          } ]
+        }, {
+          "op" : "scalar",
+          "operator" : "=",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r0"
+          }, {
+            "op" : "int",
+            "value" : 4
+          } ]
+        } ]
+      } ]
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "S",
+      "arity" : 2,
+      "id" : "r0"
+    },
+    "id" : "r5"
+  }
+}

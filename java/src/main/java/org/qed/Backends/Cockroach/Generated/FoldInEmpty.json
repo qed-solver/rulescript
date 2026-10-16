@@ -1,0 +1,32 @@
+{
+  "name" : "FoldInEmpty",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "semi",
+    "cond" : {
+      "op" : "pred",
+      "name" : "cond",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r2" ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "empty",
+      "arity" : 1,
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "empty",
+    "arity" : 1,
+    "id" : "r3"
+  }
+}

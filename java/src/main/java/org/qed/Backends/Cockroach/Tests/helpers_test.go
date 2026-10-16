@@ -162,6 +162,22 @@ func (e *env) expectRewrite(rule *rulescript.Rule, before, want memo.RelExpr) {
 	}
 }
 
+// expectRewriteUpToFreshColumns is expectRewrite for rewrites that introduce computed columns, whose IDs cannot be
+// known in advance.
+func (e *env) expectRewriteUpToFreshColumns(rule *rulescript.Rule, before, want memo.RelExpr) {
+	e.t.Helper()
+	got, ok := rule.Apply(&e.f, before)
+	if !ok {
+		e.t.Fatalf("%s did not apply to:\n%s", rule.Name, e.format(before))
+	}
+	g, _ := alphaComputedColumns(e.format(got))
+	w, _ := alphaComputedColumns(e.format(want))
+	if g != w {
+		e.t.Fatalf("%s produced an unexpected plan\ninput:\n%s\ngot:\n%s\nwant:\n%s",
+			rule.Name, e.format(before), g, w)
+	}
+}
+
 func (e *env) compareNativeRoot(name string, before, generated memo.RelExpr) {
 	e.t.Helper()
 	args := make([]interface{}, 0, before.ChildCount()+1)

@@ -6,12 +6,25 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import kala.collection.Seq;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.core.TableScan;
+import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rel.logical.LogicalJoin;
+import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.rex.RexCorrelVariable;
+import org.apache.calcite.rex.RexFieldAccess;
+import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.rex.RexLiteral;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexSubQuery;
+import org.apache.calcite.sql.SqlKind;
 import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.ArrayList;
@@ -48,8 +61,8 @@ public final class CockroachGenerator {
         collectTypeRefs(rule.before());
         var from = rel(rule.before(), true);
         var to = rel(rule.after(), true);
-        if (countOp(from, "exists") > 1 || countOp(to, "exists") > 1 ||
-                countOp(to, "exists") > countOp(from, "exists")) {
+        if (countOp(from, "exists") > 1 || countOp(to, "exists") > 1 || countOp(from, "any") > 1 ||
+                countOp(to, "exists") > countOp(from, "exists") + countOp(from, "any")) {
             throw new UnsupportedOperationException("Unsupported Exists private mapping: expected at most one matched Exists");
         }
         var positionalScans = new HashSet<String>();
@@ -67,6 +80,7 @@ public final class CockroachGenerator {
         var matchedEmptyIds = new HashSet<String>();
         collectEmptyIds(from, matchedEmptyIds);
         checkNewEmpty(to, true, matchedEmptyIds);
+        checkProjectionItems(from, new HashSet<>());
         var preds = new LinkedHashMap<String, PredicatePattern>();
         var projs = new HashSet<String>();
         var groups = new HashSet<String>();
@@ -78,10 +92,32 @@ public final class CockroachGenerator {
         mapNewValues(to, true, from, matchedValues);
         var matchedProjectIds = new HashSet<String>();
         collectProjectIds(from, matchedProjectIds);
-        checkConcreteProjectMappings(to, true, from, matchedProjectIds);
+        var keptProjectIds = new HashSet<String>();
+        collectProjectIds(to, keptProjectIds);
+        var replacedProjects = new ArrayList<ObjectNode>();
+        collectProjects(from, replacedProjects);
+        replacedProjects.removeIf(project -> keptProjectIds.contains(project.path("id").asText()));
+        checkConcreteProjectMappings(to, true, from, matchedProjectIds, replacedProjects);
         node.set("from", from);
         node.set("to", to);
         return node;
+    }
+
+    // A projection symbol binds one computed column, so it cannot be the item of two matched Projects.
+    private static void checkProjectionItems(JsonNode node, Set<String> seen) {
+        if (node.isObject()) {
+            if (node.path("op").asText().equals("project")) {
+                for (var expr : node.withArray("exprs")) {
+                    if (expr.path("op").asText().equals("proj") && !seen.add(expr.path("name").asText())) {
+                        throw new UnsupportedOperationException("Unsupported repeated projection symbol: "
+                                + expr.path("name").asText());
+                    }
+                }
+            }
+            node.elements().forEachRemaining(child -> checkProjectionItems(child, seen));
+        } else if (node.isArray()) {
+            node.elements().forEachRemaining(child -> checkProjectionItems(child, seen));
+        }
     }
 
     private static void collectValues(ObjectNode rel, List<ObjectNode> found) {
@@ -307,27 +343,37 @@ public final class CockroachGenerator {
         }
     }
 
+    // A concrete Project that replaces a matched Project keeps its output columns; one that does not replace any
+    // gets fresh columns.
     private static void checkConcreteProjectMappings(ObjectNode rel, boolean root, ObjectNode from,
-                                                     Set<String> matchedIds) {
+                                                     Set<String> matchedIds, List<ObjectNode> replaced) {
         switch (rel.path("op").asText()) {
             case "project" -> {
                 boolean concrete = false;
                 for (var expr : rel.withArray("exprs")) {
-                    concrete |= Set.of("scalar", "true", "false", "null", "int", "field_alias")
+                    concrete |= Set.of("scalar", "true", "false", "null", "int", "field_alias", "and_scalar", "or", "not")
                             .contains(expr.path("op").asText());
                 }
                 int rootArity = rootOutputArity(from);
                 if (concrete && !matchedIds.contains(rel.path("id").asText())
                         && !(root && (rootArity < 0 || rootArity == rel.withArray("exprs").size()))) {
-                    throw new UnsupportedOperationException("Unsupported concrete Project output column mapping");
+                    var candidates = replaced.stream()
+                            .filter(c -> c.withArray("exprs").size() == rel.withArray("exprs").size()).toList();
+                    if (candidates.size() == 1) {
+                        rel.put("reuse_cols_of", candidates.get(0).path("id").asText());
+                    } else if (root) {
+                        throw new UnsupportedOperationException("Unsupported concrete Project output column mapping");
+                    }
                 }
-                checkConcreteProjectMappings((ObjectNode) rel.get("input"), false, from, matchedIds);
+                checkConcreteProjectMappings((ObjectNode) rel.get("input"), false, from, matchedIds, replaced);
             }
-            case "filter" -> checkConcreteProjectMappings((ObjectNode) rel.get("input"), root, from, matchedIds);
-            case "aggregate" -> checkConcreteProjectMappings((ObjectNode) rel.get("input"), false, from, matchedIds);
+            case "filter" -> checkConcreteProjectMappings((ObjectNode) rel.get("input"), root, from, matchedIds,
+                    replaced);
+            case "aggregate" -> checkConcreteProjectMappings((ObjectNode) rel.get("input"), false, from, matchedIds,
+                    replaced);
             case "join", "set" -> {
-                checkConcreteProjectMappings((ObjectNode) rel.get("left"), false, from, matchedIds);
-                checkConcreteProjectMappings((ObjectNode) rel.get("right"), false, from, matchedIds);
+                checkConcreteProjectMappings((ObjectNode) rel.get("left"), false, from, matchedIds, replaced);
+                checkConcreteProjectMappings((ObjectNode) rel.get("right"), false, from, matchedIds, replaced);
             }
             default -> { }
         }
@@ -349,6 +395,7 @@ public final class CockroachGenerator {
                 int right = rootOutputArity((ObjectNode) rel.get("right"));
                 yield left < 0 || right < 0 ? -1 : left + right;
             }
+            case "set" -> rootOutputArity((ObjectNode) rel.get("left"));
             default -> -1;
         };
     }
@@ -402,7 +449,8 @@ public final class CockroachGenerator {
                         if (!fields.add(expr.toString())) {
                             ((ObjectNode) expr).put("op", "field_alias");
                         }
-                    } else if (Set.of("scalar", "true", "false", "null", "int").contains(expr.path("op").asText())) {
+                    } else if (Set.of("scalar", "true", "false", "null", "int", "and", "and_scalar", "or", "not")
+                            .contains(expr.path("op").asText())) {
                         checkScalar((ObjectNode) expr, from, preds, projs);
                     } else {
                         throw new UnsupportedOperationException("Unsupported project expression: "
@@ -497,7 +545,8 @@ public final class CockroachGenerator {
                     checkCond((ObjectNode) arg, from, preds, projs);
                 }
             }
-            case "scalar", "not", "or", "and_scalar", "in_single", "not_in_single", "exists" -> checkScalar(cond, from, preds, projs);
+            case "scalar", "not", "or", "and_scalar", "in_single", "not_in_single", "exists", "any", "field" ->
+                    checkScalar(cond, from, preds, projs);
             case "null" -> {
                 if (!cond.path("type").asText().equals("bool")) {
                     throw new UnsupportedOperationException("Unsupported non-boolean NULL filter: "
@@ -515,6 +564,14 @@ public final class CockroachGenerator {
             case "field", "joinfield", "true", "false", "int" -> { }
             case "exists" -> checkRel((ObjectNode) expr.get("input"), from, preds, projs,
                     new HashSet<>(), new HashSet<>());
+            case "any" -> {
+                if (!expr.path("cmp").asText().equals("=")) {
+                    throw new UnsupportedOperationException("Unsupported quantified comparison: "
+                            + expr.path("cmp").asText());
+                }
+                checkScalar((ObjectNode) expr.get("scalar"), from, preds, projs);
+                checkRel((ObjectNode) expr.get("input"), from, preds, projs, new HashSet<>(), new HashSet<>());
+            }
             case "null" -> {
                 if (expr.path("type").asText().equals("same_as")) {
                     if (expr.withArray("refs").isEmpty()) {
@@ -571,11 +628,12 @@ public final class CockroachGenerator {
             case "scalar" -> {
                 var operator = expr.path("operator").asText();
                 if (!Set.of("=", "<>", "<", "<=", ">", ">=", "IS NOT DISTINCT FROM",
-                        "IS NULL", "IS NOT NULL", "IS NOT FALSE", "IS TRUE", "IS NOT TRUE", "-").contains(operator)) {
-                    throw new UnsupportedOperationException("Unsupported concrete predicate operator: " + operator);
+                        "IS NULL", "IS NOT NULL", "IS NOT FALSE", "IS TRUE", "IS NOT TRUE", "-", "+").contains(operator)) {
+                    throw new UnsupportedOperationException("Unsupported concrete operator: " + operator);
                 }
-                int arity = Set.of("IS NULL", "IS NOT NULL", "IS NOT FALSE", "IS TRUE", "IS NOT TRUE", "-").contains(operator) ? 1 : 2;
-                if (expr.withArray("args").size() != arity) {
+                int arity = Set.of("IS NULL", "IS NOT NULL", "IS NOT FALSE", "IS TRUE", "IS NOT TRUE").contains(operator)
+                        ? 1 : operator.equals("-") ? expr.withArray("args").size() : 2;
+                if (expr.withArray("args").size() != arity || arity < 1 || arity > 2) {
                     throw new UnsupportedOperationException("Unsupported scalar arity for " + operator + ": "
                             + expr.withArray("args").size());
                 }
@@ -601,7 +659,7 @@ public final class CockroachGenerator {
         var name = expr.path("name").asText();
         if (from) {
             var previous = preds.putIfAbsent(name, new PredicatePattern(expr.path("args"), scalar));
-            if (previous != null && (!previous.args().equals(expr.path("args"))
+            if (previous != null && (!sameArguments(previous.args(), expr.path("args"))
                     || previous.scalar() != scalar)) {
                 throw new UnsupportedOperationException("Unsupported repeated predicate symbol with different arguments or context: "
                         + name);
@@ -609,6 +667,36 @@ public final class CockroachGenerator {
         } else if (!preds.containsKey(name)) {
             throw new UnsupportedOperationException("Unsupported unbound predicate symbol: " + name);
         }
+    }
+
+    // The runtime accepts a repeated symbol only when it reads the same columns, whichever relation they come from.
+    private static boolean sameArguments(JsonNode left, JsonNode right) {
+        if (left.isObject() && right.isObject()) {
+            var names = new HashSet<String>();
+            left.fieldNames().forEachRemaining(names::add);
+            right.fieldNames().forEachRemaining(names::add);
+            for (var name : names) {
+                if (Set.of("of", "left", "right", "rels", "id").contains(name)) {
+                    continue;
+                }
+                if (!sameArguments(left.path(name), right.path(name))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (left.isArray() && right.isArray()) {
+            if (left.size() != right.size()) {
+                return false;
+            }
+            for (int i = 0; i < left.size(); i++) {
+                if (!sameArguments(left.get(i), right.get(i))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return left.equals(right);
     }
 
     private static void checkProj(ObjectNode proj, boolean from, Set<String> projs) {
@@ -744,7 +832,7 @@ public final class CockroachGenerator {
             }
             default -> {
                 if (!(rel.semantics() instanceof org.apache.calcite.rel.core.Values values)) {
-                    throw unsupported(rel);
+                    return lifted(rel, tagged);
                 }
                 node.put("op", "values");
                 var rows = node.putArray("rows");
@@ -821,14 +909,17 @@ public final class CockroachGenerator {
                 }
             }
             case RexRN.Proj proj -> {
-                if (proj.operator().getKind() == org.apache.calcite.sql.SqlKind.MINUS_PREFIX) {
+                if (proj.operator().getKind() == org.apache.calcite.sql.SqlKind.MINUS_PREFIX
+                        || proj.operator().getKind() == org.apache.calcite.sql.SqlKind.MINUS) {
                     node.put("op", "scalar");
                     node.put("operator", "-");
                     var args = node.putArray("args");
                     proj.sources().forEach(s -> args.add(rex(s, tagged, context)));
                 } else if (!(proj.operator() instanceof org.qed.RuleBuilder.QedFunction)) {
-                    throw new UnsupportedOperationException("Unsupported concrete projection operator: "
-                            + proj.operator().getName());
+                    node.put("op", "scalar");
+                    node.put("operator", proj.operator().getName());
+                    var args = node.putArray("args");
+                    proj.sources().forEach(s -> args.add(rex(s, tagged, context)));
                 } else {
                     symbol(node, "proj", proj.operator().getName(), proj.sources(), tagged, context);
                 }
@@ -930,6 +1021,195 @@ public final class CockroachGenerator {
             }
         }
         return node;
+    }
+
+    // A custom relation that is not part of the DSL is generated from the relational tree of its semantics(). The
+    // relations and expressions it holds (its record components) are the slots: a subtree equal to a slot is
+    // generated as that relation, everything else is generated structurally.
+    private record Lift(List<RelRN> rels) { }
+
+    private final Map<org.apache.calcite.rel.core.CorrelationId, RelNode> correlations = new HashMap<>();
+
+    private ObjectNode lifted(RelRN custom, boolean tagged) {
+        var rels = new ArrayList<RelRN>();
+        var components = custom.getClass().getRecordComponents();
+        if (components != null) {
+            for (var component : components) {
+                if (!RelRN.class.isAssignableFrom(component.getType())) {
+                    continue;
+                }
+                try {
+                    var accessor = component.getAccessor();
+                    accessor.setAccessible(true);
+                    rels.add((RelRN) accessor.invoke(custom));
+                } catch (ReflectiveOperationException e) {
+                    throw new UnsupportedOperationException("Unsupported relation component: "
+                            + constructName(custom.getClass()), e);
+                }
+            }
+        }
+        return liftRel(custom.semantics(), new Lift(rels), tagged);
+    }
+
+    private String liftId(RelNode node, Lift lift) {
+        return ids.computeIfAbsent(liftRel(node, lift, false).toString(), k -> "r" + ids.size());
+    }
+
+    private ObjectNode liftRel(RelNode node, Lift lift, boolean tagged) {
+        for (var slot : lift.rels()) {
+            if (slot.semantics().deepEquals(node)) {
+                return rel(slot, tagged);
+            }
+        }
+        var out = MAPPER.createObjectNode();
+        switch (node) {
+            case TableScan scan -> {
+                var table = scan.getTable().getQualifiedName();
+                out.put("op", "scan");
+                out.put("name", table.get(table.size() - 1));
+                var columns = scan.getRowType().getFieldList();
+                out.put("arity", columns.size());
+                var nonNull = MAPPER.createArrayNode();
+                for (int i = 0; i < columns.size(); i++) {
+                    if (!columns.get(i).getType().isNullable()) {
+                        nonNull.add(i);
+                    }
+                }
+                if (!nonNull.isEmpty()) {
+                    out.set("non_null", nonNull);
+                }
+            }
+            case LogicalFilter filter -> {
+                filter.getVariablesSet().forEach(id -> correlations.put(id, filter.getInput()));
+                out.put("op", "filter");
+                out.set("cond", liftRex(filter.getCondition(), filter.getInput(), lift, tagged));
+                out.set("input", liftRel(filter.getInput(), lift, tagged));
+            }
+            case LogicalJoin join -> {
+                join.getVariablesSet().forEach(id -> correlations.put(id, join));
+                out.put("op", "join");
+                out.put("type", join.getJoinType().name().toLowerCase());
+                out.set("cond", liftRex(join.getCondition(), join, lift, tagged));
+                out.set("left", liftRel(join.getLeft(), lift, tagged));
+                out.set("right", liftRel(join.getRight(), lift, tagged));
+            }
+            default -> throw new UnsupportedOperationException("Unsupported relational operator: "
+                    + node.getRelTypeName());
+        }
+        if (tagged) {
+            out.put("id", liftId(node, lift));
+        }
+        return out;
+    }
+
+    private ObjectNode liftField(RelNode context, int ordinal, Lift lift, boolean tagged) {
+        var out = MAPPER.createObjectNode();
+        if (context instanceof LogicalJoin join && !tagged) {
+            out.put("op", "joinfield");
+            out.put("ordinal", ordinal);
+            out.put("left", liftId(join.getLeft(), lift));
+            out.put("right", liftId(join.getRight(), lift));
+        } else {
+            out.put("op", "field");
+            out.put("ordinal", ordinal);
+            out.put("of", liftId(context, lift));
+        }
+        return out;
+    }
+
+    private ObjectNode liftRex(RexNode rex, RelNode context, Lift lift, boolean tagged) {
+        var out = MAPPER.createObjectNode();
+        switch (rex) {
+            case RexInputRef ref -> {
+                return liftField(context, ref.getIndex(), lift, tagged);
+            }
+            case RexFieldAccess access when access.getReferenceExpr() instanceof RexCorrelVariable variable -> {
+                var owner = correlations.get(variable.id);
+                if (owner == null) {
+                    throw new UnsupportedOperationException("Unsupported correlation variable outside its scope");
+                }
+                return liftField(owner, access.getField().getIndex(), lift, tagged);
+            }
+            case RexLiteral literal -> literal(out, literal);
+            case RexSubQuery subQuery -> {
+                switch (subQuery.getKind()) {
+                    case EXISTS -> {
+                        out.put("op", "exists");
+                        out.set("input", liftRel(subQuery.rel, lift, tagged));
+                    }
+                    case IN -> {
+                        if (subQuery.getOperands().size() != 1) {
+                            throw new UnsupportedOperationException("Unsupported multi-column IN subquery");
+                        }
+                        out.put("op", "any");
+                        out.put("cmp", "=");
+                        out.set("scalar", liftRex(subQuery.getOperands().get(0), context, lift, tagged));
+                        out.set("input", liftRel(subQuery.rel, lift, tagged));
+                    }
+                    default -> throw new UnsupportedOperationException("Unsupported subquery: "
+                            + subQuery.getKind());
+                }
+            }
+            case RexCall call -> {
+                var args = MAPPER.createArrayNode();
+                for (var operand : call.getOperands()) {
+                    args.add(liftRex(operand, context, lift, tagged));
+                }
+                switch (call.getKind()) {
+                    case NOT -> {
+                        out.put("op", "not");
+                        out.set("arg", args.get(0));
+                    }
+                    case OR -> {
+                        out.put("op", "or");
+                        out.set("args", args);
+                    }
+                    case AND -> {
+                        out.put("op", "and");
+                        out.set("args", args);
+                    }
+                    default -> {
+                        out.put("op", "scalar");
+                        out.put("operator", call.getOperator().getName());
+                        out.set("args", args);
+                    }
+                }
+            }
+            default -> throw new UnsupportedOperationException("Unsupported expression construct: " + rex);
+        }
+        return out;
+    }
+
+    private void literal(ObjectNode node, RexLiteral literal) {
+        var sqlType = literal.getType().getSqlTypeName();
+        if (literal.isNull()) {
+            node.put("op", "null");
+            if (sqlType == org.apache.calcite.sql.type.SqlTypeName.BOOLEAN) {
+                node.put("type", "bool");
+            } else if (sqlType == org.apache.calcite.sql.type.SqlTypeName.INTEGER) {
+                node.put("type", "int");
+            } else if (literal.getType() instanceof org.qed.RelType.VarType) {
+                var refs = typeRefs.get(literal.getType().toString());
+                if (refs == null || refs.isEmpty()) {
+                    throw new UnsupportedOperationException("Unsupported unbound NULL type variable: "
+                            + literal.getType());
+                }
+                node.put("type", "same_as");
+                var out = node.putArray("refs");
+                for (var ref : refs) {
+                    out.addObject().put("of", ref.of()).put("ordinal", ref.ordinal());
+                }
+            } else {
+                throw new UnsupportedOperationException("Unsupported NULL literal type: " + literal.getType());
+            }
+        } else if (sqlType == org.apache.calcite.sql.type.SqlTypeName.INTEGER) {
+            node.put("op", "int");
+            node.put("value", literal.getValueAs(Integer.class));
+        } else if (sqlType == org.apache.calcite.sql.type.SqlTypeName.BOOLEAN) {
+            node.put("op", Boolean.TRUE.equals(literal.getValueAs(Boolean.class)) ? "true" : "false");
+        } else {
+            throw new UnsupportedOperationException("Unsupported literal: " + literal);
+        }
     }
 
     private void singletonMembership(ObjectNode node, String op, RexRN.Or or,
