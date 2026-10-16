@@ -1,0 +1,166 @@
+{
+  "name" : "PushExtraPredicateThroughJoin",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "or",
+      "args" : [ {
+        "op" : "and_scalar",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "p",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r2"
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "q",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r2"
+          } ]
+        } ]
+      }, {
+        "op" : "and_scalar",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "p",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r2"
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "s",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r2"
+          } ]
+        } ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "id" : "r0",
+      "arity" : 1
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "R",
+      "id" : "r1",
+      "arity" : 1
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "or",
+      "args" : [ {
+        "op" : "and_scalar",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "p",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r3"
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "q",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r3"
+          } ]
+        } ]
+      }, {
+        "op" : "and_scalar",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "p",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r3"
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "s",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r3"
+          } ]
+        } ]
+      } ]
+    },
+    "left" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "or",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "p",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "p",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "L",
+        "id" : "r0",
+        "arity" : 1
+      },
+      "id" : "r4"
+    },
+    "right" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "or",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "q",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r1" ]
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "s",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r1" ]
+          } ]
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "R",
+        "id" : "r1",
+        "arity" : 1
+      },
+      "id" : "r5"
+    },
+    "id" : "r3"
+  }
+}

@@ -1,0 +1,104 @@
+{
+  "name" : "RemoveRepetitionFromGroupExpressions",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r2"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r2"
+    }, {
+      "op" : "field",
+      "ordinal" : 3,
+      "of" : "r2"
+    } ],
+    "input" : {
+      "op" : "aggregate",
+      "groups" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r1"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r1"
+      }, {
+        "op" : "field",
+        "ordinal" : 2,
+        "of" : "r1"
+      } ],
+      "aggs" : [ {
+        "op" : "agg",
+        "name" : "sum",
+        "distinct" : false,
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 3,
+          "of" : "r1"
+        } ]
+      } ],
+      "input" : {
+        "op" : "project",
+        "exprs" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        }, {
+          "op" : "field_alias",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "field",
+          "ordinal" : 2,
+          "of" : "r0"
+        } ],
+        "input" : {
+          "op" : "scan",
+          "name" : "S",
+          "arity" : 3,
+          "id" : "r0"
+        },
+        "id" : "r1"
+      },
+      "id" : "r2"
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r0"
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "sum",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 2,
+        "of" : "r0"
+      } ]
+    } ],
+    "input" : {
+      "op" : "scan",
+      "name" : "S",
+      "arity" : 3,
+      "id" : "r0"
+    },
+    "id" : "r4"
+  }
+}

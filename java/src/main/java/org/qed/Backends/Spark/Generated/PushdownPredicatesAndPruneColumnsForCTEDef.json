@@ -1,0 +1,129 @@
+{
+  "name" : "PushdownPredicatesAndPruneColumnsForCTEDef",
+  "from" : {
+    "op" : "set",
+    "kind" : "union",
+    "all" : true,
+    "inputs" : [ {
+      "op" : "filter",
+      "input" : {
+        "op" : "scan",
+        "name" : "Cte",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "ref1Pred",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "id" : "r1"
+    }, {
+      "op" : "filter",
+      "input" : {
+        "op" : "scan",
+        "name" : "Cte",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "ref2Pred",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "id" : "r2"
+    } ],
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "set",
+    "kind" : "union",
+    "all" : true,
+    "inputs" : [ {
+      "op" : "filter",
+      "input" : {
+        "op" : "filter",
+        "input" : {
+          "op" : "scan",
+          "name" : "Cte",
+          "arity" : 1,
+          "id" : "r0"
+        },
+        "cond" : {
+          "op" : "or",
+          "args" : [ {
+            "op" : "pred",
+            "name" : "ref1Pred",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r0" ]
+            } ]
+          }, {
+            "op" : "pred",
+            "name" : "ref2Pred",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r0" ]
+            } ]
+          } ]
+        },
+        "id" : "r4"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "ref1Pred",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "id" : "r5"
+    }, {
+      "op" : "filter",
+      "input" : {
+        "op" : "filter",
+        "input" : {
+          "op" : "scan",
+          "name" : "Cte",
+          "arity" : 1,
+          "id" : "r0"
+        },
+        "cond" : {
+          "op" : "or",
+          "args" : [ {
+            "op" : "pred",
+            "name" : "ref1Pred",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r0" ]
+            } ]
+          }, {
+            "op" : "pred",
+            "name" : "ref2Pred",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r0" ]
+            } ]
+          } ]
+        },
+        "id" : "r4"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "ref2Pred",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "id" : "r6"
+    } ],
+    "id" : "r7"
+  }
+}

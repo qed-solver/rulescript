@@ -1,0 +1,318 @@
+{
+  "name" : "TransposeWindow",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r4"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r4"
+    }, {
+      "op" : "field",
+      "ordinal" : 2,
+      "of" : "r4"
+    }, {
+      "op" : "field",
+      "ordinal" : 3,
+      "of" : "r4"
+    }, {
+      "op" : "field",
+      "ordinal" : 5,
+      "of" : "r4"
+    } ],
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r4"
+        }, {
+          "op" : "field",
+          "ordinal" : 4,
+          "of" : "r4"
+        } ]
+      },
+      "left" : {
+        "op" : "project",
+        "exprs" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r5"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r5"
+        }, {
+          "op" : "field",
+          "ordinal" : 2,
+          "of" : "r5"
+        }, {
+          "op" : "field",
+          "ordinal" : 5,
+          "of" : "r5"
+        } ],
+        "input" : {
+          "op" : "join",
+          "type" : "inner",
+          "cond" : {
+            "op" : "and",
+            "args" : [ {
+              "op" : "scalar",
+              "operator" : "=",
+              "args" : [ {
+                "op" : "field",
+                "ordinal" : 0,
+                "of" : "r5"
+              }, {
+                "op" : "field",
+                "ordinal" : 3,
+                "of" : "r5"
+              } ]
+            }, {
+              "op" : "scalar",
+              "operator" : "=",
+              "args" : [ {
+                "op" : "field",
+                "ordinal" : 1,
+                "of" : "r5"
+              }, {
+                "op" : "field",
+                "ordinal" : 4,
+                "of" : "r5"
+              } ]
+            } ]
+          },
+          "left" : {
+            "op" : "scan",
+            "name" : "R",
+            "arity" : 3,
+            "id" : "r0"
+          },
+          "right" : {
+            "op" : "aggregate",
+            "groups" : [ {
+              "op" : "field",
+              "ordinal" : 0,
+              "of" : "r0"
+            }, {
+              "op" : "field",
+              "ordinal" : 1,
+              "of" : "r0"
+            } ],
+            "aggs" : [ {
+              "op" : "agg",
+              "name" : "innerW",
+              "distinct" : false,
+              "args" : [ {
+                "op" : "field",
+                "ordinal" : 2,
+                "of" : "r0"
+              } ]
+            } ],
+            "input" : {
+              "op" : "scan",
+              "name" : "R",
+              "arity" : 3,
+              "id" : "r0"
+            },
+            "id" : "r1"
+          },
+          "id" : "r5"
+        },
+        "id" : "r2"
+      },
+      "right" : {
+        "op" : "aggregate",
+        "groups" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ],
+        "aggs" : [ {
+          "op" : "agg",
+          "name" : "outerW",
+          "distinct" : false,
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 2,
+            "of" : "r0"
+          } ]
+        } ],
+        "input" : {
+          "op" : "scan",
+          "name" : "R",
+          "arity" : 3,
+          "id" : "r0"
+        },
+        "id" : "r3"
+      },
+      "id" : "r4"
+    },
+    "id" : "r6"
+  },
+  "to" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r8"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r8"
+    }, {
+      "op" : "field",
+      "ordinal" : 2,
+      "of" : "r8"
+    }, {
+      "op" : "field",
+      "ordinal" : 6,
+      "of" : "r8"
+    }, {
+      "op" : "field",
+      "ordinal" : 3,
+      "of" : "r8"
+    } ],
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "and",
+        "args" : [ {
+          "op" : "scalar",
+          "operator" : "=",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r8"
+          }, {
+            "op" : "field",
+            "ordinal" : 4,
+            "of" : "r8"
+          } ]
+        }, {
+          "op" : "scalar",
+          "operator" : "=",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r8"
+          }, {
+            "op" : "field",
+            "ordinal" : 5,
+            "of" : "r8"
+          } ]
+        } ]
+      },
+      "left" : {
+        "op" : "project",
+        "exprs" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r9"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r9"
+        }, {
+          "op" : "field",
+          "ordinal" : 2,
+          "of" : "r9"
+        }, {
+          "op" : "field",
+          "ordinal" : 4,
+          "of" : "r9"
+        } ],
+        "input" : {
+          "op" : "join",
+          "type" : "inner",
+          "cond" : {
+            "op" : "scalar",
+            "operator" : "=",
+            "args" : [ {
+              "op" : "field",
+              "ordinal" : 0,
+              "of" : "r9"
+            }, {
+              "op" : "field",
+              "ordinal" : 3,
+              "of" : "r9"
+            } ]
+          },
+          "left" : {
+            "op" : "scan",
+            "name" : "R",
+            "arity" : 3,
+            "id" : "r0"
+          },
+          "right" : {
+            "op" : "aggregate",
+            "groups" : [ {
+              "op" : "field",
+              "ordinal" : 0,
+              "of" : "r0"
+            } ],
+            "aggs" : [ {
+              "op" : "agg",
+              "name" : "outerW",
+              "distinct" : false,
+              "args" : [ {
+                "op" : "field",
+                "ordinal" : 2,
+                "of" : "r0"
+              } ]
+            } ],
+            "input" : {
+              "op" : "scan",
+              "name" : "R",
+              "arity" : 3,
+              "id" : "r0"
+            },
+            "id" : "r3"
+          },
+          "id" : "r9"
+        },
+        "id" : "r7"
+      },
+      "right" : {
+        "op" : "aggregate",
+        "groups" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        } ],
+        "aggs" : [ {
+          "op" : "agg",
+          "name" : "innerW",
+          "distinct" : false,
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 2,
+            "of" : "r0"
+          } ]
+        } ],
+        "input" : {
+          "op" : "scan",
+          "name" : "R",
+          "arity" : 3,
+          "id" : "r0"
+        },
+        "id" : "r1"
+      },
+      "id" : "r8"
+    },
+    "id" : "r10"
+  }
+}

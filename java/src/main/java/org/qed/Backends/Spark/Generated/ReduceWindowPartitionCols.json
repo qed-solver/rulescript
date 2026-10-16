@@ -1,0 +1,306 @@
+{
+  "name" : "ReduceWindowPartitionCols",
+  "from" : {
+    "op" : "project",
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "left" : {
+        "op" : "project",
+        "input" : {
+          "op" : "scan",
+          "name" : "B",
+          "arity" : 2,
+          "id" : "r0"
+        },
+        "exprs" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "proj",
+          "name" : "f",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r0"
+          } ]
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        } ],
+        "id" : "r1"
+      },
+      "right" : {
+        "op" : "aggregate",
+        "input" : {
+          "op" : "project",
+          "input" : {
+            "op" : "scan",
+            "name" : "B",
+            "arity" : 2,
+            "id" : "r0"
+          },
+          "exprs" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r0"
+          }, {
+            "op" : "proj",
+            "name" : "f",
+            "args" : [ {
+              "op" : "field",
+              "ordinal" : 0,
+              "of" : "r0"
+            } ]
+          }, {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r0"
+          } ],
+          "id" : "r1"
+        },
+        "groups" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r1"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r1"
+        } ],
+        "aggs" : [ {
+          "op" : "agg",
+          "name" : "w",
+          "distinct" : false,
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 2,
+            "of" : "r1"
+          } ]
+        } ],
+        "id" : "r2"
+      },
+      "cond" : {
+        "op" : "and",
+        "args" : [ {
+          "op" : "scalar",
+          "operator" : "=",
+          "args" : [ {
+            "op" : "joinfield",
+            "ordinal" : 0,
+            "left" : "r1",
+            "right" : "r2"
+          }, {
+            "op" : "joinfield",
+            "ordinal" : 3,
+            "left" : "r1",
+            "right" : "r2"
+          } ]
+        }, {
+          "op" : "scalar",
+          "operator" : "=",
+          "args" : [ {
+            "op" : "joinfield",
+            "ordinal" : 1,
+            "left" : "r1",
+            "right" : "r2"
+          }, {
+            "op" : "joinfield",
+            "ordinal" : 4,
+            "left" : "r1",
+            "right" : "r2"
+          } ]
+        } ]
+      },
+      "id" : "r3"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "Top",
+      "args" : [ {
+        "op" : "joinfield",
+        "ordinal" : 0,
+        "left" : "r1",
+        "right" : "r2"
+      }, {
+        "op" : "joinfield",
+        "ordinal" : 1,
+        "left" : "r1",
+        "right" : "r2"
+      }, {
+        "op" : "joinfield",
+        "ordinal" : 2,
+        "left" : "r1",
+        "right" : "r2"
+      }, {
+        "op" : "joinfield",
+        "ordinal" : 5,
+        "left" : "r1",
+        "right" : "r2"
+      } ]
+    } ],
+    "id" : "r4"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "left" : {
+        "op" : "project",
+        "input" : {
+          "op" : "scan",
+          "name" : "B",
+          "arity" : 2,
+          "id" : "r0"
+        },
+        "exprs" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "proj",
+          "name" : "f",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r0"
+          } ]
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        } ],
+        "id" : "r1"
+      },
+      "right" : {
+        "op" : "project",
+        "input" : {
+          "op" : "aggregate",
+          "input" : {
+            "op" : "project",
+            "input" : {
+              "op" : "scan",
+              "name" : "B",
+              "arity" : 2,
+              "id" : "r0"
+            },
+            "exprs" : [ {
+              "op" : "field",
+              "ordinal" : 0,
+              "of" : "r0"
+            }, {
+              "op" : "proj",
+              "name" : "f",
+              "args" : [ {
+                "op" : "field",
+                "ordinal" : 0,
+                "of" : "r0"
+              } ]
+            }, {
+              "op" : "field",
+              "ordinal" : 1,
+              "of" : "r0"
+            } ],
+            "id" : "r1"
+          },
+          "groups" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r1"
+          } ],
+          "aggs" : [ {
+            "op" : "agg",
+            "name" : "w",
+            "distinct" : false,
+            "args" : [ {
+              "op" : "field",
+              "ordinal" : 2,
+              "of" : "r1"
+            } ]
+          } ],
+          "id" : "r5"
+        },
+        "exprs" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r5"
+        }, {
+          "op" : "proj",
+          "name" : "f",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r5"
+          } ]
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r5"
+        } ],
+        "id" : "r6"
+      },
+      "cond" : {
+        "op" : "and",
+        "args" : [ {
+          "op" : "scalar",
+          "operator" : "=",
+          "args" : [ {
+            "op" : "joinfield",
+            "ordinal" : 0,
+            "left" : "r1",
+            "right" : "r6"
+          }, {
+            "op" : "joinfield",
+            "ordinal" : 3,
+            "left" : "r1",
+            "right" : "r6"
+          } ]
+        }, {
+          "op" : "scalar",
+          "operator" : "=",
+          "args" : [ {
+            "op" : "joinfield",
+            "ordinal" : 1,
+            "left" : "r1",
+            "right" : "r6"
+          }, {
+            "op" : "joinfield",
+            "ordinal" : 4,
+            "left" : "r1",
+            "right" : "r6"
+          } ]
+        } ]
+      },
+      "id" : "r7"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "Top",
+      "args" : [ {
+        "op" : "joinfield",
+        "ordinal" : 0,
+        "left" : "r1",
+        "right" : "r6"
+      }, {
+        "op" : "joinfield",
+        "ordinal" : 1,
+        "left" : "r1",
+        "right" : "r6"
+      }, {
+        "op" : "joinfield",
+        "ordinal" : 2,
+        "left" : "r1",
+        "right" : "r6"
+      }, {
+        "op" : "joinfield",
+        "ordinal" : 5,
+        "left" : "r1",
+        "right" : "r6"
+      } ]
+    } ],
+    "id" : "r8"
+  }
+}

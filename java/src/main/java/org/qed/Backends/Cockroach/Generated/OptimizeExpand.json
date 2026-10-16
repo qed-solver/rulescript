@@ -1,0 +1,584 @@
+{
+  "name" : "OptimizeExpand",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "aggregate",
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r3"
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "outeragg",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 3,
+        "of" : "r3"
+      } ]
+    } ],
+    "input" : {
+      "op" : "aggregate",
+      "groups" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r2"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r2"
+      }, {
+        "op" : "field",
+        "ordinal" : 2,
+        "of" : "r2"
+      } ],
+      "aggs" : [ {
+        "op" : "agg",
+        "name" : "count",
+        "distinct" : false,
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 3,
+          "of" : "r2"
+        } ]
+      } ],
+      "input" : {
+        "op" : "aggregate",
+        "groups" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r1"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r1"
+        }, {
+          "op" : "field",
+          "ordinal" : 2,
+          "of" : "r1"
+        }, {
+          "op" : "field",
+          "ordinal" : 3,
+          "of" : "r1"
+        } ],
+        "aggs" : [ ],
+        "input" : {
+          "op" : "set",
+          "type" : "union",
+          "all" : true,
+          "left" : {
+            "op" : "set",
+            "type" : "union",
+            "all" : true,
+            "left" : {
+              "op" : "project",
+              "exprs" : [ {
+                "op" : "field",
+                "ordinal" : 0,
+                "of" : "r0"
+              }, {
+                "op" : "proj",
+                "name" : "c1a",
+                "args" : [ {
+                  "op" : "field",
+                  "ordinal" : 0,
+                  "of" : "r0"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 1,
+                  "of" : "r0"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 2,
+                  "of" : "r0"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 3,
+                  "of" : "r0"
+                } ]
+              }, {
+                "op" : "proj",
+                "name" : "c2a",
+                "args" : [ {
+                  "op" : "field",
+                  "ordinal" : 0,
+                  "of" : "r0"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 1,
+                  "of" : "r0"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 2,
+                  "of" : "r0"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 3,
+                  "of" : "r0"
+                } ]
+              }, {
+                "op" : "field",
+                "ordinal" : 3,
+                "of" : "r0"
+              } ],
+              "input" : {
+                "op" : "scan",
+                "name" : "child",
+                "arity" : 4,
+                "id" : "r0"
+              },
+              "id" : "r4"
+            },
+            "right" : {
+              "op" : "project",
+              "exprs" : [ {
+                "op" : "field",
+                "ordinal" : 0,
+                "of" : "r0"
+              }, {
+                "op" : "proj",
+                "name" : "c1b",
+                "args" : [ {
+                  "op" : "field",
+                  "ordinal" : 0,
+                  "of" : "r0"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 1,
+                  "of" : "r0"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 2,
+                  "of" : "r0"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 3,
+                  "of" : "r0"
+                } ]
+              }, {
+                "op" : "proj",
+                "name" : "c2b",
+                "args" : [ {
+                  "op" : "field",
+                  "ordinal" : 0,
+                  "of" : "r0"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 1,
+                  "of" : "r0"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 2,
+                  "of" : "r0"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 3,
+                  "of" : "r0"
+                } ]
+              }, {
+                "op" : "field",
+                "ordinal" : 3,
+                "of" : "r0"
+              } ],
+              "input" : {
+                "op" : "scan",
+                "name" : "child",
+                "arity" : 4,
+                "id" : "r0"
+              },
+              "id" : "r5"
+            },
+            "id" : "r6"
+          },
+          "right" : {
+            "op" : "project",
+            "exprs" : [ {
+              "op" : "field",
+              "ordinal" : 0,
+              "of" : "r0"
+            }, {
+              "op" : "proj",
+              "name" : "c1c",
+              "args" : [ {
+                "op" : "field",
+                "ordinal" : 0,
+                "of" : "r0"
+              }, {
+                "op" : "field",
+                "ordinal" : 1,
+                "of" : "r0"
+              }, {
+                "op" : "field",
+                "ordinal" : 2,
+                "of" : "r0"
+              }, {
+                "op" : "field",
+                "ordinal" : 3,
+                "of" : "r0"
+              } ]
+            }, {
+              "op" : "proj",
+              "name" : "c2c",
+              "args" : [ {
+                "op" : "field",
+                "ordinal" : 0,
+                "of" : "r0"
+              }, {
+                "op" : "field",
+                "ordinal" : 1,
+                "of" : "r0"
+              }, {
+                "op" : "field",
+                "ordinal" : 2,
+                "of" : "r0"
+              }, {
+                "op" : "field",
+                "ordinal" : 3,
+                "of" : "r0"
+              } ]
+            }, {
+              "op" : "field",
+              "ordinal" : 3,
+              "of" : "r0"
+            } ],
+            "input" : {
+              "op" : "scan",
+              "name" : "child",
+              "arity" : 4,
+              "id" : "r0"
+            },
+            "id" : "r7"
+          },
+          "id" : "r1"
+        },
+        "id" : "r2"
+      },
+      "id" : "r3"
+    },
+    "id" : "r8"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r12"
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "outeragg",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 3,
+        "of" : "r12"
+      } ]
+    } ],
+    "input" : {
+      "op" : "aggregate",
+      "groups" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r11"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r11"
+      }, {
+        "op" : "field",
+        "ordinal" : 2,
+        "of" : "r11"
+      } ],
+      "aggs" : [ {
+        "op" : "agg",
+        "name" : "count",
+        "distinct" : false,
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 3,
+          "of" : "r11"
+        } ]
+      } ],
+      "input" : {
+        "op" : "aggregate",
+        "groups" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r10"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r10"
+        }, {
+          "op" : "field",
+          "ordinal" : 2,
+          "of" : "r10"
+        }, {
+          "op" : "field",
+          "ordinal" : 3,
+          "of" : "r10"
+        } ],
+        "aggs" : [ ],
+        "input" : {
+          "op" : "set",
+          "type" : "union",
+          "all" : true,
+          "left" : {
+            "op" : "set",
+            "type" : "union",
+            "all" : true,
+            "left" : {
+              "op" : "project",
+              "exprs" : [ {
+                "op" : "field",
+                "ordinal" : 0,
+                "of" : "r9"
+              }, {
+                "op" : "proj",
+                "name" : "c1a",
+                "args" : [ {
+                  "op" : "field",
+                  "ordinal" : 0,
+                  "of" : "r9"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 1,
+                  "of" : "r9"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 2,
+                  "of" : "r9"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 3,
+                  "of" : "r9"
+                } ]
+              }, {
+                "op" : "proj",
+                "name" : "c2a",
+                "args" : [ {
+                  "op" : "field",
+                  "ordinal" : 0,
+                  "of" : "r9"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 1,
+                  "of" : "r9"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 2,
+                  "of" : "r9"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 3,
+                  "of" : "r9"
+                } ]
+              }, {
+                "op" : "field",
+                "ordinal" : 3,
+                "of" : "r9"
+              } ],
+              "input" : {
+                "op" : "aggregate",
+                "groups" : [ {
+                  "op" : "field",
+                  "ordinal" : 0,
+                  "of" : "r0"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 1,
+                  "of" : "r0"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 2,
+                  "of" : "r0"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 3,
+                  "of" : "r0"
+                } ],
+                "aggs" : [ ],
+                "input" : {
+                  "op" : "scan",
+                  "name" : "child",
+                  "arity" : 4,
+                  "id" : "r0"
+                },
+                "id" : "r9"
+              },
+              "id" : "r13"
+            },
+            "right" : {
+              "op" : "project",
+              "exprs" : [ {
+                "op" : "field",
+                "ordinal" : 0,
+                "of" : "r9"
+              }, {
+                "op" : "proj",
+                "name" : "c1b",
+                "args" : [ {
+                  "op" : "field",
+                  "ordinal" : 0,
+                  "of" : "r9"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 1,
+                  "of" : "r9"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 2,
+                  "of" : "r9"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 3,
+                  "of" : "r9"
+                } ]
+              }, {
+                "op" : "proj",
+                "name" : "c2b",
+                "args" : [ {
+                  "op" : "field",
+                  "ordinal" : 0,
+                  "of" : "r9"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 1,
+                  "of" : "r9"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 2,
+                  "of" : "r9"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 3,
+                  "of" : "r9"
+                } ]
+              }, {
+                "op" : "field",
+                "ordinal" : 3,
+                "of" : "r9"
+              } ],
+              "input" : {
+                "op" : "aggregate",
+                "groups" : [ {
+                  "op" : "field",
+                  "ordinal" : 0,
+                  "of" : "r0"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 1,
+                  "of" : "r0"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 2,
+                  "of" : "r0"
+                }, {
+                  "op" : "field",
+                  "ordinal" : 3,
+                  "of" : "r0"
+                } ],
+                "aggs" : [ ],
+                "input" : {
+                  "op" : "scan",
+                  "name" : "child",
+                  "arity" : 4,
+                  "id" : "r0"
+                },
+                "id" : "r9"
+              },
+              "id" : "r14"
+            },
+            "id" : "r15"
+          },
+          "right" : {
+            "op" : "project",
+            "exprs" : [ {
+              "op" : "field",
+              "ordinal" : 0,
+              "of" : "r9"
+            }, {
+              "op" : "proj",
+              "name" : "c1c",
+              "args" : [ {
+                "op" : "field",
+                "ordinal" : 0,
+                "of" : "r9"
+              }, {
+                "op" : "field",
+                "ordinal" : 1,
+                "of" : "r9"
+              }, {
+                "op" : "field",
+                "ordinal" : 2,
+                "of" : "r9"
+              }, {
+                "op" : "field",
+                "ordinal" : 3,
+                "of" : "r9"
+              } ]
+            }, {
+              "op" : "proj",
+              "name" : "c2c",
+              "args" : [ {
+                "op" : "field",
+                "ordinal" : 0,
+                "of" : "r9"
+              }, {
+                "op" : "field",
+                "ordinal" : 1,
+                "of" : "r9"
+              }, {
+                "op" : "field",
+                "ordinal" : 2,
+                "of" : "r9"
+              }, {
+                "op" : "field",
+                "ordinal" : 3,
+                "of" : "r9"
+              } ]
+            }, {
+              "op" : "field",
+              "ordinal" : 3,
+              "of" : "r9"
+            } ],
+            "input" : {
+              "op" : "aggregate",
+              "groups" : [ {
+                "op" : "field",
+                "ordinal" : 0,
+                "of" : "r0"
+              }, {
+                "op" : "field",
+                "ordinal" : 1,
+                "of" : "r0"
+              }, {
+                "op" : "field",
+                "ordinal" : 2,
+                "of" : "r0"
+              }, {
+                "op" : "field",
+                "ordinal" : 3,
+                "of" : "r0"
+              } ],
+              "aggs" : [ ],
+              "input" : {
+                "op" : "scan",
+                "name" : "child",
+                "arity" : 4,
+                "id" : "r0"
+              },
+              "id" : "r9"
+            },
+            "id" : "r16"
+          },
+          "id" : "r10"
+        },
+        "id" : "r11"
+      },
+      "id" : "r12"
+    },
+    "id" : "r17"
+  }
+}

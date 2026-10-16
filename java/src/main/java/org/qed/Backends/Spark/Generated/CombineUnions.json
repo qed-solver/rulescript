@@ -1,0 +1,93 @@
+{
+  "name" : "CombineUnions",
+  "from" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "set",
+      "kind" : "union",
+      "all" : true,
+      "inputs" : [ {
+        "op" : "scan",
+        "name" : "A",
+        "arity" : 1,
+        "id" : "r0"
+      }, {
+        "op" : "aggregate",
+        "input" : {
+          "op" : "set",
+          "kind" : "union",
+          "all" : true,
+          "inputs" : [ {
+            "op" : "scan",
+            "name" : "B",
+            "arity" : 1,
+            "id" : "r1"
+          }, {
+            "op" : "scan",
+            "name" : "C",
+            "arity" : 1,
+            "id" : "r2"
+          } ],
+          "id" : "r4"
+        },
+        "groups" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r4"
+        } ],
+        "aggs" : [ ],
+        "id" : "r5"
+      }, {
+        "op" : "scan",
+        "name" : "D",
+        "arity" : 1,
+        "id" : "r3"
+      } ],
+      "id" : "r6"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r6"
+    } ],
+    "aggs" : [ ],
+    "id" : "r7"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "set",
+      "kind" : "union",
+      "all" : true,
+      "inputs" : [ {
+        "op" : "scan",
+        "name" : "A",
+        "arity" : 1,
+        "id" : "r0"
+      }, {
+        "op" : "scan",
+        "name" : "B",
+        "arity" : 1,
+        "id" : "r1"
+      }, {
+        "op" : "scan",
+        "name" : "C",
+        "arity" : 1,
+        "id" : "r2"
+      }, {
+        "op" : "scan",
+        "name" : "D",
+        "arity" : 1,
+        "id" : "r3"
+      } ],
+      "id" : "r8"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r8"
+    } ],
+    "aggs" : [ ],
+    "id" : "r9"
+  }
+}

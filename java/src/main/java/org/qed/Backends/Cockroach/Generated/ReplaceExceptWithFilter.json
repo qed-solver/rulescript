@@ -1,0 +1,142 @@
+{
+  "name" : "ReplaceExceptWithFilter",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "set",
+    "type" : "except",
+    "all" : false,
+    "left" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "pred",
+        "name" : "P_L",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "Base",
+        "id" : "r0"
+      },
+      "id" : "r1"
+    },
+    "right" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "pred",
+        "name" : "P_R",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "Base",
+        "id" : "r0"
+      },
+      "id" : "r2"
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "set",
+    "type" : "intersect",
+    "all" : false,
+    "left" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "or",
+        "args" : [ {
+          "op" : "not",
+          "arg" : {
+            "op" : "pred",
+            "name" : "P_R",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r0" ]
+            } ]
+          }
+        }, {
+          "op" : "scalar",
+          "operator" : "IS NULL",
+          "args" : [ {
+            "op" : "pred",
+            "name" : "P_R",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r0" ]
+            } ]
+          } ]
+        } ]
+      },
+      "input" : {
+        "op" : "filter",
+        "cond" : {
+          "op" : "pred",
+          "name" : "P_L",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        },
+        "input" : {
+          "op" : "scan",
+          "name" : "Base",
+          "id" : "r0"
+        },
+        "id" : "r1"
+      },
+      "id" : "r4"
+    },
+    "right" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "or",
+        "args" : [ {
+          "op" : "not",
+          "arg" : {
+            "op" : "pred",
+            "name" : "P_R",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r0" ]
+            } ]
+          }
+        }, {
+          "op" : "scalar",
+          "operator" : "IS NULL",
+          "args" : [ {
+            "op" : "pred",
+            "name" : "P_R",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r0" ]
+            } ]
+          } ]
+        } ]
+      },
+      "input" : {
+        "op" : "filter",
+        "cond" : {
+          "op" : "pred",
+          "name" : "P_L",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        },
+        "input" : {
+          "op" : "scan",
+          "name" : "Base",
+          "id" : "r0"
+        },
+        "id" : "r1"
+      },
+      "id" : "r4"
+    },
+    "id" : "r5"
+  }
+}

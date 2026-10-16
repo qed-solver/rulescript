@@ -1,0 +1,94 @@
+{
+  "name" : "AggregateProjectPullUpConstants",
+  "from" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "project",
+      "input" : {
+        "op" : "scan",
+        "name" : "S",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "exprs" : [ {
+        "op" : "true"
+      }, {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ],
+      "id" : "r1"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r1"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r1"
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "f",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r1"
+      } ]
+    } ],
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "aggregate",
+      "input" : {
+        "op" : "project",
+        "input" : {
+          "op" : "scan",
+          "name" : "S",
+          "arity" : 1,
+          "id" : "r0"
+        },
+        "exprs" : [ {
+          "op" : "true"
+        }, {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ],
+        "id" : "r1"
+      },
+      "groups" : [ {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r1"
+      } ],
+      "aggs" : [ {
+        "op" : "agg",
+        "name" : "f",
+        "distinct" : false,
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r1"
+        } ]
+      } ],
+      "id" : "r3"
+    },
+    "exprs" : [ {
+      "op" : "true"
+    }, {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r3"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r3"
+    } ],
+    "id" : "r4"
+  }
+}

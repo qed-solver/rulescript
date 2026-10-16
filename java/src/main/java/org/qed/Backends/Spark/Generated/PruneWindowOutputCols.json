@@ -1,0 +1,158 @@
+{
+  "name" : "PruneWindowOutputCols",
+  "from" : {
+    "op" : "project",
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "left" : {
+        "op" : "scan",
+        "name" : "Input",
+        "arity" : 2,
+        "nonnull" : [ 0, 1 ],
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "aggregate",
+        "input" : {
+          "op" : "scan",
+          "name" : "Input",
+          "arity" : 2,
+          "nonnull" : [ 0, 1 ],
+          "id" : "r0"
+        },
+        "groups" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ],
+        "aggs" : [ {
+          "op" : "agg",
+          "name" : "w1",
+          "distinct" : false,
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r0"
+          } ]
+        }, {
+          "op" : "agg",
+          "name" : "w2",
+          "distinct" : false,
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r0"
+          } ]
+        } ],
+        "id" : "r1"
+      },
+      "cond" : {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 0,
+          "left" : "r0",
+          "right" : "r1"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 2,
+          "left" : "r0",
+          "right" : "r1"
+        } ]
+      },
+      "id" : "r2"
+    },
+    "exprs" : [ {
+      "op" : "joinfield",
+      "ordinal" : 0,
+      "left" : "r0",
+      "right" : "r1"
+    }, {
+      "op" : "joinfield",
+      "ordinal" : 1,
+      "left" : "r0",
+      "right" : "r1"
+    }, {
+      "op" : "joinfield",
+      "ordinal" : 3,
+      "left" : "r0",
+      "right" : "r1"
+    } ],
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "left" : {
+        "op" : "scan",
+        "name" : "Input",
+        "arity" : 2,
+        "nonnull" : [ 0, 1 ],
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "aggregate",
+        "input" : {
+          "op" : "scan",
+          "name" : "Input",
+          "arity" : 2,
+          "nonnull" : [ 0, 1 ],
+          "id" : "r0"
+        },
+        "groups" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ],
+        "aggs" : [ {
+          "op" : "agg",
+          "name" : "w1",
+          "distinct" : false,
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r0"
+          } ]
+        } ],
+        "id" : "r4"
+      },
+      "cond" : {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 0,
+          "left" : "r0",
+          "right" : "r1"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 2,
+          "left" : "r0",
+          "right" : "r1"
+        } ]
+      },
+      "id" : "r5"
+    },
+    "exprs" : [ {
+      "op" : "joinfield",
+      "ordinal" : 0,
+      "left" : "r0",
+      "right" : "r4"
+    }, {
+      "op" : "joinfield",
+      "ordinal" : 1,
+      "left" : "r0",
+      "right" : "r4"
+    }, {
+      "op" : "joinfield",
+      "ordinal" : 3,
+      "left" : "r0",
+      "right" : "r4"
+    } ],
+    "id" : "r6"
+  }
+}

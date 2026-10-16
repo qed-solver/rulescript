@@ -80,6 +80,8 @@ public final class CockroachGenerator {
         var matchedEmptyIds = new HashSet<String>();
         collectEmptyIds(from, matchedEmptyIds);
         checkNewEmpty(to, true, matchedEmptyIds);
+        computedKeys(from, true);
+        computedKeys(to, false);
         var preds = new LinkedHashMap<String, PredicatePattern>();
         var projs = new HashSet<String>();
         var groups = new HashSet<String>();
@@ -100,6 +102,36 @@ public final class CockroachGenerator {
         node.set("from", from);
         node.set("to", to);
         return node;
+    }
+
+    private static void computedKeys(JsonNode node, boolean from) {
+        if (node == null) {
+            return;
+        }
+        if (node.isObject() && node.path("op").asText().equals("aggregate") && from) {
+            for (var group : node.withArray("groups")) {
+                if (group.path("op").asText().equals("proj")) {
+                    ((ObjectNode) group).put("op", "group_key");
+                }
+            }
+            for (var agg : node.withArray("aggs")) {
+                for (var arg : agg.withArray("args")) {
+                    if (arg.path("op").asText().equals("proj")) {
+                        ((ObjectNode) arg).put("op", "group_key");
+                    }
+                }
+            }
+        }
+        if (node.isObject() && node.path("op").asText().equals("project") && !from) {
+            for (var expr : node.withArray("exprs")) {
+                if (expr.path("op").asText().equals("group_key")) {
+                    ((ObjectNode) expr).put("op", "proj");
+                }
+            }
+        }
+        for (var child : node) {
+            computedKeys(child, from);
+        }
     }
 
     private static void collectValues(ObjectNode rel, List<ObjectNode> found) {
@@ -444,7 +476,7 @@ public final class CockroachGenerator {
                         .contains(rel.path("type").asText())) {
                     throw new UnsupportedOperationException("Unsupported join type: " + rel.path("type").asText());
                 }
-                if (rel.path("apply").asBoolean() && !Set.of("inner", "semi").contains(rel.path("type").asText())) {
+                if (rel.path("apply").asBoolean() && !Set.of("inner", "semi", "left", "anti").contains(rel.path("type").asText())) {
                     throw new UnsupportedOperationException("Unsupported Apply join type: " + rel.path("type").asText());
                 }
                 checkCond((ObjectNode) rel.get("cond"), from, preds, projs);
@@ -466,6 +498,9 @@ public final class CockroachGenerator {
                             var name = group.path("name").asText();
                             if (from && !groups.add(name)) {
                                 throw new UnsupportedOperationException("Unsupported repeated grouping symbol: " + name);
+                            }
+                            if (from) {
+                                projs.add(name);
                             }
                             if (!from && !groups.contains(name)) {
                                 throw new UnsupportedOperationException("Unsupported unbound grouping symbol: " + name);
@@ -489,6 +524,7 @@ public final class CockroachGenerator {
                             var keyName = arg.path("name").asText();
                             if (from) {
                                 groups.add(keyName);
+                                projs.add(keyName);
                             }
                             if (!from && !groups.contains(keyName)) {
                                 throw new UnsupportedOperationException("Unsupported unbound grouping symbol: " + keyName);
@@ -783,7 +819,7 @@ public final class CockroachGenerator {
             }
             case RelRN.Correlate corr -> {
                 var type = corr.ty().name().toLowerCase();
-                if (!Set.of("inner", "semi").contains(type)) {
+                if (!Set.of("inner", "semi", "left", "anti").contains(type)) {
                     throw new UnsupportedOperationException("Unsupported Correlate join type: " + type);
                 }
                 node.put("op", "join");
@@ -950,22 +986,41 @@ public final class CockroachGenerator {
                     node.put("op", "field");
                     node.put("ordinal", ref.getIndex());
                     node.put("of", id(context));
-                } else if (rex.semantics() instanceof org.apache.calcite.rex.RexSubQuery subquery &&
-                        subquery.getKind() == org.apache.calcite.sql.SqlKind.EXISTS) {
+                } else if (endsInExists(rex.semantics())) {
                     var components = rex.getClass().getRecordComponents();
-                    if (components == null || components.length != 1 ||
-                            components[0].getType() != RelRN.class) {
-                        throw new UnsupportedOperationException("Unsupported Exists relation component: "
-                                + constructName(rex.getClass()));
-                    }
+                    RelRN body = null;
+                    var guards = new ArrayList<ObjectNode>();
                     try {
-                        var accessor = components[0].getAccessor();
-                        accessor.setAccessible(true);
-                        node.put("op", "exists");
-                        node.set("input", rel((RelRN) accessor.invoke(rex), tagged));
+                        for (var component : components == null ? new java.lang.reflect.RecordComponent[0] : components) {
+                            component.getAccessor().setAccessible(true);
+                            var value = component.getAccessor().invoke(rex);
+                            if (value instanceof RelRN rel && body == null) {
+                                body = rel;
+                            } else if (value instanceof RexRN guard && !guard.semantics().isAlwaysTrue()) {
+                                guards.add(rex(guard, tagged, context));
+                            } else if (!(value instanceof RexRN)) {
+                                body = null;
+                                break;
+                            }
+                        }
                     } catch (ReflectiveOperationException e) {
                         throw new UnsupportedOperationException("Unsupported Exists relation access: "
                                 + constructName(rex.getClass()), e);
+                    }
+                    if (body == null) {
+                        throw new UnsupportedOperationException("Unsupported Exists relation component: "
+                                + constructName(rex.getClass()));
+                    }
+                    var exists = MAPPER.createObjectNode();
+                    exists.put("op", "exists");
+                    exists.set("input", rel(body, tagged));
+                    if (guards.isEmpty()) {
+                        node.setAll(exists);
+                    } else {
+                        node.put("op", "and");
+                        var args = node.putArray("args");
+                        guards.forEach(args::add);
+                        args.add(exists);
                     }
                 } else if (rex.semantics() instanceof org.apache.calcite.rex.RexLiteral literal && literal.isNull()) {
                     node.put("op", "null");
@@ -1000,6 +1055,14 @@ public final class CockroachGenerator {
             }
         }
         return node;
+    }
+
+    private static boolean endsInExists(org.apache.calcite.rex.RexNode node) {
+        if (node instanceof org.apache.calcite.rex.RexCall call && call.getKind() == org.apache.calcite.sql.SqlKind.AND) {
+            node = call.getOperands().get(call.getOperands().size() - 1);
+        }
+        return node instanceof org.apache.calcite.rex.RexSubQuery subquery
+                && subquery.getKind() == org.apache.calcite.sql.SqlKind.EXISTS;
     }
 
     private record Lift(List<RelRN> rels) { }

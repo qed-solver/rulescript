@@ -1,0 +1,103 @@
+{
+  "name" : "NormalizeInConst",
+  "from" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 3,
+      "id" : "r0"
+    },
+    "cond" : {
+      "op" : "or",
+      "args" : [ {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        } ]
+      }, {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "field",
+          "ordinal" : 2,
+          "of" : "r0"
+        } ]
+      }, {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        } ]
+      }, {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "field",
+          "ordinal" : 2,
+          "of" : "r0"
+        } ]
+      } ]
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 3,
+      "id" : "r0"
+    },
+    "cond" : {
+      "op" : "or",
+      "args" : [ {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        } ]
+      }, {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "field",
+          "ordinal" : 2,
+          "of" : "r0"
+        } ]
+      } ]
+    },
+    "id" : "r2"
+  }
+}

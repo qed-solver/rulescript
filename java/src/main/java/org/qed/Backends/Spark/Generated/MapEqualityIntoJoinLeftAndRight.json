@@ -1,0 +1,105 @@
+{
+  "name" : "MapEqualityIntoJoinLeftAndRight",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "left" : {
+      "op" : "scan",
+      "name" : "A",
+      "arity" : 2,
+      "nonnull" : [ 0, 1 ],
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "B",
+      "arity" : 1,
+      "nonnull" : [ 0 ],
+      "id" : "r1"
+    },
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 0,
+          "left" : "r0",
+          "right" : "r1"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 2,
+          "left" : "r0",
+          "right" : "r1"
+        } ]
+      }, {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 2,
+          "left" : "r0",
+          "right" : "r1"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 1,
+          "left" : "r0",
+          "right" : "r1"
+        } ]
+      } ]
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "inner",
+    "left" : {
+      "op" : "scan",
+      "name" : "A",
+      "arity" : 2,
+      "nonnull" : [ 0, 1 ],
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "B",
+      "arity" : 1,
+      "nonnull" : [ 0 ],
+      "id" : "r1"
+    },
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 2,
+          "left" : "r0",
+          "right" : "r1"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 1,
+          "left" : "r0",
+          "right" : "r1"
+        } ]
+      }, {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 0,
+          "left" : "r0",
+          "right" : "r1"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 1,
+          "left" : "r0",
+          "right" : "r1"
+        } ]
+      } ]
+    },
+    "id" : "r3"
+  }
+}

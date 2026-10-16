@@ -51,6 +51,8 @@ For `FilterMerge` this produces:
 
 **Interpreted backends** — rules are translated to a JSON rule format that an interpreter inside the engine applies. See [CockroachDB](src/main/java/org/qed/Backends/Cockroach/README.md).
 
+**Spark** — rules are translated to a JSON pattern that a generic Catalyst rule interprets inside the optimizer. See [Apache Spark](src/main/java/org/qed/Backends/Spark/README.md).
+
 **Native runtime backend** — rules are defined and applied directly through backend integration. See the [Datafusion backend](../README.md) for details.
 
 ## Qed Proofs on Rules

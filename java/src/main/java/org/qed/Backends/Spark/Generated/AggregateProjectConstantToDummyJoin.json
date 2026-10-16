@@ -1,0 +1,119 @@
+{
+  "name" : "AggregateProjectConstantToDummyJoin",
+  "from" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "project",
+      "input" : {
+        "op" : "scan",
+        "name" : "S",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "exprs" : [ {
+        "op" : "true"
+      }, {
+        "op" : "false"
+      }, {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ],
+      "id" : "r1"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r1"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r1"
+    }, {
+      "op" : "field",
+      "ordinal" : 2,
+      "of" : "r1"
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "f",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 2,
+        "of" : "r1"
+      } ]
+    } ],
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "project",
+      "input" : {
+        "op" : "join",
+        "type" : "inner",
+        "left" : {
+          "op" : "scan",
+          "name" : "S",
+          "arity" : 1,
+          "id" : "r0"
+        },
+        "right" : {
+          "op" : "values",
+          "rows" : [ [ {
+            "op" : "true"
+          }, {
+            "op" : "false"
+          } ] ],
+          "id" : "r3"
+        },
+        "cond" : {
+          "op" : "true"
+        },
+        "id" : "r4"
+      },
+      "exprs" : [ {
+        "op" : "joinfield",
+        "ordinal" : 1,
+        "left" : "r0",
+        "right" : "r3"
+      }, {
+        "op" : "joinfield",
+        "ordinal" : 2,
+        "left" : "r0",
+        "right" : "r3"
+      }, {
+        "op" : "joinfield",
+        "ordinal" : 0,
+        "left" : "r0",
+        "right" : "r3"
+      } ],
+      "id" : "r5"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r5"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r5"
+    }, {
+      "op" : "field",
+      "ordinal" : 2,
+      "of" : "r5"
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "f",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 2,
+        "of" : "r5"
+      } ]
+    } ],
+    "id" : "r6"
+  }
+}

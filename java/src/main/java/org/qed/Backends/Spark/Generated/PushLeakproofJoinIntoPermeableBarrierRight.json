@@ -1,0 +1,91 @@
+{
+  "name" : "PushLeakproofJoinIntoPermeableBarrierRight",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "arity" : 2,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "project",
+      "input" : {
+        "op" : "scan",
+        "name" : "R",
+        "arity" : 2,
+        "id" : "r1"
+      },
+      "exprs" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r1"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r1"
+      } ],
+      "id" : "r2"
+    },
+    "cond" : {
+      "op" : "pred",
+      "name" : "C",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0", "r2" ]
+      } ]
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "left" : {
+        "op" : "scan",
+        "name" : "L",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "R",
+        "arity" : 2,
+        "id" : "r1"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "C",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0", "r1" ]
+        } ]
+      },
+      "id" : "r4"
+    },
+    "exprs" : [ {
+      "op" : "joinfield",
+      "ordinal" : 0,
+      "left" : "r0",
+      "right" : "r1"
+    }, {
+      "op" : "joinfield",
+      "ordinal" : 1,
+      "left" : "r0",
+      "right" : "r1"
+    }, {
+      "op" : "joinfield",
+      "ordinal" : 2,
+      "left" : "r0",
+      "right" : "r1"
+    }, {
+      "op" : "joinfield",
+      "ordinal" : 3,
+      "left" : "r0",
+      "right" : "r1"
+    } ],
+    "id" : "r5"
+  }
+}

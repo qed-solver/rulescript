@@ -1,0 +1,93 @@
+{
+  "name" : "AggregateUnionTranspose",
+  "from" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "set",
+      "kind" : "union",
+      "all" : true,
+      "inputs" : [ {
+        "op" : "scan",
+        "name" : "A",
+        "arity" : 2,
+        "id" : "r0"
+      }, {
+        "op" : "scan",
+        "name" : "B",
+        "arity" : 2,
+        "id" : "r1"
+      } ],
+      "id" : "r2"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r2"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r2"
+    } ],
+    "aggs" : [ ],
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "set",
+      "kind" : "union",
+      "all" : true,
+      "inputs" : [ {
+        "op" : "aggregate",
+        "input" : {
+          "op" : "scan",
+          "name" : "A",
+          "arity" : 2,
+          "id" : "r0"
+        },
+        "groups" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        } ],
+        "aggs" : [ ],
+        "id" : "r4"
+      }, {
+        "op" : "aggregate",
+        "input" : {
+          "op" : "scan",
+          "name" : "B",
+          "arity" : 2,
+          "id" : "r1"
+        },
+        "groups" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r1"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r1"
+        } ],
+        "aggs" : [ ],
+        "id" : "r5"
+      } ],
+      "id" : "r6"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r6"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r6"
+    } ],
+    "aggs" : [ ],
+    "id" : "r7"
+  }
+}

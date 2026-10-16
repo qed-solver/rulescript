@@ -1,0 +1,35 @@
+{
+  "name" : "EliminateExistsZeroRows",
+  "from" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "scan",
+      "name" : "Outer",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "cond" : {
+      "op" : "exists",
+      "input" : {
+        "op" : "empty",
+        "of" : "r1",
+        "arity" : 1,
+        "id" : "r2"
+      }
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "scan",
+      "name" : "Outer",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "cond" : {
+      "op" : "false"
+    },
+    "id" : "r4"
+  }
+}

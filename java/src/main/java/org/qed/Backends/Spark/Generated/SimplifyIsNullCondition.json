@@ -1,0 +1,49 @@
+{
+  "name" : "SimplifyIsNullCondition",
+  "from" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "filter",
+      "input" : {
+        "op" : "scan",
+        "name" : "Input",
+        "arity" : 2,
+        "nonnull" : [ 0 ],
+        "id" : "r0"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "other",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "id" : "r1"
+    },
+    "cond" : {
+      "op" : "scalar",
+      "operator" : "IS NULL",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ]
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "scan",
+      "name" : "Input",
+      "arity" : 2,
+      "nonnull" : [ 0 ],
+      "id" : "r0"
+    },
+    "cond" : {
+      "op" : "false"
+    },
+    "id" : "r3"
+  }
+}

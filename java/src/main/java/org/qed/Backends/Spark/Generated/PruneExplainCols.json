@@ -1,0 +1,49 @@
+{
+  "name" : "PruneExplainCols",
+  "from" : {
+    "op" : "project",
+    "input" : {
+      "op" : "scan",
+      "name" : "I",
+      "arity" : 2,
+      "id" : "r0"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "E",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ]
+    } ],
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "project",
+      "input" : {
+        "op" : "scan",
+        "name" : "I",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "exprs" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ],
+      "id" : "r2"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "E",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r2" ]
+      } ]
+    } ],
+    "id" : "r3"
+  }
+}

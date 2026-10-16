@@ -1,0 +1,59 @@
+{
+  "name" : "FoldGroupingOperators",
+  "from" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "aggregate",
+      "input" : {
+        "op" : "scan",
+        "name" : "S",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "groups" : [ {
+        "op" : "group_key",
+        "name" : "k1",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ],
+      "aggs" : [ {
+        "op" : "agg",
+        "name" : "v",
+        "distinct" : false,
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ],
+      "id" : "r1"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r1"
+    } ],
+    "aggs" : [ ],
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "scan",
+      "name" : "S",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "groups" : [ {
+      "op" : "group_key",
+      "name" : "k1",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0" ]
+      } ]
+    } ],
+    "aggs" : [ ],
+    "id" : "r3"
+  }
+}

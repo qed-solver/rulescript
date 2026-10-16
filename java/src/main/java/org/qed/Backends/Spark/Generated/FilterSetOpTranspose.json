@@ -1,0 +1,73 @@
+{
+  "name" : "FilterSetOpTranspose",
+  "from" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "set",
+      "kind" : "union",
+      "all" : true,
+      "inputs" : [ {
+        "op" : "scan",
+        "name" : "L",
+        "arity" : 1,
+        "id" : "r0"
+      }, {
+        "op" : "scan",
+        "name" : "R",
+        "arity" : 1,
+        "id" : "r1"
+      } ],
+      "id" : "r2"
+    },
+    "cond" : {
+      "op" : "pred",
+      "name" : "P",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r2" ]
+      } ]
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "set",
+    "kind" : "union",
+    "all" : true,
+    "inputs" : [ {
+      "op" : "filter",
+      "input" : {
+        "op" : "scan",
+        "name" : "L",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "P",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "id" : "r4"
+    }, {
+      "op" : "filter",
+      "input" : {
+        "op" : "scan",
+        "name" : "R",
+        "arity" : 1,
+        "id" : "r1"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "P",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r1" ]
+        } ]
+      },
+      "id" : "r5"
+    } ],
+    "id" : "r6"
+  }
+}

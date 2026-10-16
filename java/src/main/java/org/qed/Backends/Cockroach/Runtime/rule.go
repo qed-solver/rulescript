@@ -137,7 +137,7 @@ func (r *Rel) check() error {
 		default:
 			return fmt.Errorf("unsupported join type %q", r.Type)
 		}
-		if r.Apply && r.Type != "inner" && r.Type != "semi" {
+		if r.Apply && r.Type != "inner" && r.Type != "semi" && r.Type != "left" && r.Type != "anti" {
 			return fmt.Errorf("unsupported apply join type %q", r.Type)
 		}
 		if err := r.Cond.check(); err != nil {

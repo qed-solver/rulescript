@@ -1,0 +1,118 @@
+{
+  "name" : "ProjectCalcMerge",
+  "from" : {
+    "op" : "project",
+    "input" : {
+      "op" : "project",
+      "input" : {
+        "op" : "filter",
+        "input" : {
+          "op" : "scan",
+          "name" : "S",
+          "arity" : 2,
+          "id" : "r0"
+        },
+        "cond" : {
+          "op" : "pred",
+          "name" : "B",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        },
+        "id" : "r1"
+      },
+      "exprs" : [ {
+        "op" : "proj",
+        "name" : "E0",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "proj",
+        "name" : "E1",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ],
+      "id" : "r2"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "P0",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r2" ]
+      } ]
+    }, {
+      "op" : "proj",
+      "name" : "P1",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r2" ]
+      } ]
+    } ],
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "filter",
+      "input" : {
+        "op" : "scan",
+        "name" : "S",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "B",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "id" : "r1"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "P0",
+      "args" : [ {
+        "op" : "proj",
+        "name" : "E0",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "proj",
+        "name" : "E1",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ]
+    }, {
+      "op" : "proj",
+      "name" : "P1",
+      "args" : [ {
+        "op" : "proj",
+        "name" : "E0",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "proj",
+        "name" : "E1",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ]
+    } ],
+    "id" : "r4"
+  }
+}

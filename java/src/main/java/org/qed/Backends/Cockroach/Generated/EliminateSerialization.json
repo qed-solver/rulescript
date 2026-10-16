@@ -1,0 +1,69 @@
+{
+  "name" : "EliminateSerialization",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "deser",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ]
+    } ],
+    "input" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "pred",
+        "name" : "cond",
+        "args" : [ {
+          "op" : "proj",
+          "name" : "deser",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r0"
+          } ]
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "Row",
+        "id" : "r0"
+      },
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "cond",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r3" ]
+      } ]
+    },
+    "input" : {
+      "op" : "project",
+      "exprs" : [ {
+        "op" : "proj",
+        "name" : "deser",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ]
+      } ],
+      "input" : {
+        "op" : "scan",
+        "name" : "Row",
+        "id" : "r0"
+      },
+      "id" : "r3"
+    },
+    "id" : "r4"
+  }
+}

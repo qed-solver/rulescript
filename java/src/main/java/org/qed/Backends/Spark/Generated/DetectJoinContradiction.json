@@ -1,0 +1,53 @@
+{
+  "name" : "DetectJoinContradiction",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "R",
+      "arity" : 1,
+      "id" : "r1"
+    },
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "false"
+      }, {
+        "op" : "pred",
+        "name" : "rest",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0", "r1" ]
+        } ]
+      } ]
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "inner",
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "R",
+      "arity" : 1,
+      "id" : "r1"
+    },
+    "cond" : {
+      "op" : "false"
+    },
+    "id" : "r3"
+  }
+}

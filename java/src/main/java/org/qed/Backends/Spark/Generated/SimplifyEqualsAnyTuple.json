@@ -1,0 +1,58 @@
+{
+  "name" : "SimplifyEqualsAnyTuple",
+  "from" : {
+    "op" : "join",
+    "type" : "semi",
+    "left" : {
+      "op" : "scan",
+      "name" : "S",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "V",
+      "arity" : 1,
+      "id" : "r1"
+    },
+    "cond" : {
+      "op" : "scalar",
+      "operator" : "=",
+      "args" : [ {
+        "op" : "joinfield",
+        "ordinal" : 0,
+        "left" : "r0",
+        "right" : "r1"
+      }, {
+        "op" : "joinfield",
+        "ordinal" : 1,
+        "left" : "r0",
+        "right" : "r1"
+      } ]
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "scan",
+      "name" : "S",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "cond" : {
+      "op" : "in",
+      "values" : [ {
+        "op" : "input",
+        "ordinal" : 0
+      } ],
+      "input" : {
+        "op" : "scan",
+        "name" : "V",
+        "arity" : 1,
+        "id" : "r1"
+      }
+    },
+    "id" : "r4"
+  }
+}

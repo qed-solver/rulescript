@@ -1,0 +1,66 @@
+{
+  "name" : "EliminateJoinUnderProjectLeft",
+  "from" : {
+    "op" : "project",
+    "input" : {
+      "op" : "join",
+      "type" : "left",
+      "left" : {
+        "op" : "scan",
+        "name" : "T",
+        "arity" : 1,
+        "nonnull" : [ 0 ],
+        "unique" : true,
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "T",
+        "arity" : 1,
+        "nonnull" : [ 0 ],
+        "unique" : true,
+        "id" : "r0"
+      },
+      "cond" : {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 0,
+          "left" : "r0",
+          "right" : "r0"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 1,
+          "left" : "r0",
+          "right" : "r0"
+        } ]
+      },
+      "id" : "r1"
+    },
+    "exprs" : [ {
+      "op" : "joinfield",
+      "ordinal" : 0,
+      "left" : "r0",
+      "right" : "r0"
+    } ],
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "scan",
+      "name" : "T",
+      "arity" : 1,
+      "nonnull" : [ 0 ],
+      "unique" : true,
+      "id" : "r0"
+    },
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    } ],
+    "id" : "r3"
+  }
+}

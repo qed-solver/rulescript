@@ -1,0 +1,83 @@
+{
+  "name" : "NormalizeSelectNotAnyFilter",
+  "from" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "scan",
+      "name" : "Input",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "cond" : {
+      "op" : "not",
+      "arg" : {
+        "op" : "in",
+        "values" : [ {
+          "op" : "input",
+          "ordinal" : 0
+        } ],
+        "input" : {
+          "op" : "scan",
+          "name" : "Sub",
+          "arity" : 1,
+          "id" : "r1"
+        }
+      }
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "scan",
+      "name" : "Input",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "cond" : {
+      "op" : "not",
+      "arg" : {
+        "op" : "exists",
+        "input" : {
+          "op" : "filter",
+          "input" : {
+            "op" : "scan",
+            "name" : "Sub",
+            "arity" : 1,
+            "id" : "r1"
+          },
+          "cond" : {
+            "op" : "or",
+            "args" : [ {
+              "op" : "scalar",
+              "operator" : "=",
+              "args" : [ {
+                "op" : "outer",
+                "ordinal" : 0
+              }, {
+                "op" : "input",
+                "ordinal" : 0
+              } ]
+            }, {
+              "op" : "scalar",
+              "operator" : "IS NULL",
+              "args" : [ {
+                "op" : "scalar",
+                "operator" : "=",
+                "args" : [ {
+                  "op" : "outer",
+                  "ordinal" : 0
+                }, {
+                  "op" : "input",
+                  "ordinal" : 0
+                } ]
+              } ]
+            } ]
+          },
+          "id" : "r4"
+        }
+      }
+    },
+    "id" : "r6"
+  }
+}

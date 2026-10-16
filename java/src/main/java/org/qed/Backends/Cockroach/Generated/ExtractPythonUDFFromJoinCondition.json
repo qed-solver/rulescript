@@ -1,0 +1,72 @@
+{
+  "name" : "ExtractPythonUDFFromJoinCondition",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "udf",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "pred",
+        "name" : "rest",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "R",
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "udf",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0" ]
+      } ]
+    },
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "pred",
+        "name" : "rest",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "L",
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "R",
+        "id" : "r1"
+      },
+      "id" : "r3"
+    },
+    "id" : "r4"
+  }
+}

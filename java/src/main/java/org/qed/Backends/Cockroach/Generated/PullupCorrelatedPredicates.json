@@ -1,0 +1,96 @@
+{
+  "name" : "PullupCorrelatedPredicates",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "outer_cond",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "exists",
+        "input" : {
+          "op" : "filter",
+          "cond" : {
+            "op" : "and",
+            "args" : [ {
+              "op" : "pred",
+              "name" : "pulled_up_cond",
+              "args" : [ ]
+            }, {
+              "op" : "pred",
+              "name" : "local_cond",
+              "args" : [ {
+                "op" : "row",
+                "rels" : [ "r1" ]
+              } ]
+            } ]
+          },
+          "input" : {
+            "op" : "scan",
+            "name" : "Inner",
+            "id" : "r1"
+          },
+          "id" : "r2"
+        }
+      } ]
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Outer",
+      "id" : "r0"
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "and_scalar",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "outer_cond",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "and_scalar",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "pulled_up_cond",
+          "args" : [ ]
+        }, {
+          "op" : "exists",
+          "input" : {
+            "op" : "filter",
+            "cond" : {
+              "op" : "pred",
+              "name" : "local_cond",
+              "args" : [ {
+                "op" : "row",
+                "rels" : [ "r1" ]
+              } ]
+            },
+            "input" : {
+              "op" : "scan",
+              "name" : "Inner",
+              "id" : "r1"
+            },
+            "id" : "r4"
+          }
+        } ]
+      } ]
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Outer",
+      "id" : "r0"
+    },
+    "id" : "r5"
+  }
+}

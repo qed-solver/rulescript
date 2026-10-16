@@ -1,0 +1,74 @@
+{
+  "name" : "PullOutVariantExtractions",
+  "from" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 2,
+      "id" : "r0"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "f",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "proj",
+        "name" : "ve",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        } ]
+      } ]
+    } ],
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "project",
+      "input" : {
+        "op" : "scan",
+        "name" : "Source",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "exprs" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      }, {
+        "op" : "proj",
+        "name" : "ve",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        } ]
+      } ],
+      "id" : "r2"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r2"
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "f",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r2"
+      } ]
+    } ],
+    "id" : "r3"
+  }
+}

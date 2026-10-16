@@ -1,0 +1,103 @@
+{
+  "name" : "PushSelectIntoGroupBy",
+  "from" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "aggregate",
+      "input" : {
+        "op" : "scan",
+        "name" : "Input",
+        "arity" : 2,
+        "nonnull" : [ 0, 1 ],
+        "id" : "r0"
+      },
+      "groups" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ],
+      "aggs" : [ {
+        "op" : "agg",
+        "name" : "f",
+        "distinct" : false,
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        } ]
+      } ],
+      "id" : "r1"
+    },
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "P",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r1"
+        } ]
+      }, {
+        "op" : "pred",
+        "name" : "R",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r1"
+        } ]
+      } ]
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "filter",
+      "input" : {
+        "op" : "scan",
+        "name" : "Input",
+        "arity" : 2,
+        "nonnull" : [ 0, 1 ],
+        "id" : "r0"
+      },
+      "cond" : {
+        "op" : "and",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "P",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r0"
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "R",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r0"
+          } ]
+        } ]
+      },
+      "id" : "r3"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "f",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r0"
+      } ]
+    } ],
+    "id" : "r4"
+  }
+}

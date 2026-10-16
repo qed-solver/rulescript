@@ -1,0 +1,62 @@
+{
+  "name" : "PruneValuesCols",
+  "from" : {
+    "op" : "project",
+    "input" : {
+      "op" : "values",
+      "rows" : [ [ {
+        "op" : "int",
+        "value" : 1
+      }, {
+        "op" : "int",
+        "value" : 2
+      }, {
+        "op" : "int",
+        "value" : 3
+      } ] ],
+      "id" : "r0"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "Top",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ]
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r0"
+    } ],
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "values",
+      "rows" : [ [ {
+        "op" : "int",
+        "value" : 1
+      }, {
+        "op" : "int",
+        "value" : 2
+      } ] ],
+      "id" : "r2"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "Top",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r2"
+      } ]
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r2"
+    } ],
+    "id" : "r3"
+  }
+}

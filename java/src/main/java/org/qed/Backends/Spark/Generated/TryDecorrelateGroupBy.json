@@ -1,0 +1,118 @@
+{
+  "name" : "TryDecorrelateGroupBy",
+  "from" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "left" : {
+        "op" : "scan",
+        "name" : "L",
+        "arity" : 1,
+        "nonnull" : [ 0 ],
+        "unique" : true,
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "aggregate",
+        "input" : {
+          "op" : "scan",
+          "name" : "R",
+          "arity" : 2,
+          "nonnull" : [ 0, 1 ],
+          "id" : "r1"
+        },
+        "groups" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r1"
+        } ],
+        "aggs" : [ {
+          "op" : "agg",
+          "name" : "f",
+          "distinct" : false,
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r1"
+          } ]
+        } ],
+        "id" : "r2"
+      },
+      "cond" : {
+        "op" : "true"
+      },
+      "id" : "r3"
+    },
+    "cond" : {
+      "op" : "pred",
+      "name" : "on",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0", "r2" ]
+      } ]
+    },
+    "id" : "r4"
+  },
+  "to" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "aggregate",
+      "input" : {
+        "op" : "join",
+        "type" : "inner",
+        "left" : {
+          "op" : "scan",
+          "name" : "L",
+          "arity" : 1,
+          "nonnull" : [ 0 ],
+          "unique" : true,
+          "id" : "r0"
+        },
+        "right" : {
+          "op" : "scan",
+          "name" : "R",
+          "arity" : 2,
+          "nonnull" : [ 0, 1 ],
+          "id" : "r1"
+        },
+        "cond" : {
+          "op" : "true"
+        },
+        "id" : "r5"
+      },
+      "groups" : [ {
+        "op" : "joinfield",
+        "ordinal" : 0,
+        "left" : "r0",
+        "right" : "r1"
+      }, {
+        "op" : "joinfield",
+        "ordinal" : 1,
+        "left" : "r0",
+        "right" : "r1"
+      } ],
+      "aggs" : [ {
+        "op" : "agg",
+        "name" : "f",
+        "distinct" : false,
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 2,
+          "left" : "r0",
+          "right" : "r1"
+        } ]
+      } ],
+      "id" : "r6"
+    },
+    "cond" : {
+      "op" : "pred",
+      "name" : "on",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r6" ]
+      } ]
+    },
+    "id" : "r7"
+  }
+}

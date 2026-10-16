@@ -1,0 +1,110 @@
+{
+  "name" : "PushPredicateThroughNonJoin",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "F",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r1"
+        } ]
+      }, {
+        "op" : "pred",
+        "name" : "G",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r1"
+        } ]
+      } ]
+    },
+    "input" : {
+      "op" : "project",
+      "exprs" : [ {
+        "op" : "proj",
+        "name" : "P1",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ]
+      }, {
+        "op" : "proj",
+        "name" : "P2",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ]
+      } ],
+      "input" : {
+        "op" : "scan",
+        "name" : "Source",
+        "id" : "r0"
+      },
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "G",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r1"
+      } ]
+    },
+    "input" : {
+      "op" : "project",
+      "exprs" : [ {
+        "op" : "proj",
+        "name" : "P1",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ]
+      }, {
+        "op" : "proj",
+        "name" : "P2",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ]
+      } ],
+      "input" : {
+        "op" : "filter",
+        "cond" : {
+          "op" : "pred",
+          "name" : "F",
+          "args" : [ {
+            "op" : "proj",
+            "name" : "P1",
+            "args" : [ {
+              "op" : "field",
+              "ordinal" : 0,
+              "of" : "r0"
+            } ]
+          } ]
+        },
+        "input" : {
+          "op" : "scan",
+          "name" : "Source",
+          "id" : "r0"
+        },
+        "id" : "r3"
+      },
+      "id" : "r4"
+    },
+    "id" : "r5"
+  }
+}

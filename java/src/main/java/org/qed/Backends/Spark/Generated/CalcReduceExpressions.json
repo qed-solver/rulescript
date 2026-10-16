@@ -1,0 +1,42 @@
+{
+  "name" : "CalcReduceExpressions",
+  "from" : {
+    "op" : "project",
+    "input" : {
+      "op" : "filter",
+      "input" : {
+        "op" : "scan",
+        "name" : "S",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "cond" : {
+        "op" : "false"
+      },
+      "id" : "r1"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "E1",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0" ]
+      } ]
+    }, {
+      "op" : "proj",
+      "name" : "E2",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ]
+    } ],
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "empty",
+    "of" : "r3",
+    "arity" : 2,
+    "id" : "r4"
+  }
+}

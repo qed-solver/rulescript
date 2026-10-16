@@ -1,0 +1,59 @@
+{
+  "name" : "IntersectReorder",
+  "from" : {
+    "op" : "set",
+    "kind" : "intersect",
+    "all" : false,
+    "inputs" : [ {
+      "op" : "set",
+      "kind" : "intersect",
+      "all" : false,
+      "inputs" : [ {
+        "op" : "scan",
+        "name" : "A",
+        "arity" : 1,
+        "id" : "r0"
+      }, {
+        "op" : "scan",
+        "name" : "B",
+        "arity" : 1,
+        "id" : "r1"
+      } ],
+      "id" : "r3"
+    }, {
+      "op" : "scan",
+      "name" : "C",
+      "arity" : 1,
+      "id" : "r2"
+    } ],
+    "id" : "r4"
+  },
+  "to" : {
+    "op" : "set",
+    "kind" : "intersect",
+    "all" : false,
+    "inputs" : [ {
+      "op" : "set",
+      "kind" : "intersect",
+      "all" : false,
+      "inputs" : [ {
+        "op" : "scan",
+        "name" : "C",
+        "arity" : 1,
+        "id" : "r2"
+      }, {
+        "op" : "scan",
+        "name" : "A",
+        "arity" : 1,
+        "id" : "r0"
+      } ],
+      "id" : "r5"
+    }, {
+      "op" : "scan",
+      "name" : "B",
+      "arity" : 1,
+      "id" : "r1"
+    } ],
+    "id" : "r6"
+  }
+}

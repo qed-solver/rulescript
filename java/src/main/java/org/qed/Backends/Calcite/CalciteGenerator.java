@@ -17,6 +17,7 @@ import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.CodeGenerator;
@@ -472,6 +473,10 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         if (semantics instanceof RexLiteral literal) {
             return matchLiteral(env, literal);
         }
+        var lifted = withExists(custom);
+        if (lifted != null) {
+            return onMatch(env, lifted);
+        }
         if (semantics instanceof RexSubQuery subQuery && subQuery.getKind() == SqlKind.EXISTS) {
             env.check(env.rex + " instanceof RexSubQuery && ((RexSubQuery) " + env.rex
                     + ").getKind() == org.apache.calcite.sql.SqlKind.EXISTS");
@@ -483,6 +488,52 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             return env;
         }
         return unimplementedOnMatch(env, custom);
+    }
+
+    private record ExistsOf(RelRN input) implements RexRN {
+        @Override
+        public RexNode semantics() {
+            return RexSubQuery.exists(input.semantics());
+        }
+    }
+
+    private static RexRN withExists(RexRN custom) {
+        var components = custom.getClass().getRecordComponents();
+        var semantics = custom.semantics();
+        if (components == null || components.length < 2) {
+            return null;
+        }
+        var guards = semantics instanceof RexCall call && call.getKind() == SqlKind.AND ? call.getOperands().size() - 1 : 0;
+        var last = semantics instanceof RexCall call && call.getKind() == SqlKind.AND
+                ? call.getOperands().get(call.getOperands().size() - 1) : semantics;
+        if (!(last instanceof RexSubQuery subQuery) || subQuery.getKind() != SqlKind.EXISTS) {
+            return null;
+        }
+        var parts = new java.util.ArrayList<RexRN>();
+        RelRN relation = null;
+        try {
+            for (var component : components) {
+                component.getAccessor().setAccessible(true);
+                var value = component.getAccessor().invoke(custom);
+                if (value instanceof RelRN rel && relation == null) {
+                    relation = rel;
+                } else if (value instanceof RexRN rex) {
+                    if (guards == 0 && rex.semantics().isAlwaysTrue()) {
+                        continue;
+                    }
+                    parts.add(rex);
+                } else {
+                    return null;
+                }
+            }
+        } catch (ReflectiveOperationException e) {
+            return null;
+        }
+        if (relation == null || parts.size() != guards) {
+            return null;
+        }
+        parts.add(new ExistsOf(relation));
+        return parts.size() == 1 ? parts.get(0) : RexRN.and(parts.toArray(new RexRN[0]));
     }
 
     private static RelRN subQueryBody(RexRN custom) {
@@ -962,7 +1013,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
                 if (literal.isNull()) {
                     return "b.getRexBuilder().makeNullLiteral(" + typeReference(env, literal.getType()) + ")";
                 }
-                return "b.literal(" + javaValue(literal) + ")";
+                return literalCall(literal);
             }
             case RexFieldAccess access when access.getReferenceExpr() instanceof RexCorrelVariable variable -> {
                 var reference = env.correlations.get(variable.id);
@@ -1062,7 +1113,11 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             if (literal.isNull()) {
                 return emit(env, "b.getRexBuilder().makeNullLiteral(" + typeReference(env, literal.getType()) + ")");
             }
-            return emit(env, "b.literal(" + javaValue(literal) + ")");
+            return emit(env, literalCall(literal));
+        }
+        var lifted = withExists(custom);
+        if (lifted != null) {
+            return transform(env, lifted);
         }
         if (semantics instanceof RexSubQuery subQuery && subQuery.getKind() == SqlKind.EXISTS) {
             var inputs = env.inputs;
@@ -1167,6 +1222,11 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             }
         }
         return "new String[]{" + names + "}" + (rows.isEmpty() ? "" : ", " + String.join(", ", rows));
+    }
+
+    private static String literalCall(RexLiteral value) {
+        return value.getType().getSqlTypeName() == SqlTypeName.BIGINT
+                ? "CalciteRuntime.bigint(b, " + javaValue(value) + ")" : "b.literal(" + javaValue(value) + ")";
     }
 
     private static String javaValue(RexLiteral value) {

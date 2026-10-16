@@ -152,4 +152,12 @@ public interface RexRN {
             return RuleBuilder.create().literal(true);
         }
     }
+
+    record Const(RelType type) implements RexRN {
+
+        @Override
+        public RexNode semantics() {
+            return RuleBuilder.create().getRexBuilder().makeLiteral(0, type);
+        }
+    }
 }

@@ -1,0 +1,69 @@
+{
+  "name" : "SubQueryRemove",
+  "from" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "scan",
+      "name" : "R",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "cond" : {
+      "op" : "exists",
+      "input" : {
+        "op" : "scan",
+        "name" : "S",
+        "arity" : 1,
+        "id" : "r1"
+      }
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "left" : {
+        "op" : "scan",
+        "name" : "R",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "aggregate",
+        "input" : {
+          "op" : "project",
+          "input" : {
+            "op" : "scan",
+            "name" : "S",
+            "arity" : 1,
+            "id" : "r1"
+          },
+          "exprs" : [ {
+            "op" : "true"
+          } ],
+          "id" : "r3"
+        },
+        "groups" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r3"
+        } ],
+        "aggs" : [ ],
+        "id" : "r4"
+      },
+      "cond" : {
+        "op" : "true"
+      },
+      "id" : "r5"
+    },
+    "exprs" : [ {
+      "op" : "joinfield",
+      "ordinal" : 0,
+      "left" : "r0",
+      "right" : "r4"
+    } ],
+    "id" : "r6"
+  }
+}

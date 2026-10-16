@@ -209,6 +209,11 @@ public final class CalciteRuntime {
         return bound == null || sameType(bound, expr.getType());
     }
 
+    public static RexNode bigint(RelBuilder b, long value) {
+        return b.getRexBuilder().makeExactLiteral(java.math.BigDecimal.valueOf(value),
+                b.getTypeFactory().createSqlType(org.apache.calcite.sql.type.SqlTypeName.BIGINT));
+    }
+
     public static boolean isLiteral(RexNode expr, Object value) {
         return expr instanceof org.apache.calcite.rex.RexLiteral literal && !literal.isNull()
                 && value.equals(literal.getValueAs(value.getClass()));

@@ -1,0 +1,44 @@
+{
+  "name" : "EliminateGroupByProject",
+  "from" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "project",
+      "input" : {
+        "op" : "scan",
+        "name" : "S",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "exprs" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ],
+      "id" : "r1"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r1"
+    } ],
+    "aggs" : [ ],
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "scan",
+      "name" : "S",
+      "arity" : 2,
+      "id" : "r0"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    } ],
+    "aggs" : [ ],
+    "id" : "r3"
+  }
+}

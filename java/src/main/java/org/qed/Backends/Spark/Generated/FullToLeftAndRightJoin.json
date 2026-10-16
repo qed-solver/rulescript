@@ -1,0 +1,127 @@
+{
+  "name" : "FullToLeftAndRightJoin",
+  "from" : {
+    "op" : "join",
+    "type" : "full",
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "R",
+      "arity" : 1,
+      "id" : "r1"
+    },
+    "cond" : {
+      "op" : "scalar",
+      "operator" : "=",
+      "args" : [ {
+        "op" : "joinfield",
+        "ordinal" : 0,
+        "left" : "r0",
+        "right" : "r1"
+      }, {
+        "op" : "joinfield",
+        "ordinal" : 1,
+        "left" : "r0",
+        "right" : "r1"
+      } ]
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "set",
+    "kind" : "union",
+    "all" : true,
+    "inputs" : [ {
+      "op" : "join",
+      "type" : "left",
+      "left" : {
+        "op" : "scan",
+        "name" : "L",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "R",
+        "arity" : 1,
+        "id" : "r1"
+      },
+      "cond" : {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 0,
+          "left" : "r0",
+          "right" : "r1"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 1,
+          "left" : "r0",
+          "right" : "r1"
+        } ]
+      },
+      "id" : "r3"
+    }, {
+      "op" : "filter",
+      "input" : {
+        "op" : "join",
+        "type" : "right",
+        "left" : {
+          "op" : "scan",
+          "name" : "L",
+          "arity" : 1,
+          "id" : "r0"
+        },
+        "right" : {
+          "op" : "scan",
+          "name" : "R",
+          "arity" : 1,
+          "id" : "r1"
+        },
+        "cond" : {
+          "op" : "scalar",
+          "operator" : "=",
+          "args" : [ {
+            "op" : "joinfield",
+            "ordinal" : 0,
+            "left" : "r0",
+            "right" : "r1"
+          }, {
+            "op" : "joinfield",
+            "ordinal" : 1,
+            "left" : "r0",
+            "right" : "r1"
+          } ]
+        },
+        "id" : "r4"
+      },
+      "cond" : {
+        "op" : "scalar",
+        "operator" : "IS NOT TRUE",
+        "args" : [ {
+          "op" : "scalar",
+          "operator" : "=",
+          "args" : [ {
+            "op" : "joinfield",
+            "ordinal" : 0,
+            "left" : "r0",
+            "right" : "r1"
+          }, {
+            "op" : "joinfield",
+            "ordinal" : 1,
+            "left" : "r0",
+            "right" : "r1"
+          } ]
+        } ]
+      },
+      "id" : "r5"
+    } ],
+    "id" : "r6"
+  }
+}

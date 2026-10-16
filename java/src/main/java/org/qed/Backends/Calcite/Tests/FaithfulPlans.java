@@ -13,6 +13,7 @@ import org.apache.calcite.rel.logical.LogicalIntersect;
 import org.apache.calcite.rel.logical.LogicalMinus;
 import org.apache.calcite.rel.logical.LogicalUnion;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.util.ImmutableBitSet;
@@ -56,10 +57,11 @@ public final class FaithfulPlans {
         switch (pattern) {
             case RelRN.Filter filter -> {
                 push(builder, filter.source(), options);
-                if (options.exact()) {
-                    builder.push(LogicalFilter.create(builder.build(), rex(builder, options, filter.cond())));
+                var cond = rex(builder, options, filter.cond());
+                if (options.exact() || RexUtil.SubQueryFinder.find(cond) != null) {
+                    builder.push(LogicalFilter.create(builder.build(), cond));
                 } else {
-                    builder.filter(rex(builder, options, filter.cond()));
+                    builder.filter(cond);
                 }
             }
             case RelRN.Project project -> {
@@ -188,10 +190,35 @@ public final class FaithfulPlans {
                     rexBuilder.makeCall(groupBy.operator(), groupBy.sources().map(e -> rex(builder, options, e)).asJava());
             default -> {
                 var body = subqueryBody(pattern);
-                yield body == null ? pattern.semantics()
-                        : org.apache.calcite.rex.RexSubQuery.exists(build(body, options));
+                if (body == null) {
+                    yield pattern.semantics();
+                }
+                var parts = new java.util.ArrayList<RexNode>();
+                for (var guard : guards(pattern)) {
+                    if (!guard.semantics().isAlwaysTrue()) {
+                        parts.add(rex(builder, options, guard));
+                    }
+                }
+                parts.add(org.apache.calcite.rex.RexSubQuery.exists(build(body, options)));
+                yield parts.size() == 1 ? parts.get(0) : rexBuilder.makeCall(SqlStdOperatorTable.AND, parts);
             }
         };
+    }
+
+    private static List<RexRN> guards(RexRN pattern) {
+        var out = new java.util.ArrayList<RexRN>();
+        try {
+            for (var component : pattern.getClass().getRecordComponents()) {
+                var accessor = component.getAccessor();
+                accessor.setAccessible(true);
+                if (accessor.invoke(pattern) instanceof RexRN rex) {
+                    out.add(rex);
+                }
+            }
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+        return out;
     }
 
     private static RelRN subqueryBody(RexRN pattern) {

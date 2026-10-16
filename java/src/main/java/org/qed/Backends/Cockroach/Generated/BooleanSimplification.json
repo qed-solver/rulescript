@@ -1,0 +1,88 @@
+{
+  "name" : "BooleanSimplification",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "or",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "A",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "B",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        } ]
+      }, {
+        "op" : "or",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "A",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "C",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        } ]
+      } ]
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "or",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "A",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "and_scalar",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "B",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "C",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        } ]
+      } ]
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "id" : "r0"
+    },
+    "id" : "r2"
+  }
+}

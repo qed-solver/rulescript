@@ -1,0 +1,46 @@
+{
+  "name" : "RemoveNoopUnion",
+  "from" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "set",
+      "kind" : "union",
+      "all" : true,
+      "inputs" : [ {
+        "op" : "scan",
+        "name" : "A",
+        "arity" : 1,
+        "id" : "r0"
+      }, {
+        "op" : "scan",
+        "name" : "A",
+        "arity" : 1,
+        "id" : "r0"
+      } ],
+      "id" : "r1"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r1"
+    } ],
+    "aggs" : [ ],
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "scan",
+      "name" : "A",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    } ],
+    "aggs" : [ ],
+    "id" : "r3"
+  }
+}

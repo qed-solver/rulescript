@@ -1,0 +1,122 @@
+{
+  "name" : "PruneGroupByCols",
+  "from" : {
+    "op" : "project",
+    "input" : {
+      "op" : "aggregate",
+      "input" : {
+        "op" : "scan",
+        "name" : "S",
+        "arity" : 4,
+        "id" : "r0"
+      },
+      "groups" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ],
+      "aggs" : [ {
+        "op" : "agg",
+        "name" : "f",
+        "distinct" : false,
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        } ]
+      }, {
+        "op" : "agg",
+        "name" : "g",
+        "distinct" : false,
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 2,
+          "of" : "r0"
+        } ]
+      } ],
+      "id" : "r1"
+    },
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r1"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r1"
+    }, {
+      "op" : "field",
+      "ordinal" : 2,
+      "of" : "r1"
+    } ],
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "aggregate",
+      "input" : {
+        "op" : "project",
+        "input" : {
+          "op" : "scan",
+          "name" : "S",
+          "arity" : 4,
+          "id" : "r0"
+        },
+        "exprs" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        }, {
+          "op" : "field",
+          "ordinal" : 2,
+          "of" : "r0"
+        } ],
+        "id" : "r3"
+      },
+      "groups" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r3"
+      } ],
+      "aggs" : [ {
+        "op" : "agg",
+        "name" : "f",
+        "distinct" : false,
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r3"
+        } ]
+      }, {
+        "op" : "agg",
+        "name" : "g",
+        "distinct" : false,
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 2,
+          "of" : "r3"
+        } ]
+      } ],
+      "id" : "r4"
+    },
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r4"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r4"
+    }, {
+      "op" : "field",
+      "ordinal" : 2,
+      "of" : "r4"
+    } ],
+    "id" : "r5"
+  }
+}

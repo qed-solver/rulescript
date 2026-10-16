@@ -1,0 +1,69 @@
+{
+  "name" : "PruneWithCols",
+  "from" : {
+    "op" : "project",
+    "input" : {
+      "op" : "project",
+      "input" : {
+        "op" : "scan",
+        "name" : "Input",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "exprs" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ],
+      "id" : "r1"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "Expr",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r1" ]
+      } ]
+    }, {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r1"
+    } ],
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "project",
+      "input" : {
+        "op" : "scan",
+        "name" : "Input",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "exprs" : [ {
+        "op" : "proj",
+        "name" : "Expr",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ],
+      "id" : "r3"
+    },
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r3"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r3"
+    } ],
+    "id" : "r4"
+  }
+}

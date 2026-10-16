@@ -1,0 +1,190 @@
+{
+  "name" : "TryDecorrelateWindow",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "arity" : 1,
+      "nonnull" : [ 0 ],
+      "unique" : true,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "join",
+      "type" : "inner",
+      "left" : {
+        "op" : "scan",
+        "name" : "Input",
+        "arity" : 1,
+        "nonnull" : [ 0 ],
+        "id" : "r1"
+      },
+      "right" : {
+        "op" : "aggregate",
+        "input" : {
+          "op" : "scan",
+          "name" : "Input",
+          "arity" : 1,
+          "nonnull" : [ 0 ],
+          "id" : "r1"
+        },
+        "groups" : [ ],
+        "aggs" : [ {
+          "op" : "agg",
+          "name" : "w",
+          "distinct" : false,
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r1" ]
+          } ]
+        } ],
+        "id" : "r2"
+      },
+      "cond" : {
+        "op" : "true"
+      },
+      "id" : "r3"
+    },
+    "cond" : {
+      "op" : "pred",
+      "name" : "on_cond",
+      "args" : [ {
+        "op" : "joinfield",
+        "ordinal" : 0,
+        "left" : "r0",
+        "right" : "r3"
+      }, {
+        "op" : "joinfield",
+        "ordinal" : 1,
+        "left" : "r0",
+        "right" : "r3"
+      } ]
+    },
+    "id" : "r4"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "filter",
+      "input" : {
+        "op" : "join",
+        "type" : "inner",
+        "left" : {
+          "op" : "join",
+          "type" : "inner",
+          "left" : {
+            "op" : "scan",
+            "name" : "L",
+            "arity" : 1,
+            "nonnull" : [ 0 ],
+            "unique" : true,
+            "id" : "r0"
+          },
+          "right" : {
+            "op" : "scan",
+            "name" : "Input",
+            "arity" : 1,
+            "nonnull" : [ 0 ],
+            "id" : "r1"
+          },
+          "cond" : {
+            "op" : "true"
+          },
+          "id" : "r5"
+        },
+        "right" : {
+          "op" : "aggregate",
+          "input" : {
+            "op" : "join",
+            "type" : "inner",
+            "left" : {
+              "op" : "scan",
+              "name" : "L",
+              "arity" : 1,
+              "nonnull" : [ 0 ],
+              "unique" : true,
+              "id" : "r0"
+            },
+            "right" : {
+              "op" : "scan",
+              "name" : "Input",
+              "arity" : 1,
+              "nonnull" : [ 0 ],
+              "id" : "r1"
+            },
+            "cond" : {
+              "op" : "true"
+            },
+            "id" : "r5"
+          },
+          "groups" : [ {
+            "op" : "joinfield",
+            "ordinal" : 0,
+            "left" : "r0",
+            "right" : "r1"
+          } ],
+          "aggs" : [ {
+            "op" : "agg",
+            "name" : "w",
+            "distinct" : false,
+            "args" : [ {
+              "op" : "joinfield",
+              "ordinal" : 1,
+              "left" : "r0",
+              "right" : "r1"
+            } ]
+          } ],
+          "id" : "r6"
+        },
+        "cond" : {
+          "op" : "scalar",
+          "operator" : "=",
+          "args" : [ {
+            "op" : "joinfield",
+            "ordinal" : 0,
+            "left" : "r5",
+            "right" : "r6"
+          }, {
+            "op" : "joinfield",
+            "ordinal" : 2,
+            "left" : "r5",
+            "right" : "r6"
+          } ]
+        },
+        "id" : "r7"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "on_cond",
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 0,
+          "left" : "r5",
+          "right" : "r6"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 1,
+          "left" : "r5",
+          "right" : "r6"
+        } ]
+      },
+      "id" : "r8"
+    },
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r8"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r8"
+    }, {
+      "op" : "field",
+      "ordinal" : 3,
+      "of" : "r8"
+    } ],
+    "id" : "r9"
+  }
+}

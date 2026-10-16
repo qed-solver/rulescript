@@ -1,0 +1,79 @@
+{
+  "name" : "PushLeakproofFiltersIntoPermeableBarrier",
+  "from" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "project",
+      "input" : {
+        "op" : "scan",
+        "name" : "Input",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "exprs" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ],
+      "id" : "r1"
+    },
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "Leakproof",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r1" ]
+        } ]
+      }, {
+        "op" : "pred",
+        "name" : "Remaining",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r1" ]
+        } ]
+      } ]
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "project",
+      "input" : {
+        "op" : "filter",
+        "input" : {
+          "op" : "scan",
+          "name" : "Input",
+          "arity" : 1,
+          "id" : "r0"
+        },
+        "cond" : {
+          "op" : "pred",
+          "name" : "Leakproof",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        },
+        "id" : "r3"
+      },
+      "exprs" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r3"
+      } ],
+      "id" : "r4"
+    },
+    "cond" : {
+      "op" : "pred",
+      "name" : "Remaining",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r4" ]
+      } ]
+    },
+    "id" : "r5"
+  }
+}

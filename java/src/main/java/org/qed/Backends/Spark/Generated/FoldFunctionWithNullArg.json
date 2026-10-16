@@ -1,0 +1,43 @@
+{
+  "name" : "FoldFunctionWithNullArg",
+  "from" : {
+    "op" : "project",
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "exprs" : [ {
+      "op" : "scalar",
+      "operator" : "=",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      }, {
+        "op" : "null",
+        "type" : "same_as",
+        "refs" : [ {
+          "of" : "r0",
+          "ordinal" : 0
+        } ]
+      } ]
+    } ],
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "exprs" : [ {
+      "op" : "null",
+      "type" : "bool"
+    } ],
+    "id" : "r2"
+  }
+}

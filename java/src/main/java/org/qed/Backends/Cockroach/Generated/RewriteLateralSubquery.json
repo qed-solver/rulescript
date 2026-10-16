@@ -1,0 +1,55 @@
+{
+  "name" : "RewriteLateralSubquery",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "left",
+    "apply" : true,
+    "cond" : {
+      "op" : "pred",
+      "name" : "lateral_cond",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r2" ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "arity" : 2,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "S",
+      "arity" : 2,
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "left",
+    "cond" : {
+      "op" : "pred",
+      "name" : "lateral_cond",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r3" ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "arity" : 2,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "S",
+      "arity" : 2,
+      "id" : "r1"
+    },
+    "id" : "r3"
+  }
+}

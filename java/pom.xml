@@ -22,6 +22,10 @@
                 <version>3.14.0</version>
                 <configuration>
                     <release>${maven.compiler.release}</release>
+                    <excludes>
+                        <exclude>org/qed/Backends/Spark/Runtime/**</exclude>
+                        <exclude>org/qed/Backends/Spark/Tests/**</exclude>
+                    </excludes>
                 </configuration>
             </plugin>
             <plugin>
@@ -42,6 +46,12 @@
                         <id>cockroach-codegen</id>
                         <configuration>
                             <mainClass>org.qed.Backends.Cockroach.CockroachTester</mainClass>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>spark-codegen</id>
+                        <configuration>
+                            <mainClass>org.qed.Backends.Spark.SparkTester</mainClass>
                         </configuration>
                     </execution>
                     <execution>

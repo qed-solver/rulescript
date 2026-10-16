@@ -1,0 +1,21 @@
+{
+  "name" : "UnionEliminator",
+  "from" : {
+    "op" : "set",
+    "kind" : "union",
+    "all" : true,
+    "inputs" : [ {
+      "op" : "scan",
+      "name" : "Input",
+      "arity" : 1,
+      "id" : "r0"
+    } ],
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "scan",
+    "name" : "Input",
+    "arity" : 1,
+    "id" : "r0"
+  }
+}

@@ -79,6 +79,10 @@ func (r *Rel) mayMatch(op opt.Operator) bool {
 				return op == opt.InnerJoinApplyOp
 			case "semi":
 				return op == opt.SemiJoinApplyOp
+			case "left":
+				return op == opt.LeftJoinApplyOp
+			case "anti":
+				return op == opt.AntiJoinApplyOp
 			}
 			return false
 		}
@@ -626,6 +630,14 @@ func (s *state) matchRel(p *Rel, e memo.RelExpr) bool {
 			}
 		case *memo.SemiJoinApplyExpr:
 			if p.Apply && p.Type == "semi" {
+				left, right, on, private = join.Left, join.Right, join.On, &join.JoinPrivate
+			}
+		case *memo.LeftJoinApplyExpr:
+			if p.Apply && p.Type == "left" {
+				left, right, on, private = join.Left, join.Right, join.On, &join.JoinPrivate
+			}
+		case *memo.AntiJoinApplyExpr:
+			if p.Apply && p.Type == "anti" {
 				left, right, on, private = join.Left, join.Right, join.On, &join.JoinPrivate
 			}
 		}
@@ -1423,6 +1435,10 @@ func (s *state) buildRel(p *Rel) memo.RelExpr {
 				out = s.f.ConstructInnerJoinApply(left, right, on, &private)
 			case "semi":
 				out = s.f.ConstructSemiJoinApply(left, right, on, &private)
+			case "left":
+				out = s.f.ConstructLeftJoinApply(left, right, on, &private)
+			case "anti":
+				out = s.f.ConstructAntiJoinApply(left, right, on, &private)
 			default:
 				panic(abort{})
 			}
@@ -1786,6 +1802,11 @@ func (s *state) buildScalar(p *Rex) opt.ScalarExpr {
 
 func (s *state) buildProjection(p *Rex) memo.ProjectionsItem {
 	b, ok := s.projs[p.Name]
+	if p.Op == "proj" && !ok {
+		if _, keyed := s.groups[p.Name]; keyed {
+			return s.buildBoundScalar(p, s.groups)
+		}
+	}
 	if p.Op != "proj" || !ok {
 		panic(abort{})
 	}

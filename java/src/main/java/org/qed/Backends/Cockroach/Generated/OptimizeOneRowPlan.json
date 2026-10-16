@@ -1,0 +1,39 @@
+{
+  "name" : "OptimizeOneRowPlan",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "aggregate",
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    } ],
+    "aggs" : [ ],
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "unique" : true,
+      "arity" : 1,
+      "non_null" : [ 0 ],
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    } ],
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "unique" : true,
+      "arity" : 1,
+      "non_null" : [ 0 ],
+      "id" : "r0"
+    },
+    "id" : "r2"
+  }
+}

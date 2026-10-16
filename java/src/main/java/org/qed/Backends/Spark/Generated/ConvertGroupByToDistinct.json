@@ -1,0 +1,43 @@
+{
+  "name" : "ConvertGroupByToDistinct",
+  "from" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "scan",
+      "name" : "Input",
+      "arity" : 2,
+      "nonnull" : [ 0, 1 ],
+      "id" : "r0"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r0"
+    } ],
+    "aggs" : [ ],
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "set",
+    "kind" : "intersect",
+    "all" : false,
+    "inputs" : [ {
+      "op" : "scan",
+      "name" : "Input",
+      "arity" : 2,
+      "nonnull" : [ 0, 1 ],
+      "id" : "r0"
+    }, {
+      "op" : "scan",
+      "name" : "Input",
+      "arity" : 2,
+      "nonnull" : [ 0, 1 ],
+      "id" : "r0"
+    } ],
+    "id" : "r2"
+  }
+}

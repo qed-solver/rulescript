@@ -1,0 +1,62 @@
+{
+  "name" : "DecorrelateProjectSet",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "E",
+      "arity" : 1,
+      "id" : "r1"
+    },
+    "cond" : {
+      "op" : "pred",
+      "name" : "M",
+      "args" : [ {
+        "op" : "joinfield",
+        "ordinal" : 1,
+        "left" : "r0",
+        "right" : "r1"
+      } ]
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "inner",
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "filter",
+      "input" : {
+        "op" : "scan",
+        "name" : "E",
+        "arity" : 1,
+        "id" : "r1"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "M",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r1" ]
+        } ]
+      },
+      "id" : "r3"
+    },
+    "cond" : {
+      "op" : "true"
+    },
+    "id" : "r4"
+  }
+}
