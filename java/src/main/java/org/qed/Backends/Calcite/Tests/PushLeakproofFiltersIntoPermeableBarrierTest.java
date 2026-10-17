@@ -1,5 +1,7 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.PushLeakproofFiltersIntoPermeableBarrier;
 import org.qed.RuleBuilder;
@@ -7,7 +9,6 @@ import org.qed.RuleBuilder;
 import java.util.List;
 
 public class PushLeakproofFiltersIntoPermeableBarrierTest {
-
     public static void runTest() {
         var rule = new PushLeakproofFiltersIntoPermeableBarrier();
         RuleChecks.rewritesPattern(rule);
@@ -17,28 +18,25 @@ public class PushLeakproofFiltersIntoPermeableBarrierTest {
     }
 
     private static void ordinaryTables(PushLeakproofFiltersIntoPermeableBarrier rule) {
-        var base = RuleBuilder.create();
-        var one = RuleChecks.table(base, 1, false);
-        var two = RuleChecks.table(base, 2, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var before = b.scan(one)
-                .project(List.of(b.field(0)), List.of(), true)
-                .filter(b.and(RuleChecks.gt(b, b.field(0), 5),
-                        b.call(SqlStdOperatorTable.LESS_THAN, b.field(0), b.literal(10))))
-                .build();
-        var after = b.scan(one)
-                .filter(RuleChecks.gt(b, b.field(0), 5))
-                .project(b.field(0))
-                .filter(b.call(SqlStdOperatorTable.LESS_THAN, b.field(0), b.literal(10)))
-                .build();
+        var qed = RuleBuilder.create();
+        var table = RuleChecks.table(qed, 1, false);
+        var leakproof = qed.genericPredicateOp("Leakproof", true);
+        var remaining = qed.genericPredicateOp("Remaining", true);
+        var b = RuleChecks.ruleBuilder(qed);
+        var rex = b.getRexBuilder();
+        var scan = b.scan(table).build();
+        var barrier = LogicalProject.create(scan, List.of(), List.of(rex.makeInputRef(scan, 0)), List.of("c"));
+        var ref = rex.makeInputRef(barrier, 0);
+
+        var both = rex.makeCall(SqlStdOperatorTable.AND, rex.makeCall(leakproof, ref), rex.makeCall(remaining, ref));
+        var before = LogicalFilter.create(barrier, both);
+
+        var pushed = LogicalFilter.create(scan, rex.makeCall(leakproof, rex.makeInputRef(scan, 0)));
+        var after = LogicalFilter.create(pushed, rex.makeCall(remaining, rex.makeInputRef(pushed, 0)));
         RuleChecks.rewrites(rule, before, after);
 
-        var skewed = b.scan(two)
-                .project(List.of(b.field(1)), List.of(), true)
-                .filter(b.and(RuleChecks.gt(b, b.field(0), 5),
-                        b.call(SqlStdOperatorTable.LESS_THAN, b.field(0), b.literal(10))))
-                .build();
-        RuleChecks.doesNotApply(rule, skewed);
+        var single = LogicalFilter.create(barrier, rex.makeCall(leakproof, ref));
+        RuleChecks.doesNotApply(rule, single);
     }
 
     public static void main(String[] args) {

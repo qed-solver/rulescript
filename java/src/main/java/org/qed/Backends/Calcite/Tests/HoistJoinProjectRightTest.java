@@ -1,43 +1,68 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.logical.LogicalProject;
+import org.qed.Backends.Calcite.CalciteRuntime;
 import org.qed.RRuleInstances.HoistJoinProjectRight;
 import org.qed.RuleBuilder;
 
-public class HoistJoinProjectRightTest {
+import java.util.List;
 
+public class HoistJoinProjectRightTest {
     public static void runTest() {
         var rule = new HoistJoinProjectRight();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
-    }
 
-    private static void ordinaryTables(HoistJoinProjectRight rule) {
-        var builder = RuleBuilder.create();
-        var l = RuleChecks.table(builder, 1, false);
-        var r = RuleChecks.table(builder, 2, false);
-        var cond = builder.genericPredicateOp("C", true);
-        var before = builder.scan(l).scan(r)
-                .project(builder.field(1), builder.field(0))
-                .join(JoinRelType.LEFT, builder.call(cond,
-                        builder.field(2, 0, 0), builder.field(2, 1, 0), builder.field(2, 1, 1)))
-                .build();
-        var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(l).scan(r)
-                .join(JoinRelType.LEFT, plain.call(cond,
-                        plain.field(2, 0, 0), plain.field(2, 1, 1), plain.field(2, 1, 0)))
-                .project(plain.field(0), plain.field(2), plain.field(1))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
+        var schema = RuleBuilder.create();
+        var leftTable = RuleChecks.table(schema, 1, false);
+        var rightTable = RuleChecks.table(schema, 2, false);
+        var b = schema.transform(CalciteRuntime::configure);
+        var left = b.scan(leftTable).build();
+        var right = b.scan(rightTable).build();
+        b.push(left).push(right);
+        b.project(List.of(b.getRexBuilder().makeInputRef(right, 1),
+                b.getRexBuilder().makeInputRef(right, 0)));
+        var projectedJoin = b.peek(1);
+        var condition = RuleChecks.eq(b,
+                b.getRexBuilder().makeInputRef(projectedJoin.getRowType().getFieldList().get(0).getType(), 0),
+                b.getRexBuilder().makeInputRef(projectedJoin.getRowType().getFieldList().get(0).getType(), 1));
+        b.join(JoinRelType.LEFT, condition);
+        RelNode input = b.build();
 
-        var inner = builder.scan(l).scan(r)
-                .project(builder.field(1), builder.field(0))
-                .join(JoinRelType.INNER, builder.call(cond,
-                        builder.field(2, 0, 0), builder.field(2, 1, 0), builder.field(2, 1, 1)))
-                .build();
-        RuleChecks.doesNotApply(rule, inner);
+        var expectedBuilder = schema.transform(CalciteRuntime::configure);
+        var rawLeft = expectedBuilder.scan(leftTable).build();
+        var rawRight = expectedBuilder.scan(rightTable).build();
+        expectedBuilder.push(rawLeft).push(rawRight);
+        var rawJoin = expectedBuilder.peek(1);
+        var expectedCondition = RuleChecks.eq(expectedBuilder,
+                expectedBuilder.getRexBuilder().makeInputRef(rawJoin.getRowType().getFieldList().get(0).getType(), 0),
+                expectedBuilder.getRexBuilder().makeInputRef(rawJoin.getRowType().getFieldList().get(0).getType(), 2));
+        expectedBuilder.join(JoinRelType.LEFT, expectedCondition);
+        var expectedJoin = expectedBuilder.build();
+        RelNode expected = LogicalProject.create(expectedJoin, List.of(), List.of(
+                expectedBuilder.getRexBuilder().makeInputRef(expectedJoin, 0),
+                expectedBuilder.getRexBuilder().makeInputRef(expectedJoin, 2),
+                expectedBuilder.getRexBuilder().makeInputRef(expectedJoin, 1)), (List<String>) null);
+        RuleChecks.rewrites(rule, input, expected);
+
+        var noMatch = RuleBuilder.create();
+        var noMatchLeftTable = RuleChecks.table(noMatch, 1, false);
+        var noMatchRightTable = RuleChecks.table(noMatch, 2, false);
+        var n = noMatch.transform(CalciteRuntime::configure);
+        var rawNoMatchLeft = n.scan(noMatchLeftTable).build();
+        var rawNoMatchRight = n.scan(noMatchRightTable).build();
+        n.push(rawNoMatchLeft).push(rawNoMatchRight);
+        n.project(List.of(n.getRexBuilder().makeInputRef(rawNoMatchRight, 0),
+                n.getRexBuilder().makeInputRef(rawNoMatchRight, 1)));
+        var identityProjected = n.peek(1);
+        var noMatchCondition = RuleChecks.eq(n,
+                n.getRexBuilder().makeInputRef(identityProjected.getRowType().getFieldList().get(0).getType(), 0),
+                n.getRexBuilder().makeInputRef(identityProjected.getRowType().getFieldList().get(0).getType(), 1));
+        n.join(JoinRelType.LEFT, noMatchCondition);
+        RuleChecks.doesNotApply(rule, n.build());
     }
 
     public static void main(String[] args) {

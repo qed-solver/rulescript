@@ -1,43 +1,36 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.InlineConstVar;
 import org.qed.RuleBuilder;
 
-public class InlineConstVarTest {
+public final class InlineConstVarTest {
+    private InlineConstVarTest() {}
 
     public static void runTest() {
         var rule = new InlineConstVar();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+
+        RuleChecks.rewrites(rule, concretePlan(false, true), concretePlan(true, true));
+        RuleChecks.doesNotApply(rule, concretePlan(false, false));
     }
 
-    private static void ordinaryTables(InlineConstVar rule) {
+    private static RelNode concretePlan(boolean inline, boolean uniqueConstant) {
         var builder = RuleBuilder.create();
-        var source = RuleChecks.table(builder, 1, false);
-        var constant = RuleChecks.table(builder, 1, true, false);
-        var before = builder.scan(source).scan(constant)
-                .join(JoinRelType.INNER, RuleChecks.eq(builder, builder.field(2, 0, 0), builder.field(2, 1, 0)))
-                .filter(RuleChecks.gt(builder, builder.field(0), 5))
-                .build();
-        var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(source).scan(constant)
-                .join(JoinRelType.INNER, RuleChecks.eq(plain, plain.field(2, 0, 0), plain.field(2, 1, 0)))
-                .filter(RuleChecks.gt(plain, plain.field(1), 5))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
-
-        var nonUnique = RuleChecks.table(builder, 1, false);
-        RuleChecks.doesNotApply(rule, builder.scan(source).scan(nonUnique)
-                .join(JoinRelType.INNER, RuleChecks.eq(builder, builder.field(2, 0, 0), builder.field(2, 1, 0)))
-                .filter(RuleChecks.gt(builder, builder.field(0), 5))
-                .build());
-        RuleChecks.doesNotApply(rule, builder.scan(source).scan(constant)
-                .join(JoinRelType.LEFT, RuleChecks.eq(builder, builder.field(2, 0, 0), builder.field(2, 1, 0)))
-                .filter(RuleChecks.gt(builder, builder.field(0), 5))
-                .build());
+        var source = RuleChecks.table(builder, 1, false, true);
+        var constant = RuleChecks.table(builder, 1, uniqueConstant, false);
+        builder.scan(source).scan(constant).join(org.apache.calcite.rel.core.JoinRelType.INNER,
+                builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 0), builder.field(2, 1, 0)));
+        var value = builder.field(1);
+        if (inline) {
+            builder.filter(builder.call(builder.genericPredicateOp("f", true), value));
+        } else {
+            builder.filter(builder.call(builder.genericPredicateOp("f", true), builder.field(0)));
+        }
+        return builder.build();
     }
 
     public static void main(String[] args) {

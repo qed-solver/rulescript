@@ -1,40 +1,51 @@
 package org.qed.Backends.Calcite.Tests;
 
+import kala.collection.Seq;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.JoinConditionExpandIsNotDistinctFrom;
-import org.qed.RuleBuilder;
+import org.qed.RelRN;
+import org.qed.RexRN;
 
-import java.util.List;
-
-public class JoinConditionExpandIsNotDistinctFromTest {
-
+public final class JoinConditionExpandIsNotDistinctFromTest {
     public static void runTest() {
         var rule = new JoinConditionExpandIsNotDistinctFrom();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        handBuiltNullableJoin();
+        rejectsAdditionalJoinCondition();
     }
 
-    private static void ordinaryTables(JoinConditionExpandIsNotDistinctFrom rule) {
-        var base = RuleBuilder.create();
-        var l = RuleChecks.table(base, 1, false);
-        var r = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var joinOn = (java.util.function.BiFunction<JoinRelType, org.apache.calcite.sql.SqlOperator, RelBuilder>)
-                (type, op) -> b.scan(l).scan(r).join(type, b.call(op, b.field(2, 0, 0), b.field(2, 1, 0)));
-        var before = joinOn.apply(JoinRelType.INNER, SqlStdOperatorTable.IS_NOT_DISTINCT_FROM).build();
-        b.scan(l).scan(r);
-        var after = b.join(JoinRelType.INNER, b.or(b.and(b.isNull(b.field(2, 0, 0)), b.isNull(b.field(2, 1, 0))),
-                b.call(SqlStdOperatorTable.IS_TRUE, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0))))).build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void handBuiltNullableJoin() {
+        var left = RelRN.scan("Left", "INTEGER");
+        var right = RelRN.scan("Right", "INTEGER");
+        var x = left.joinField(0, right);
+        var y = left.joinField(1, right);
+        var before = FaithfulPlans.of(left.join(JoinRelType.INNER,
+                new RexRN.Pred(SqlStdOperatorTable.IS_NOT_DISTINCT_FROM, Seq.of(x, y)), right));
+        var equivalent = new RexRN.Or(Seq.of(
+                new RexRN.And(Seq.of(
+                        new RexRN.Pred(SqlStdOperatorTable.IS_NULL, Seq.of(x)),
+                        new RexRN.Pred(SqlStdOperatorTable.IS_NULL, Seq.of(y)))),
+                new RexRN.Pred(SqlStdOperatorTable.IS_TRUE, Seq.of(
+                        new RexRN.Pred(SqlStdOperatorTable.EQUALS, Seq.of(x, y))))));
+        var expected = FaithfulPlans.expected(left.join(JoinRelType.INNER, equivalent, right));
+        RuleChecks.rewrites(new JoinConditionExpandIsNotDistinctFrom(), before, expected);
+    }
 
-        RuleChecks.doesNotApply(rule, joinOn.apply(JoinRelType.INNER, SqlStdOperatorTable.IS_DISTINCT_FROM).build());
-        RuleChecks.doesNotApply(rule, joinOn.apply(JoinRelType.INNER, SqlStdOperatorTable.EQUALS).build());
-        RuleChecks.doesNotApply(rule, joinOn.apply(JoinRelType.LEFT, SqlStdOperatorTable.IS_NOT_DISTINCT_FROM).build());
+    private static void rejectsAdditionalJoinCondition() {
+        var left = RelRN.scan("Left", "INTEGER");
+        var right = RelRN.scan("Right", "INTEGER");
+        var x = left.joinField(0, right);
+        var y = left.joinField(1, right);
+        var condition = new RexRN.And(Seq.of(
+                new RexRN.Pred(SqlStdOperatorTable.IS_NOT_DISTINCT_FROM, Seq.of(x, y)),
+                new RexRN.Pred(SqlStdOperatorTable.IS_NOT_NULL, Seq.of(x))));
+        RelNode plan = FaithfulPlans.of(left.join(JoinRelType.INNER, condition, right));
+        RuleChecks.doesNotApply(new JoinConditionExpandIsNotDistinctFrom(), plan);
     }
 
     public static void main(String[] args) {

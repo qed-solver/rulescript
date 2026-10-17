@@ -1,59 +1,49 @@
 package org.qed.Backends.Calcite.Tests;
 
-import java.util.List;
-import java.util.Set;
-import java.util.function.Function;
-
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rel.logical.LogicalJoin;
-import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.DetectJoinContradiction;
-import org.qed.RuleBuilder;
 
-public class DetectJoinContradictionTest {
-
+public final class DetectJoinContradictionTest {
     public static void runTest() {
         var rule = new DetectJoinContradiction();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+
+        var builder = org.qed.RuleBuilder.create();
+        var left = RuleChecks.table(builder, 1, false, false);
+        var right = RuleChecks.table(builder, 1, false, false);
+        var source = manualJoin(builder, left, right, JoinRelType.INNER, true);
+        var expected = manualJoin(builder, left, right, JoinRelType.INNER, false);
+        RuleChecks.rewrites(rule, source, expected);
+
+        var nearMissBuilder = org.qed.RuleBuilder.create();
+        var nearLeft = RuleChecks.table(nearMissBuilder, 1, false, false);
+        var nearRight = RuleChecks.table(nearMissBuilder, 1, false, false);
+        RuleChecks.doesNotApply(rule, manualJoin(nearMissBuilder, nearLeft, nearRight, JoinRelType.LEFT, true));
+
+        if (CalciteTester.failures() > 0) {
+            throw new AssertionError("DetectJoinContradiction had " + CalciteTester.failures() + " failure(s)");
+        }
     }
 
-    private static RelNode join(RelBuilder b, String l, String r, JoinRelType type,
-                                Function<RelBuilder, RexNode> condition) {
-        b.scan(l).scan(r);
-        var cond = condition.apply(b);
-        var right = b.build();
-        var left = b.build();
-        return LogicalJoin.create(left, right, List.of(), cond, Set.of(), type);
-    }
-
-    private static void ordinaryTables(DetectJoinContradiction rule) {
-        var base = RuleBuilder.create();
-        var l = RuleChecks.table(base, 1, false);
-        var r = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-
-        var before = join(b, l, r, JoinRelType.INNER, x -> x.getRexBuilder().makeCall(SqlStdOperatorTable.AND,
-                x.literal(false), RuleChecks.eq(x, x.field(2, 0, 0), x.field(2, 1, 0))));
-        var after = join(b, l, r, JoinRelType.INNER, x -> x.literal(false));
-        RuleChecks.rewrites(rule, before, after);
-
-        var leftJoin = join(b, l, r, JoinRelType.LEFT, x -> x.getRexBuilder().makeCall(SqlStdOperatorTable.AND,
-                x.literal(false), RuleChecks.eq(x, x.field(2, 0, 0), x.field(2, 1, 0))));
-        RuleChecks.doesNotApply(rule, leftJoin);
-
-        var noContradiction = join(b, l, r, JoinRelType.INNER, x -> x.getRexBuilder().makeCall(SqlStdOperatorTable.AND,
-                RuleChecks.gt(x, x.field(2, 0, 0), 5),
-                RuleChecks.eq(x, x.field(2, 0, 0), x.field(2, 1, 0))));
-        RuleChecks.doesNotApply(rule, noContradiction);
-
-        var soleFalse = join(b, l, r, JoinRelType.INNER, x -> x.literal(false));
-        RuleChecks.doesNotApply(rule, soleFalse);
+    private static RelNode manualJoin(org.qed.RuleBuilder ruleBuilder, String left, String right,
+                                      JoinRelType type, boolean withContradiction) {
+        var builder = RuleChecks.ruleBuilder(ruleBuilder);
+        builder.scan(left);
+        builder.scan(right);
+        var rex = builder.getRexBuilder();
+        var integer = builder.getTypeFactory().createSqlType(org.apache.calcite.sql.type.SqlTypeName.INTEGER);
+        var rest = rex.makeCall(SqlStdOperatorTable.LESS_THAN,
+                rex.makeInputRef(integer, 0), rex.makeExactLiteral(java.math.BigDecimal.valueOf(7)));
+        var condition = withContradiction
+                ? rex.makeCall(SqlStdOperatorTable.AND, rex.makeLiteral(false), rest)
+                : rex.makeLiteral(false);
+        builder.join(type, condition);
+        return builder.build();
     }
 
     public static void main(String[] args) {

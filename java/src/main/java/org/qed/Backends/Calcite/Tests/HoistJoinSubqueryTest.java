@@ -1,57 +1,64 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexSubQuery;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.HoistJoinSubquery;
-import org.qed.RuleBuilder;
 
-public class HoistJoinSubqueryTest {
-
+public final class HoistJoinSubqueryTest {
     public static void runTest() {
         var rule = new HoistJoinSubquery();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        handBuiltUncorrelatedExistsMovesToRightFilter();
+        handBuiltCorrelatedExistsRemainsInJoinCondition();
     }
 
-    private static void ordinaryTables(HoistJoinSubquery rule) {
-        var builder = RuleBuilder.create();
-        var left = RuleChecks.table(builder, 1, false);
-        var right = RuleChecks.table(builder, 1, false);
-        var sub = RuleChecks.table(builder, 1, false);
-        var five = builder.literal(5);
-        var subPlan = builder.scan(sub)
-                .filter(builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), five))
-                .build();
-        var joined = builder.scan(left).scan(right);
-        var before = joined.join(JoinRelType.INNER,
-                builder.call(SqlStdOperatorTable.AND,
-                        RuleChecks.eq(builder, builder.field(2, 0, 0), builder.field(2, 1, 0)),
-                        RexSubQuery.exists(subPlan)))
-                .build();
+    private static void handBuiltUncorrelatedExistsMovesToRightFilter() {
+        var builder = org.qed.RuleBuilder.create();
+        var lName = RuleChecks.table(builder, 1, false);
+        var rName = RuleChecks.table(builder, 1, false);
+        var sName = RuleChecks.table(builder, 1, false);
+        var b = RuleChecks.ruleBuilder(builder);
+        var left = b.scan(lName).build();
+        var right = b.scan(rName).build();
+        var sub = b.scan(sName).build();
+        var rex = b.getRexBuilder();
+        var on = RuleChecks.eq(b, rex.makeInputRef(left.getRowType().getFieldList().get(0).getType(), 0),
+                rex.makeInputRef(right.getRowType().getFieldList().get(0).getType(), 1));
+        var subPredicate = RuleChecks.gt(b, rex.makeInputRef(sub.getRowType().getFieldList().get(0).getType(), 0), 10);
+        var exists = org.apache.calcite.rex.RexSubQuery.exists(
+                org.apache.calcite.rel.logical.LogicalFilter.create(sub, subPredicate));
+        var before = org.apache.calcite.rel.logical.LogicalJoin.create(left, right, java.util.List.of(),
+                rex.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.AND, on, exists), java.util.Set.of(),
+                JoinRelType.INNER);
+        var expectedRight = org.apache.calcite.rel.logical.LogicalFilter.create(right, exists);
+        var expected = org.apache.calcite.rel.logical.LogicalJoin.create(left, expectedRight, java.util.List.of(),
+                on, java.util.Set.of(), JoinRelType.INNER);
+        RuleChecks.rewrites(new HoistJoinSubquery(), before, expected);
+    }
 
-        var plain = RuleChecks.ruleBuilder(builder);
-        var plainSub = plain.scan(sub)
-                .filter(plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(0), five))
-                .build();
-        var rightFiltered = plain.scan(right)
-                .filter(RexSubQuery.exists(plainSub))
-                .build();
-        var after = plain.scan(left)
-                .push(rightFiltered)
-                .join(JoinRelType.INNER, RuleChecks.eq(plain, plain.field(2, 0, 0), plain.field(2, 1, 0)))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
-
-        var leftJoin = builder.scan(left).scan(right)
-                .join(JoinRelType.LEFT,
-                        builder.call(SqlStdOperatorTable.AND,
-                                RuleChecks.eq(builder, builder.field(2, 0, 0), builder.field(2, 1, 0)),
-                                RexSubQuery.exists(subPlan)))
-                .build();
-        RuleChecks.doesNotApply(rule, leftJoin);
+    private static void handBuiltCorrelatedExistsRemainsInJoinCondition() {
+        var builder = org.qed.RuleBuilder.create();
+        var lName = RuleChecks.table(builder, 1, false);
+        var rName = RuleChecks.table(builder, 1, false);
+        var sName = RuleChecks.table(builder, 1, false);
+        var b = RuleChecks.ruleBuilder(builder);
+        var left = b.scan(lName).build();
+        var right = b.scan(rName).build();
+        var sub = b.scan(sName).build();
+        var rex = b.getRexBuilder();
+        var on = RuleChecks.eq(b, rex.makeInputRef(left.getRowType().getFieldList().get(0).getType(), 0),
+                rex.makeInputRef(right.getRowType().getFieldList().get(0).getType(), 1));
+        var correlationId = b.getCluster().createCorrel();
+        var corr = rex.makeCorrel(left.getRowType(), correlationId);
+        var correlatedPredicate = RuleChecks.eq(b, rex.makeFieldAccess(corr, 0),
+                rex.makeInputRef(sub.getRowType().getFieldList().get(0).getType(), 0));
+        var exists = org.apache.calcite.rex.RexSubQuery.exists(
+                org.apache.calcite.rel.logical.LogicalFilter.create(sub, correlatedPredicate));
+        var before = org.apache.calcite.rel.logical.LogicalJoin.create(left, right, java.util.List.of(),
+                rex.makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.AND, on, exists), java.util.Set.of(),
+                JoinRelType.INNER);
+        RuleChecks.doesNotApply(new HoistJoinSubquery(), before);
     }
 
     public static void main(String[] args) {

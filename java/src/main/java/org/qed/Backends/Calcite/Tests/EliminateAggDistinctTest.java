@@ -1,44 +1,28 @@
 package org.qed.Backends.Calcite.Tests;
 
-import java.util.List;
-
-import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.core.AggregateCall;
-import org.apache.calcite.rel.logical.LogicalAggregate;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
-import org.apache.calcite.util.ImmutableBitSet;
+import org.apache.calcite.sql.SqlAggFunction;
 import org.qed.RRuleInstances.EliminateAggDistinct;
 import org.qed.RuleBuilder;
 
-public class EliminateAggDistinctTest {
-
+public final class EliminateAggDistinctTest {
     public static void runTest() {
         var rule = new EliminateAggDistinct();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        keyedTable(rule);
+        RuleChecks.rewrites(rule, concrete(true, true), concrete(true, false));
+        RuleChecks.doesNotApply(rule, concrete(false, true));
     }
 
-    private static RelNode sumOverKey(RelBuilder b, String table, boolean distinct) {
-        var input = b.scan(table).build();
-        var call = AggregateCall.create(SqlStdOperatorTable.SUM, distinct, false, false, List.of(0), -1, null,
-                RelCollations.EMPTY, 1, input, null, null);
-        return LogicalAggregate.create(input, List.of(), ImmutableBitSet.of(0), null, List.of(call));
-    }
-
-    private static void keyedTable(EliminateAggDistinct rule) {
-        var base = RuleBuilder.create();
-        var keyed = RuleChecks.table(base, 1, true, false);
-        var plain = RuleChecks.table(base, 1, false, false);
-        var b = RuleChecks.ruleBuilder(base);
-
-        RuleChecks.rewrites(rule, sumOverKey(b, keyed, true), sumOverKey(b, keyed, false));
-
-        RuleChecks.doesNotApply(rule, sumOverKey(b, keyed, false));
-        RuleChecks.doesNotApply(rule, sumOverKey(b, plain, true));
+    private static RelNode concrete(boolean unique, boolean distinct) {
+        var builder = RuleBuilder.create();
+        var table = RuleChecks.table(builder, 1, unique, false);
+        var rel = RuleChecks.ruleBuilder(builder);
+        rel.scan(table);
+        var aggregate = builder.genericAggregateOp("f", org.qed.RelType.fromString("INTEGER", true));
+        var call = rel.aggregateCall((SqlAggFunction) aggregate, distinct, null, "value", rel.field(0));
+        return rel.aggregate(rel.groupKey(rel.field(0)), call).build();
     }
 
     public static void main(String[] args) {

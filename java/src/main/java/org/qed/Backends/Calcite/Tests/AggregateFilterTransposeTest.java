@@ -1,45 +1,44 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.AggregateFilterTranspose;
 import org.qed.RuleBuilder;
 
-import java.util.List;
-
 public class AggregateFilterTransposeTest {
-
     public static void runTest() {
         var rule = new AggregateFilterTranspose();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
-    }
-
-    private static void ordinaryTables(AggregateFilterTranspose rule) {
-        var base = RuleBuilder.create();
-        var l = RuleChecks.table(base, 1, false);
-        var r = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var join = (java.util.function.Supplier<RelBuilder>) () ->
-                b.scan(l).scan(r).join(JoinRelType.INNER, b.literal(true));
-        var before = join.get().filter(RuleChecks.gt(b, b.field(0), 5))
-                .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.MAX, b.field(1))).build();
-        var after = join.get().aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.MAX, b.field(1)))
-                .filter(RuleChecks.gt(b, b.field(0), 5)).build();
-        RuleChecks.rewrites(rule, before, after);
-
-        RuleChecks.doesNotApply(rule, join.get().filter(RuleChecks.gt(b, b.field(1), 5))
-                .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.MAX, b.field(1))).build());
-        RuleChecks.doesNotApply(rule, join.get()
-                .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.MAX, b.field(1))).build());
+        var builder = RuleBuilder.create();
+        var left = RuleChecks.table(builder, 1, false, false);
+        var right = RuleChecks.table(builder, 1, false, false);
+        var b = RuleChecks.ruleBuilder(builder);
+        var predicate = builder.genericPredicateOp("keep_group", false);
+        var aggregate = builder.genericAggregateOp("sum_value", org.qed.RelType.fromString("INTEGER", true));
+        var source = b.scan(left).scan(right).join(JoinRelType.INNER, b.literal(true)).build();
+        var before = b.push(source)
+                .filter(b.call(predicate, b.field(0)))
+                .aggregate(b.groupKey(b.field(0)), b.aggregateCall(aggregate, false, null, "sum_value", b.field(1)))
+                .build();
+        var expected = b.scan(left).scan(right).join(JoinRelType.INNER, b.literal(true))
+                .aggregate(b.groupKey(b.field(0)), b.aggregateCall(aggregate, false, null, "sum_value", b.field(1)))
+                .filter(b.call(predicate, b.field(0))).build();
+        RuleChecks.rewrites(rule, before, expected);
+        var nearMiss = b.push(source)
+                .filter(RuleChecks.gt(b, b.field(1), 3))
+                .aggregate(b.groupKey(b.field(0)), b.aggregateCall(aggregate, false, null, "sum_value", b.field(1)))
+                .build();
+        RuleChecks.doesNotApply(rule, nearMiss);
     }
 
     public static void main(String[] args) {
         System.out.println("Running AggregateFilterTranspose test...");
         runTest();
+        if (CalciteTester.failures() > 0) {
+            throw new AssertionError(CalciteTester.failures() + " test failures");
+        }
+        System.out.println("AggregateFilterTranspose: 0 test failures");
     }
 }

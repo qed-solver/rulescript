@@ -1,35 +1,48 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.qed.RRuleInstances.FoldIsNotNull;
 import org.qed.RuleBuilder;
 
-public class FoldIsNotNullTest {
-
+public final class FoldIsNotNullTest {
     public static void runTest() {
         var rule = new FoldIsNotNull();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        handBuiltMatch(rule);
+        nonNullLiteralControl();
     }
 
-    private static void ordinaryTables(FoldIsNotNull rule) {
-        var base = RuleBuilder.create();
-        var table = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var nullInt = b.getRexBuilder().makeNullLiteral(b.getTypeFactory().createSqlType(SqlTypeName.INTEGER));
-        var before = b.scan(table)
-                .filter(b.call(SqlStdOperatorTable.IS_NOT_NULL, nullInt))
-                .build();
-        var after = b.scan(table).filter(b.literal(false)).build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void handBuiltMatch(FoldIsNotNull rule) {
+        var qed = RuleBuilder.create();
+        var table = RuleChecks.table(qed, 1, false, true);
+        var builder = RuleChecks.ruleBuilder(qed);
+        builder.scan(table);
+        var nullInt = builder.getRexBuilder().makeNullLiteral(builder.getTypeFactory().createSqlType(SqlTypeName.INTEGER));
+        RelNode before = LogicalFilter.create(builder.build(),
+                builder.call(SqlStdOperatorTable.IS_NOT_NULL, nullInt));
 
-        var nearMiss = b.scan(table)
-                .filter(b.call(SqlStdOperatorTable.IS_NULL, nullInt))
-                .build();
-        RuleChecks.doesNotApply(rule, nearMiss);
+        var expectedQed = RuleBuilder.create();
+        var expectedTable = RuleChecks.table(expectedQed, 1, false, true);
+        var expectedBuilder = RuleChecks.ruleBuilder(expectedQed);
+        expectedBuilder.scan(expectedTable);
+        RelNode expected = LogicalFilter.create(expectedBuilder.build(),
+                expectedBuilder.getRexBuilder().makeLiteral(false));
+        RuleChecks.rewrites(rule, before, expected);
+    }
+
+    private static void nonNullLiteralControl() {
+        var qed = RuleBuilder.create();
+        var table = RuleChecks.table(qed, 1, false, true);
+        var builder = RuleChecks.ruleBuilder(qed);
+        builder.scan(table);
+        RelNode plan = LogicalFilter.create(builder.build(),
+                builder.call(SqlStdOperatorTable.IS_NOT_NULL, builder.literal(7)));
+        RuleChecks.doesNotApply(new FoldIsNotNull(), plan);
     }
 
     public static void main(String[] args) {

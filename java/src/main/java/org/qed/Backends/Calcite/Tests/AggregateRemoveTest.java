@@ -1,34 +1,45 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.AggregateRemove;
 import org.qed.RuleBuilder;
 
 public class AggregateRemoveTest {
-
     public static void runTest() {
         var rule = new AggregateRemove();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        concreteUniqueKey();
+        nonUniqueKey();
     }
 
-    private static void ordinaryTables(AggregateRemove rule) {
+    private static void concreteUniqueKey() {
         var builder = RuleBuilder.create();
-        var keyed = RuleChecks.table(builder, 1, true);
-        var plain = RuleChecks.table(builder, 1, false);
-        var distinctOverKey = org.apache.calcite.rel.logical.LogicalAggregate.create(builder.scan(keyed).build(),
-                java.util.List.of(), org.apache.calcite.util.ImmutableBitSet.of(0), null, java.util.List.of());
-        RuleChecks.rewrites(rule, distinctOverKey, builder.scan(keyed).build());
-        var distinctOverColumn = org.apache.calcite.rel.logical.LogicalAggregate.create(builder.scan(plain).build(),
-                java.util.List.of(), org.apache.calcite.util.ImmutableBitSet.of(0), null, java.util.List.of());
-        RuleChecks.doesNotApply(rule, distinctOverColumn);
+        var table = RuleChecks.table(builder, 1, true);
+        var inputBuilder = RuleChecks.ruleBuilder(builder);
+        var input = inputBuilder.scan(table).build();
+        var actual = org.apache.calcite.rel.logical.LogicalAggregate.create(input, java.util.List.of(),
+                org.apache.calcite.util.ImmutableBitSet.of(0), null, java.util.List.of());
+        var expected = input;
+        RuleChecks.rewrites(new AggregateRemove(), actual, expected);
+    }
+
+    private static void nonUniqueKey() {
+        var builder = RuleBuilder.create();
+        var table = RuleChecks.table(builder, 1, false);
+        var inputBuilder = RuleChecks.ruleBuilder(builder);
+        var input = inputBuilder.scan(table).build();
+        var actual = org.apache.calcite.rel.logical.LogicalAggregate.create(input, java.util.List.of(),
+                org.apache.calcite.util.ImmutableBitSet.of(0), null, java.util.List.of());
+        RuleChecks.doesNotApply(new AggregateRemove(), actual);
     }
 
     public static void main(String[] args) {
         System.out.println("Running AggregateRemove test...");
         runTest();
+        if (CalciteTester.failures() != 0) {
+            throw new AssertionError("AggregateRemove failures: " + CalciteTester.failures());
+        }
     }
 }

@@ -2,36 +2,50 @@ package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.logical.LogicalAggregate;
 import org.apache.calcite.util.ImmutableBitSet;
+import org.qed.Backends.Calcite.CalciteRuntime;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.EliminateUpsertDistinct;
 import org.qed.RuleBuilder;
 
 import java.util.List;
 
-public class EliminateUpsertDistinctTest {
-
+public final class EliminateUpsertDistinctTest {
     public static void runTest() {
         var rule = new EliminateUpsertDistinct();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        rewritesHandBuiltPlan();
+        rejectsNonUniqueHandBuiltPlan();
     }
 
-    private static void ordinaryTables(EliminateUpsertDistinct rule) {
-        var builder = RuleBuilder.create();
-        var keyed = RuleChecks.table(builder, 1, true, true);
-        var plain = RuleChecks.table(builder, 1, false, true);
-        var before = LogicalAggregate.create(builder.scan(keyed).build(), ImmutableBitSet.of(0), null, List.of());
-        var rewritten = RuleChecks.ruleBuilder(builder);
-        var after = rewritten.scan(keyed)
-                .project(rewritten.field(0))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void rewritesHandBuiltPlan() {
+        var builder = builder();
+        var table = RuleChecks.table(builder, 1, true, true);
+        var input = builder.scan(table).build();
+        var groupSet = ImmutableBitSet.of(0);
+        var before = LogicalAggregate.create(input, List.of(), groupSet, null, List.of());
 
-        var nonKey = builder.scan(plain)
-                .aggregate(builder.groupKey(0))
-                .build();
-        RuleChecks.doesNotApply(rule, nonKey);
+        var expectedBuilder = builder();
+        var expectedTable = RuleChecks.table(expectedBuilder, 1, true, true);
+        var expected = expectedBuilder.scan(expectedTable).project(expectedBuilder.field(0)).build();
+        RuleChecks.rewrites(rule(), before, expected);
+    }
+
+    private static void rejectsNonUniqueHandBuiltPlan() {
+        var builder = builder();
+        var table = RuleChecks.table(builder, 1, false, true);
+        var input = builder.scan(table).build();
+        var before = LogicalAggregate.create(input, List.of(), ImmutableBitSet.of(0), null, List.of());
+        RuleChecks.doesNotApply(rule(), before);
+    }
+
+    private static RuleBuilder builder() {
+        return RuleBuilder.create();
+    }
+
+    private static EliminateUpsertDistinct rule() {
+        return new EliminateUpsertDistinct();
     }
 
     public static void main(String[] args) {

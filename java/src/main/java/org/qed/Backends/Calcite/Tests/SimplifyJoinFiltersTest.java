@@ -1,40 +1,52 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.SimplifyJoinFilters;
 import org.qed.RuleBuilder;
 
-public class SimplifyJoinFiltersTest {
-
+public final class SimplifyJoinFiltersTest {
     public static void runTest() {
         var rule = new SimplifyJoinFilters();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        dropsTrueOnItem(rule);
+        handBuiltInnerJoin(rule);
+        rejectsOuterJoin();
     }
 
-    private static void dropsTrueOnItem(SimplifyJoinFilters rule) {
+    private static void handBuiltInnerJoin(SimplifyJoinFilters rule) {
         var builder = RuleBuilder.create();
-        var l = RuleChecks.table(builder, 1, false);
-        var r = RuleChecks.table(builder, 1, false);
-        var raw = RuleChecks.ruleBuilder(builder);
-        var before = raw.scan(l).scan(r).join(JoinRelType.INNER,
-                raw.call(SqlStdOperatorTable.AND,
-                        raw.call(SqlStdOperatorTable.EQUALS, raw.field(2, 0, 0), raw.field(2, 1, 0)),
-                        raw.literal(true))).build();
+        var leftName = RuleChecks.table(builder, 1, false, true);
+        var rightName = RuleChecks.table(builder, 1, false, true);
+        var relBuilder = RuleChecks.ruleBuilder(builder);
+        var left = relBuilder.scan(leftName).build();
+        var right = relBuilder.scan(rightName).build();
+        var rex = relBuilder.getRexBuilder();
+        var equality = rex.makeCall(SqlStdOperatorTable.EQUALS,
+                rex.makeInputRef(left.getRowType().getFieldList().get(0).getType(), 0),
+                rex.makeInputRef(right.getRowType().getFieldList().get(0).getType(), left.getRowType().getFieldCount()));
+        var condition = rex.makeCall(SqlStdOperatorTable.AND, equality, rex.makeLiteral(true));
+        var before = LogicalJoin.create(left, right, java.util.List.of(), condition, java.util.Set.of(), JoinRelType.INNER);
+        var expected = LogicalJoin.create(left, right, java.util.List.of(), equality, java.util.Set.of(), JoinRelType.INNER);
+        RuleChecks.rewrites(rule, before, expected);
+    }
 
-        var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(l).scan(r).join(JoinRelType.INNER,
-                plain.call(SqlStdOperatorTable.EQUALS, plain.field(2, 0, 0), plain.field(2, 1, 0))).build();
-        RuleChecks.rewrites(rule, before, after);
-
-        var noTrue = RuleChecks.ruleBuilder(builder);
-        noTrue.scan(l).scan(r);
-        var withoutTrue = noTrue.join(JoinRelType.INNER,
-                noTrue.call(SqlStdOperatorTable.EQUALS, noTrue.field(2, 0, 0), noTrue.field(2, 1, 0))).build();
-        RuleChecks.doesNotApply(rule, withoutTrue);
+    private static void rejectsOuterJoin() {
+        var builder = RuleBuilder.create();
+        var leftName = RuleChecks.table(builder, 1, false, false);
+        var rightName = RuleChecks.table(builder, 1, false, false);
+        var relBuilder = RuleChecks.ruleBuilder(builder);
+        var left = relBuilder.scan(leftName).build();
+        var right = relBuilder.scan(rightName).build();
+        var rex = relBuilder.getRexBuilder();
+        var condition = rex.makeCall(SqlStdOperatorTable.AND,
+                rex.makeCall(SqlStdOperatorTable.EQUALS, rex.makeInputRef(left.getRowType().getFieldList().get(0).getType(), 0),
+                        rex.makeInputRef(right.getRowType().getFieldList().get(0).getType(), 1)),
+                rex.makeLiteral(true));
+        var outer = LogicalJoin.create(left, right, java.util.List.of(), condition, java.util.Set.of(), JoinRelType.LEFT);
+        RuleChecks.doesNotApply(new SimplifyJoinFilters(), outer);
     }
 
     public static void main(String[] args) {

@@ -1,44 +1,52 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.qed.Backends.Calcite.CalciteRuntime;
-import org.qed.RRuleInstances.EliminateAggFilteredDistinctForKeys;
+import kala.collection.Seq;
+import kala.tuple.Tuple;
+import org.apache.calcite.rel.core.AggregateCall;
+import org.apache.calcite.rel.logical.LogicalAggregate;
+import org.apache.calcite.util.ImmutableBitSet;
+import org.qed.RelType;
 import org.qed.RuleBuilder;
+import org.qed.RRuleInstances.EliminateAggFilteredDistinctForKeys;
+
+import java.util.List;
 
 public class EliminateAggFilteredDistinctForKeysTest {
-
     public static void runTest() {
         var rule = new EliminateAggFilteredDistinctForKeys();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        rewritesHandBuiltPlan();
+        rejectsFilteredAggregate();
     }
 
-    private static void ordinaryTables(EliminateAggFilteredDistinctForKeys rule) {
-        var base = RuleBuilder.create();
-        var keyed = RuleChecks.table(base, 1, true, false);
-        var plain = RuleChecks.table(base, 1, false, false);
-        var wide = RuleChecks.table(base, 2, true, false);
-        var b = base.transform(c -> CalciteRuntime.configure(c).withRemoveRedundantDistinct(false));
-        var before = b.scan(keyed)
-                .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.SUM, true, (RexNode) null, (String) null, b.field(0)))
-                .build();
-        var after = b.scan(keyed)
-                .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.SUM, b.field(0)))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void rewritesHandBuiltPlan() {
+        var builder = RuleBuilder.create();
+        var name = RuleChecks.table(builder, 1, true, false);
+        var b = RuleChecks.ruleBuilder(builder);
+        var input = b.scan(name).build();
+        var groupSet = ImmutableBitSet.of(0);
+        var call = AggregateCall.create(org.apache.calcite.sql.fun.SqlStdOperatorTable.SUM, true, false,
+                false, List.of(0), -1, null, org.apache.calcite.rel.RelCollations.EMPTY, 1, input, null, "SUM_DISTINCT");
+        var before = LogicalAggregate.create(input, List.of(), groupSet, null, List.of(call));
+        var expectedCall = AggregateCall.create(org.apache.calcite.sql.fun.SqlStdOperatorTable.SUM, false, false,
+                false, List.of(0), -1, null, org.apache.calcite.rel.RelCollations.EMPTY, 1, input, null, "SUM_DISTINCT");
+        var after = LogicalAggregate.create(input, List.of(), groupSet, null, List.of(expectedCall));
+        RuleChecks.rewrites(new EliminateAggFilteredDistinctForKeys(), before, after);
+    }
 
-        RuleChecks.doesNotApply(rule, b.scan(plain)
-                .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.SUM, true, (RexNode) null, (String) null, b.field(0)))
-                .build());
-        RuleChecks.doesNotApply(rule, b.scan(keyed)
-                .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.SUM, b.field(0)))
-                .build());
-        RuleChecks.doesNotApply(rule, b.scan(wide)
-                .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.SUM, true, (RexNode) null, (String) null, b.field(1)))
-                .build());
+    private static void rejectsFilteredAggregate() {
+        var builder = RuleBuilder.create();
+        var table = builder.createQedTable(Seq.of(Tuple.of(RelType.fromString("BOOLEAN", false), true)));
+        builder.addTable(table);
+        var b = RuleChecks.ruleBuilder(builder);
+        var input = b.scan(table.getName()).build();
+        var call = AggregateCall.create(org.apache.calcite.sql.fun.SqlStdOperatorTable.COUNT, true, false,
+                false, List.of(0), 0, null, org.apache.calcite.rel.RelCollations.EMPTY, 1, input, null,
+                "COUNT_DISTINCT_FILTERED");
+        var filtered = LogicalAggregate.create(input, List.of(), ImmutableBitSet.of(0), null, List.of(call));
+        RuleChecks.doesNotApply(new EliminateAggFilteredDistinctForKeys(), filtered);
     }
 
     public static void main(String[] args) {

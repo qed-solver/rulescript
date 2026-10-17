@@ -1,16 +1,16 @@
 package org.qed.Backends.Calcite.Tests;
 
+import kala.collection.Seq;
+import kala.tuple.Tuple;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.tools.RelBuilder;
-import org.qed.RRuleInstances.JoinToHyperGraph;
+import org.qed.RelType;
 import org.qed.RuleBuilder;
-
-import java.util.List;
+import org.qed.RRuleInstances.JoinToHyperGraph;
 
 public class JoinToHyperGraphTest {
-
     public static void runTest() {
         var rule = new JoinToHyperGraph();
         RuleChecks.rewritesPattern(rule);
@@ -20,26 +20,55 @@ public class JoinToHyperGraphTest {
     }
 
     private static void ordinaryTables(JoinToHyperGraph rule) {
-        var base = RuleBuilder.create();
-        var ta = RuleChecks.table(base, 1, false);
-        var tb = RuleChecks.table(base, 1, false);
-        var tc = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var leftDeep = (java.util.function.Function<JoinRelType, RelBuilder>) top -> {
-            b.scan(ta).scan(tb).join(JoinRelType.INNER, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)));
-            return b.scan(tc).join(top, b.and(
-                    b.call(SqlStdOperatorTable.LESS_THAN, b.field(2, 0, 0), b.field(2, 1, 0)),
-                    b.call(SqlStdOperatorTable.GREATER_THAN, b.field(2, 0, 1), b.field(2, 1, 0))));
-        };
-        var before = leftDeep.apply(JoinRelType.INNER).build();
-
-        b.scan(ta).scan(tb).scan(tc).join(JoinRelType.INNER,
-                b.call(SqlStdOperatorTable.GREATER_THAN, b.field(2, 0, 0), b.field(2, 1, 0)));
-        var after = b.join(JoinRelType.INNER, b.and(RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)),
-                b.call(SqlStdOperatorTable.LESS_THAN, b.field(2, 0, 0), b.field(2, 1, 1)))).build();
+        var beforeBuilder = builder();
+        var before = matchingPlan(beforeBuilder, JoinRelType.INNER);
+        var afterBuilder = builder();
+        var after = rewrittenPlan(afterBuilder);
         RuleChecks.rewrites(rule, before, after);
 
-        RuleChecks.doesNotApply(rule, leftDeep.apply(JoinRelType.LEFT).build());
+        var nearMissBuilder = builder();
+        var nearMiss = matchingPlan(nearMissBuilder, JoinRelType.LEFT);
+        RuleChecks.doesNotApply(rule, nearMiss);
+    }
+
+    private static RuleBuilder builder() {
+        var builder = RuleBuilder.create();
+        for (var i = 0; i < 3; i++) {
+            builder.addTable(builder.createQedTable(Seq.of(Tuple.of(RelType.fromString("INTEGER", true), false))));
+        }
+        return builder;
+    }
+
+    private static org.apache.calcite.rel.RelNode matchingPlan(RuleBuilder b, JoinRelType outerType) {
+        var a = b.scan("Table_0").build();
+        var rightB = b.scan("Table_1").build();
+        b.push(a).push(rightB).join(JoinRelType.INNER,
+                predicate(b, "pAB", field(b, 2, 0), field(b, 2, 1)));
+        var ab = b.build();
+        var third = b.scan("Table_2").build();
+        return b.push(ab).push(third).join(outerType, b.and(
+                predicate(b, "pAC", field(b, 2, 0), field(b, 2, 2)),
+                predicate(b, "pBC", field(b, 2, 1), field(b, 2, 2)))).build();
+    }
+
+    private static org.apache.calcite.rel.RelNode rewrittenPlan(RuleBuilder b) {
+        var a = b.scan("Table_0").build();
+        var rightB = b.scan("Table_1").build();
+        var rightC = b.scan("Table_2").build();
+        var bc = b.push(rightB).push(rightC).join(JoinRelType.INNER,
+                predicate(b, "pBC", field(b, 2, 0), field(b, 2, 1))).build();
+        return b.push(a).push(bc).join(JoinRelType.INNER, b.and(
+                predicate(b, "pAB", field(b, 2, 0), field(b, 2, 1)),
+                predicate(b, "pAC", field(b, 2, 0), field(b, 2, 2)))).build();
+    }
+
+    private static RexNode field(RelBuilder b, int inputs, int ordinal) {
+        return org.qed.Backends.Calcite.CalciteRuntime.field(b, inputs, ordinal);
+    }
+
+    private static RexNode predicate(RelBuilder b, String name, RexNode... args) {
+        SqlOperator operator = RuleBuilder.create().genericPredicateOp(name, true);
+        return b.call(operator, args);
     }
 
     public static void main(String[] args) {

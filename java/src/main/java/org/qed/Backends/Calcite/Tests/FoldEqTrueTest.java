@@ -1,38 +1,51 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.rel.logical.LogicalFilter;
+import kala.collection.Seq;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.qed.RRuleInstances.FoldEqTrue;
+import org.qed.Backends.Calcite.CalciteTester;
+import org.qed.RelType;
 import org.qed.RuleBuilder;
 
 public class FoldEqTrueTest {
-
     public static void runTest() {
-        var rule = new FoldEqTrue();
+        var rule = new org.qed.RRuleInstances.FoldEqTrue();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        equalsTrue(rule);
+        rewritesHandBuiltBooleanEquality();
+        preservesHandBuiltNonmatchingEquality();
     }
 
-    private static void equalsTrue(FoldEqTrue rule) {
+    private static void rewritesHandBuiltBooleanEquality() {
         var builder = RuleBuilder.create();
-        var table = RuleChecks.table(builder, 1, false);
-        var scanned = builder.scan(table);
-        var predicate = RuleChecks.gt(builder, builder.field(0), 5);
-        var before = LogicalFilter.create(scanned.build(),
-                builder.call(SqlStdOperatorTable.EQUALS, predicate, builder.literal(true)));
-        var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(table)
-                .filter(RuleChecks.gt(plain, plain.field(0), 5))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
+        var table = builder.createQedTable(Seq.of(kala.tuple.Tuple.of(
+                new RelType.BaseType(org.apache.calcite.sql.type.SqlTypeName.BOOLEAN, true), false)));
+        builder.addTable(table);
+        var scan = builder.scan(table.getName()).build();
+        var field = builder.push(scan).field(0);
+        var equality = builder.call(SqlStdOperatorTable.EQUALS, field, builder.literal(true));
+        var before = org.apache.calcite.rel.logical.LogicalFilter.create(scan, equality);
 
-        var rescanned = builder.scan(table);
-        var falsePredicate = RuleChecks.gt(builder, builder.field(0), 5);
-        var mismatched = LogicalFilter.create(rescanned.build(),
-                builder.call(SqlStdOperatorTable.EQUALS, falsePredicate, builder.literal(false)));
-        RuleChecks.doesNotApply(rule, mismatched);
+        var expectedBuilder = RuleBuilder.create();
+        var expectedTable = expectedBuilder.createQedTable(Seq.of(kala.tuple.Tuple.of(
+                new RelType.BaseType(org.apache.calcite.sql.type.SqlTypeName.BOOLEAN, true), false)));
+        expectedBuilder.addTable(expectedTable);
+        var expectedScan = expectedBuilder.scan(expectedTable.getName()).build();
+        var expectedField = expectedBuilder.push(expectedScan).field(0);
+        var expected = org.apache.calcite.rel.logical.LogicalFilter.create(expectedScan, expectedField);
+        RuleChecks.rewrites(new org.qed.RRuleInstances.FoldEqTrue(), before, expected);
+    }
+
+    private static void preservesHandBuiltNonmatchingEquality() {
+        var builder = RuleBuilder.create();
+        var table = builder.createQedTable(Seq.of(kala.tuple.Tuple.of(
+                new RelType.BaseType(org.apache.calcite.sql.type.SqlTypeName.BOOLEAN, true), false)));
+        builder.addTable(table);
+        var scan = builder.scan(table.getName()).build();
+        var field = builder.push(scan).field(0);
+        var equality = builder.call(SqlStdOperatorTable.EQUALS, field, builder.literal(false));
+        var before = org.apache.calcite.rel.logical.LogicalFilter.create(scan, equality);
+        RuleChecks.doesNotApply(new org.qed.RRuleInstances.FoldEqTrue(), before);
     }
 
     public static void main(String[] args) {

@@ -1,33 +1,41 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
+import org.qed.Backends.Calcite.CalciteTester;
+import org.qed.RRule;
 import org.qed.RRuleInstances.FilterReduceExpressions;
 import org.qed.RuleBuilder;
 
-import java.util.List;
-
-public class FilterReduceExpressionsTest {
-
+public final class FilterReduceExpressionsTest {
     public static void runTest() {
-        var rule = new FilterReduceExpressions();
+        RRule rule = new FilterReduceExpressions();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        handBuiltFalseFilterRewrites();
+        nonFalseFilterDoesNotMatch();
     }
 
-    private static void ordinaryTables(FilterReduceExpressions rule) {
-        var base = RuleBuilder.create();
-        var t = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var before = org.apache.calcite.rel.logical.LogicalFilter.create(b.scan(t).build(), b.literal(false));
-        var after = b.scan(t).empty().build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void handBuiltFalseFilterRewrites() {
+        var qedBuilder = RuleBuilder.create();
+        var table = RuleChecks.table(qedBuilder, 1, false);
+        var builder = RuleChecks.ruleBuilder(qedBuilder);
+        RelNode input = builder.scan(table).build();
+        RelNode before = LogicalFilter.create(input, builder.getRexBuilder().makeLiteral(false));
+        RelNode expected = builder.push(input).empty().build();
+        RuleChecks.rewrites(new FilterReduceExpressions(), before, expected);
+    }
 
-        RuleChecks.doesNotApply(rule, b.scan(t).filter(RuleChecks.gt(b, b.field(0), 5)).build());
+    private static void nonFalseFilterDoesNotMatch() {
+        var qedBuilder = RuleBuilder.create();
+        var table = RuleChecks.table(qedBuilder, 1, false);
+        var builder = RuleChecks.ruleBuilder(qedBuilder);
+        RelNode plan = builder.scan(table)
+                .filter(builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), builder.literal(5)))
+                .build();
+        RuleChecks.doesNotApply(new FilterReduceExpressions(), plan);
     }
 
     public static void main(String[] args) {

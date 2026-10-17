@@ -1,46 +1,39 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.tools.RelBuilder;
 import org.qed.RRuleInstances.EliminateSetRight;
 import org.qed.RuleBuilder;
 
-public class EliminateSetRightTest {
-
+public final class EliminateSetRightTest {
     public static void runTest() {
         var rule = new EliminateSetRight();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        emptyLeft(rule);
+        handBuiltUnionWithEmptyLeft(rule);
+        preservesUnionWithNonemptyLeft(rule);
     }
 
-    private static void emptyLeft(EliminateSetRight rule) {
+    private static void handBuiltUnionWithEmptyLeft(EliminateSetRight rule) {
         var builder = RuleBuilder.create();
-        var left = RuleChecks.table(builder, 3, false);
-        var right = RuleChecks.table(builder, 3, false);
-        var emptyLeft = builder.scan(left)
-                .project(builder.field(2), builder.field(0), builder.field(1))
-                .empty()
-                .build();
-        var before = builder.scan(right)
-                .project(builder.field(2), builder.field(0), builder.field(1))
-                .push(emptyLeft)
-                .union(true, 2)
-                .build();
-        var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(right)
-                .project(plain.field(2), plain.field(0), plain.field(1))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
+        var leftTable = RuleChecks.table(builder, 3, false);
+        var rightTable = RuleChecks.table(builder, 3, false);
+        var leftTemplate = builder.scan(leftTable).project(builder.field(2), builder.field(0), builder.field(1)).build();
+        var left = org.apache.calcite.rel.logical.LogicalValues.createEmpty(builder.getCluster(), leftTemplate.getRowType());
+        var right = builder.scan(rightTable).project(builder.field(2), builder.field(0), builder.field(1)).build();
+        RelNode input = builder.push(right).push(left).union(true, 2).build();
+        RuleChecks.rewrites(rule, input, right);
+    }
 
-        var nonEmptyLeft = builder.scan(left)
-                .project(builder.field(2), builder.field(0), builder.field(1))
-                .build();
-        var unionWithRows = builder.scan(right)
-                .project(builder.field(2), builder.field(0), builder.field(1))
-                .push(nonEmptyLeft)
-                .union(true, 2)
-                .build();
-        RuleChecks.doesNotApply(rule, unionWithRows);
+    private static void preservesUnionWithNonemptyLeft(EliminateSetRight rule) {
+        var builder = RuleBuilder.create();
+        var leftTable = RuleChecks.table(builder, 3, false);
+        var rightTable = RuleChecks.table(builder, 3, false);
+        var left = builder.scan(leftTable).project(builder.field(2), builder.field(0), builder.field(1)).build();
+        var right = builder.scan(rightTable).project(builder.field(2), builder.field(0), builder.field(1)).build();
+        RelNode input = builder.push(left).push(right).union(true, 2).build();
+        RuleChecks.doesNotApply(rule, input);
     }
 
     public static void main(String[] args) {

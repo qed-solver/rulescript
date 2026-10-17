@@ -1,44 +1,49 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
+import kala.collection.Seq;
+import org.qed.RRule;
 import org.qed.RRuleInstances.IntersectToExists;
 import org.qed.RuleBuilder;
 
-import java.util.List;
-
 public class IntersectToExistsTest {
-
     public static void runTest() {
         var rule = new IntersectToExists();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        handBuiltMatch(rule);
+        handBuiltNearMisses(rule);
     }
 
-    private static void ordinaryTables(IntersectToExists rule) {
-        var base = RuleBuilder.create();
-        var ta = RuleChecks.table(base, 1, false);
-        var tb = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var before = b.scan(ta).scan(tb).intersect(false, 2).build();
+    private static void handBuiltMatch(RRule rule) {
+        var builder = RuleBuilder.create();
+        var left = "A";
+        var right = "B";
+        builder.addTable(new org.qed.QedTable(left, kala.collection.Seq.of("col-A"), kala.collection.Seq.of(org.qed.RexRN.varType("T", true)), kala.collection.Set.empty(), kala.collection.Set.empty()));
+        builder.addTable(new org.qed.QedTable(right, kala.collection.Seq.of("col-B"), kala.collection.Seq.of(org.qed.RexRN.varType("T", true)), kala.collection.Set.empty(), kala.collection.Set.empty()));
+        RelNode input = builder.scan(left).scan(right).intersect(false, 2).build();
+        var pattern = org.qed.RelRN.scan(left, "T");
+        var other = org.qed.RelRN.scan(right, "T");
+        var after = new org.qed.RelRN.Aggregate(pattern.correlate(JoinRelType.SEMI,
+                SqlStdOperatorTable.IS_NOT_DISTINCT_FROM, other), Seq.of(pattern.field(0)), Seq.empty());
+        RuleChecks.rewrites(rule, input, FaithfulPlans.expected(after));
+    }
 
-        var freshBase = RuleBuilder.create();
-        RuleChecks.table(freshBase, 1, false);
-        RuleChecks.table(freshBase, 1, false);
-        var fresh = RuleChecks.ruleBuilder(freshBase);
-        var left = fresh.scan(ta).build();
-        var right = fresh.scan(tb).build();
-        var correlate = RuleChecks.correlate(fresh, left, right, JoinRelType.SEMI,
-                args -> fresh.call(SqlStdOperatorTable.IS_NOT_DISTINCT_FROM, args[0], args[1]));
-        var after = fresh.push(correlate).aggregate(fresh.groupKey(0)).build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void handBuiltNearMisses(RRule rule) {
+        var builder = RuleBuilder.create();
+        var left = RuleChecks.table(builder, 1, false);
+        var right = RuleChecks.table(builder, 1, false);
+        RelNode all = builder.scan(left).scan(right).intersect(true, 2).build();
+        RuleChecks.doesNotApply(rule, all);
 
-        RuleChecks.doesNotApply(rule, b.scan(ta).scan(tb).intersect(true, 2).build());
-        RuleChecks.doesNotApply(rule, b.scan(ta).scan(tb).minus(false, 2).build());
+        builder = RuleBuilder.create();
+        left = RuleChecks.table(builder, 2, false);
+        right = RuleChecks.table(builder, 2, false);
+        RelNode multiColumn = builder.scan(left).scan(right).intersect(false, 2).build();
+        RuleChecks.doesNotApply(rule, multiColumn);
     }
 
     public static void main(String[] args) {

@@ -1,18 +1,18 @@
 package org.qed.Backends.Calcite.Tests;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.logical.LogicalJoin;
+import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.RRule;
 import org.qed.RRuleInstances.NormalizeJoinNotAnyFilter;
 import org.qed.RuleBuilder;
 
 import java.util.List;
 
 public class NormalizeJoinNotAnyFilterTest {
-
     public static void runTest() {
         var rule = new NormalizeJoinNotAnyFilter();
         RuleChecks.rewritesPattern(rule);
@@ -21,31 +21,41 @@ public class NormalizeJoinNotAnyFilterTest {
         ordinaryTables(rule);
     }
 
-    private static void ordinaryTables(NormalizeJoinNotAnyFilter rule) {
-        var base = RuleBuilder.create();
-        var l = RuleChecks.table(base, 1, false);
-        var r = RuleChecks.table(base, 1, false);
-        var v = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var left = b.scan(l).build();
-        var right = b.scan(r).build();
-        var sub = b.scan(v).build();
-        var membership = RexSubQuery.in(sub, ImmutableList.of(b.push(left).field(0)));
-        var notIn = b.call(SqlStdOperatorTable.NOT, membership);
-        var before = LogicalJoin.create(left, right, List.of(), notIn, ImmutableSet.of(), JoinRelType.INNER);
-        var exists = RuleChecks.anyAsExists(b, before.getRowType(), sub, true);
-        var after = LogicalJoin.create(left, right, List.of(), exists.condition(), ImmutableSet.of(exists.id()),
-                JoinRelType.INNER);
+    private static void ordinaryTables(RRule rule) {
+        var builder = RuleBuilder.create();
+        var leftName = RuleChecks.table(builder, 1, false, true);
+        var rightName = RuleChecks.table(builder, 1, false, true);
+        var subName = RuleChecks.table(builder, 1, false, true);
+        RelNode left = builder.scan(leftName).build();
+        RelNode right = builder.scan(rightName).build();
+        RelNode sub = builder.scan(subName).build();
+        var rexBuilder = builder.getRexBuilder();
+        RexNode notAny = rexBuilder.makeCall(SqlStdOperatorTable.NOT,
+                builder.in(sub, List.of(rexBuilder.makeInputRef(left, 0))));
+        RelNode before = LogicalJoin.create(left, right, List.of(), notAny,
+                com.google.common.collect.ImmutableSet.of(), JoinRelType.INNER);
+
+        var corrId = builder.getCluster().createCorrel();
+        var corr = rexBuilder.makeCorrel(before.getRowType(), corrId);
+        RexNode equals = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS,
+                rexBuilder.makeFieldAccess(corr, 0),
+                rexBuilder.makeInputRef(sub.getRowType().getFieldList().get(0).getType(), 0));
+        RexNode matchesOrNull = rexBuilder.makeCall(SqlStdOperatorTable.OR, equals,
+                rexBuilder.makeCall(SqlStdOperatorTable.IS_NULL, equals));
+        RexNode exists = RexSubQuery.exists(
+                org.apache.calcite.rel.logical.LogicalFilter.create(sub, matchesOrNull));
+        RelNode after = LogicalJoin.create(left, right, List.of(),
+                rexBuilder.makeCall(SqlStdOperatorTable.NOT, exists),
+                com.google.common.collect.ImmutableSet.of(corrId), JoinRelType.INNER);
         RuleChecks.rewrites(rule, before, after);
 
-        RuleChecks.doesNotApply(rule, LogicalJoin.create(left, right, List.of(), membership, ImmutableSet.of(),
-                JoinRelType.INNER));
-        RuleChecks.doesNotApply(rule, LogicalJoin.create(left, right, List.of(), b.literal(true), ImmutableSet.of(),
-                JoinRelType.INNER));
+        RelNode leftJoinNearMiss = LogicalJoin.create(left, right, List.of(), notAny,
+                com.google.common.collect.ImmutableSet.of(), JoinRelType.LEFT);
+        RuleChecks.doesNotApply(rule, leftJoinNearMiss);
     }
 
     public static void main(String[] args) {
-        System.out.println("Running NormalizeJoinNotAnyFilter test...");
+        System.out.println("Running RULE test...");
         runTest();
     }
 }

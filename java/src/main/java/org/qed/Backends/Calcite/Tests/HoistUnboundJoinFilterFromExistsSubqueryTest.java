@@ -1,48 +1,48 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rel.logical.LogicalJoin;
+import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.Backends.Calcite.CalciteRuntime;
 import org.qed.RRuleInstances.HoistUnboundJoinFilterFromExistsSubquery;
 import org.qed.RuleBuilder;
 
-public class HoistUnboundJoinFilterFromExistsSubqueryTest {
-
+public final class HoistUnboundJoinFilterFromExistsSubqueryTest {
     public static void runTest() {
         var rule = new HoistUnboundJoinFilterFromExistsSubquery();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
-    }
 
-    private static void ordinaryTables(HoistUnboundJoinFilterFromExistsSubquery rule) {
         var builder = RuleBuilder.create();
-        var outer = RuleChecks.table(builder, 1, false);
-        var l = RuleChecks.table(builder, 1, false);
-        var r = RuleChecks.table(builder, 1, false);
-        var unbound = builder.genericPredicateOp("unbound_cond", false);
-        var joined = builder.scan(l).scan(r)
-                .join(JoinRelType.INNER, builder.and(
-                        builder.call(unbound),
-                        builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 0), builder.field(2, 1, 0))))
-                .build();
-        var before = builder.scan(outer).filter(RexSubQuery.exists(joined)).build();
-        var plain = RuleChecks.ruleBuilder(builder);
-        var innerAfter = plain.scan(l).scan(r)
-                .join(JoinRelType.INNER, plain.call(SqlStdOperatorTable.EQUALS, plain.field(2, 0, 0), plain.field(2, 1, 0)))
-                .build();
-        var after = plain.scan(outer)
-                .filter(plain.and(RexSubQuery.exists(innerAfter), plain.call(unbound)))
-                .build();
+        var outerName = RuleChecks.table(builder, 1, false);
+        var leftName = RuleChecks.table(builder, 1, false);
+        var rightName = RuleChecks.table(builder, 1, false);
+        var b = builder.transform(CalciteRuntime::configure);
+        RelNode outer = b.scan(outerName).build();
+        RelNode left = b.scan(leftName).build();
+        RelNode right = b.scan(rightName).build();
+        var rex = b.getRexBuilder();
+        RexNode outerBound = rex.makeCall(SqlStdOperatorTable.CURRENT_USER);
+        RexNode leftRef = rex.makeInputRef(left, 0);
+        RexNode rightRef = rex.makeInputRef(right, 0);
+        RexNode joinPred = rex.makeCall(SqlStdOperatorTable.EQUALS, leftRef, rightRef);
+        RexNode unboundCond = rex.makeCall(SqlStdOperatorTable.CURRENT_USER);
+        RexNode joinCondition = rex.makeCall(SqlStdOperatorTable.AND, unboundCond, joinPred);
+        RelNode join = LogicalJoin.create(left, right, java.util.List.of(), joinCondition,
+                java.util.Set.of(), JoinRelType.INNER);
+        RelNode before = LogicalFilter.create(outer, RexSubQuery.exists(join));
+        RelNode expectedJoin = LogicalJoin.create(left, right, java.util.List.of(), joinPred,
+                java.util.Set.of(), JoinRelType.INNER);
+        RelNode after = LogicalFilter.create(outer,
+                rex.makeCall(SqlStdOperatorTable.AND, RexSubQuery.exists(expectedJoin), outerBound));
         RuleChecks.rewrites(rule, before, after);
-
-        var leftJoined = builder.scan(l).scan(r)
-                .join(JoinRelType.LEFT, builder.and(
-                        builder.call(unbound),
-                        builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 0), builder.field(2, 1, 0))))
-                .build();
-        RuleChecks.doesNotApply(rule, builder.scan(outer).filter(RexSubQuery.exists(leftJoined)).build());
+        RuleChecks.doesNotApply(rule, LogicalFilter.create(outer,
+                rex.makeCall(SqlStdOperatorTable.AND, RexSubQuery.exists(expectedJoin), outerBound)));
     }
 
     public static void main(String[] args) {

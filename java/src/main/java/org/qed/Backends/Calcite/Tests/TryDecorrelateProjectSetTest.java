@@ -1,54 +1,55 @@
 package org.qed.Backends.Calcite.Tests;
 
+import kala.collection.Seq;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.Backends.Calcite.CalciteRuntime;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.TryDecorrelateProjectSet;
 import org.qed.RuleBuilder;
 
-public class TryDecorrelateProjectSetTest {
-
+public final class TryDecorrelateProjectSetTest {
     public static void runTest() {
         var rule = new TryDecorrelateProjectSet();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
-    }
 
-    private static void ordinaryTables(TryDecorrelateProjectSet rule) {
-        var base = RuleBuilder.create();
-        var tl = RuleChecks.table(base, 1, false);
-        var ti = RuleChecks.table(base, 1, false);
-        var te = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
+        var catalog = RuleBuilder.create();
+        var l = RuleChecks.table(catalog, 1, false);
+        var i = RuleChecks.table(catalog, 1, false);
+        var e = RuleChecks.table(catalog, 1, false);
+        var b = RuleChecks.ruleBuilder(catalog);
+        var left = b.scan(l).build();
+        var input = b.scan(i).build();
+        var emitted = b.scan(e).build();
+        b.push(input).push(emitted);
+        var membership = b.call(catalog.genericPredicateOp("M", true), ref(b, left, 0), ref(b, left, 1));
+        var zipped = b.join(JoinRelType.INNER, membership).build();
+        b.push(left).push(zipped);
+        var condition = b.call(catalog.genericPredicateOp("on", true),
+                ref(b, left, 0), ref(b, left, 1), ref(b, left, 2));
+        var before = b.join(JoinRelType.INNER, condition).build();
 
-        var before = b.scan(tl).scan(ti).scan(te)
-                .join(JoinRelType.INNER, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
-                .join(JoinRelType.INNER, b.and(
-                        RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)),
-                        RuleChecks.eq(b, b.field(2, 1, 0), b.field(2, 1, 1))))
-                .build();
-        var after = b.scan(tl).scan(ti)
-                .join(JoinRelType.INNER, b.literal(true))
-                .scan(te)
-                .join(JoinRelType.INNER, RuleChecks.eq(b, b.field(2, 0, 1), b.field(2, 1, 0)))
-                .filter(b.and(
-                        RuleChecks.eq(b, b.field(0), b.field(1)),
-                        RuleChecks.eq(b, b.field(1), b.field(2))))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
+        var cross = b.push(left).push(input).join(JoinRelType.INNER, b.literal(true)).build();
+        b.push(cross).push(emitted);
+        var movedMembership = b.call(catalog.genericPredicateOp("M", true), ref(b, left, 1), ref(b, left, 2));
+        var movedZip = b.join(JoinRelType.INNER, movedMembership).build();
+        b.push(movedZip);
+        var movedCondition = b.call(catalog.genericPredicateOp("on", true),
+                ref(b, left, 0), ref(b, left, 1), ref(b, left, 2));
+        var expected = b.filter(movedCondition).build();
+        RuleChecks.rewrites(rule, before, expected);
 
-        var outerJoinNotInner = b.scan(tl).scan(ti).scan(te)
-                .join(JoinRelType.INNER, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
-                .join(JoinRelType.LEFT, b.and(
-                        RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)),
-                        RuleChecks.eq(b, b.field(2, 1, 0), b.field(2, 1, 1))))
-                .build();
-        RuleChecks.doesNotApply(rule, outerJoinNotInner);
+        RuleChecks.doesNotApply(rule, b.scan(l).build());
     }
 
     public static void main(String[] args) {
         System.out.println("Running TryDecorrelateProjectSet test...");
         runTest();
+    }
+
+    private static org.apache.calcite.rex.RexNode ref(org.apache.calcite.tools.RelBuilder b,
+            org.apache.calcite.rel.RelNode typeSource, int index) {
+        return b.getRexBuilder().makeInputRef(typeSource.getRowType().getFieldList().get(0).getType(), index);
     }
 }

@@ -1,11 +1,12 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.qed.RRuleInstances.PruneUnionAllCols;
 import org.qed.RelType;
-import org.qed.RuleBuilder;
 
-public class PruneUnionAllColsTest {
+import java.util.List;
 
+public final class PruneUnionAllColsTest {
     public static void runTest() {
         var rule = new PruneUnionAllCols();
         RuleChecks.rewritesPattern(rule);
@@ -15,23 +16,20 @@ public class PruneUnionAllColsTest {
     }
 
     private static void ordinaryTables(PruneUnionAllCols rule) {
-        var base = RuleBuilder.create();
-        var l = RuleChecks.table(base, 3, false);
-        var r = RuleChecks.table(base, 3, false);
-        var g = base.genericProjectionOp("G", new RelType.VarType("G_Type", true));
-        var b = RuleChecks.ruleBuilder(base);
-        var before = b.scan(l).scan(r).union(true, 2)
-                .project(b.call(g, b.field(0), b.field(2)))
-                .build();
-        var after = b.scan(l).project(b.field(0), b.field(2))
-                .scan(r).project(b.field(0), b.field(2))
-                .union(true, 2)
-                .project(b.call(g, b.field(0), b.field(1)))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
+        var schema = org.qed.RuleBuilder.create();
+        var leftName = RuleChecks.table(schema, 3, false);
+        var rightName = RuleChecks.table(schema, 3, false);
+        var left = schema.transform(org.qed.Backends.Calcite.CalciteRuntime::configure);
+        var g = schema.genericProjectionOp("G", new RelType.VarType("G_Type", true));
+        left.scan(leftName).scan(rightName).union(true, 2);
+        RelNode before = left.project(List.of(left.call(g, left.field(0), left.field(2)))).build();
 
-        RuleChecks.doesNotApply(rule, b.scan(l).scan(r).union(false, 2)
-                .project(b.call(g, b.field(0), b.field(2))).build());
+        var expected = schema.transform(org.qed.Backends.Calcite.CalciteRuntime::configure);
+        expected.scan(leftName).project(List.of(expected.field(0), expected.field(2)));
+        expected.scan(rightName).project(List.of(expected.field(0), expected.field(2)));
+        expected.union(true, 2);
+        RelNode after = expected.project(List.of(expected.call(g, expected.field(0), expected.field(1)))).build();
+        RuleChecks.rewrites(rule, before, after);
     }
 
     public static void main(String[] args) {

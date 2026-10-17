@@ -1,17 +1,13 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.ProjectCalcMerge;
 import org.qed.RuleBuilder;
 
-import java.util.List;
-
 public class ProjectCalcMergeTest {
-
     public static void runTest() {
+        System.out.println("Running RULE test...");
         var rule = new ProjectCalcMerge();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
@@ -20,35 +16,66 @@ public class ProjectCalcMergeTest {
     }
 
     private static void ordinaryTables(ProjectCalcMerge rule) {
-        var base = RuleBuilder.create();
-        var s = RuleChecks.table(base, 2, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var calc = (java.util.function.Supplier<RelBuilder>) () -> {
-            b.scan(s).filter(RuleChecks.gt(b, b.field(0), 5));
-            return b.project(b.call(SqlStdOperatorTable.PLUS, b.field(0), b.field(1)),
-                    b.call(SqlStdOperatorTable.MULTIPLY, b.field(0), b.field(1)));
-        };
-        var before = calc.get().project(b.call(SqlStdOperatorTable.MINUS, b.field(0), b.field(1)),
-                b.call(SqlStdOperatorTable.PLUS, b.field(0), b.field(1))).build();
+        var builder = RuleBuilder.create();
+        var table = RuleChecks.table(builder, 2, false);
+        var b = RuleChecks.ruleBuilder(builder);
+        var input = b.scan(table).build();
+        var x = b.getRexBuilder().makeInputRef(input, 0);
+        var y = b.getRexBuilder().makeInputRef(input, 1);
+        var lower0 = b.call(SqlStdOperatorTable.PLUS, x, b.literal(3));
+        var lower1 = b.call(SqlStdOperatorTable.MULTIPLY, y, b.literal(2));
+        var condition = RuleChecks.gt(b, x, 0);
+        var before = org.apache.calcite.rel.logical.LogicalProject.create(
+                org.apache.calcite.rel.logical.LogicalProject.create(
+                        org.apache.calcite.rel.logical.LogicalFilter.create(input, condition),
+                        java.util.List.of(), java.util.List.of(lower0, lower1),
+                        java.util.List.of("L0", "L1")),
+                java.util.List.of(), java.util.List.of(
+                        b.call(SqlStdOperatorTable.PLUS, b.getRexBuilder().makeInputRef(
+                                org.apache.calcite.rel.logical.LogicalProject.create(
+                                        org.apache.calcite.rel.logical.LogicalFilter.create(input, condition),
+                                        java.util.List.of(), java.util.List.of(lower0, lower1),
+                                        java.util.List.of("L0", "L1")), 0), b.literal(4)),
+                        b.call(SqlStdOperatorTable.MULTIPLY, b.getRexBuilder().makeInputRef(
+                                org.apache.calcite.rel.logical.LogicalProject.create(
+                                        org.apache.calcite.rel.logical.LogicalFilter.create(input, condition),
+                                        java.util.List.of(), java.util.List.of(lower0, lower1),
+                                        java.util.List.of("L0", "L1")), 1), b.literal(5))),
+                java.util.List.of("P0", "P1"));
+        var expected = org.apache.calcite.rel.logical.LogicalProject.create(
+                org.apache.calcite.rel.logical.LogicalFilter.create(input, condition),
+                java.util.List.of(), java.util.List.of(
+                        b.call(SqlStdOperatorTable.PLUS, lower0, b.literal(4)),
+                        b.call(SqlStdOperatorTable.MULTIPLY, lower1, b.literal(5))),
+                java.util.List.of("P0", "P1"));
+        RuleChecks.rewrites(rule, before, expected);
 
-        b.scan(s).filter(RuleChecks.gt(b, b.field(0), 5));
-        var sum = b.call(SqlStdOperatorTable.PLUS, b.field(0), b.field(1));
-        var product = b.call(SqlStdOperatorTable.MULTIPLY, b.field(0), b.field(1));
-        var after = b.project(b.call(SqlStdOperatorTable.MINUS, sum, product),
-                b.call(SqlStdOperatorTable.PLUS, sum, product)).build();
-        RuleChecks.rewrites(rule, before, after);
-
-        RuleChecks.doesNotApply(rule, calc.get().project(b.call(SqlStdOperatorTable.MINUS, b.field(0), b.field(1)))
-                .build());
-        RuleChecks.doesNotApply(rule, b.scan(s)
-                .project(b.call(SqlStdOperatorTable.PLUS, b.field(0), b.field(1)),
-                        b.call(SqlStdOperatorTable.MULTIPLY, b.field(0), b.field(1)))
-                .project(b.call(SqlStdOperatorTable.MINUS, b.field(0), b.field(1)),
-                        b.call(SqlStdOperatorTable.PLUS, b.field(0), b.field(1))).build());
+        var wrongArity = org.apache.calcite.rel.logical.LogicalProject.create(
+                org.apache.calcite.rel.logical.LogicalProject.create(
+                        org.apache.calcite.rel.logical.LogicalFilter.create(input, condition),
+                        java.util.List.of(), java.util.List.of(lower0),
+                        java.util.List.of("L0")),
+                java.util.List.of(), java.util.List.of(b.getRexBuilder().makeInputRef(
+                        org.apache.calcite.rel.logical.LogicalProject.create(
+                                org.apache.calcite.rel.logical.LogicalFilter.create(input, condition),
+                                java.util.List.of(), java.util.List.of(lower0), java.util.List.of("L0")), 0),
+                        b.getRexBuilder().makeInputRef(
+                                org.apache.calcite.rel.logical.LogicalProject.create(
+                                        org.apache.calcite.rel.logical.LogicalFilter.create(input, condition),
+                                        java.util.List.of(), java.util.List.of(lower0), java.util.List.of("L0")), 0)),
+                java.util.List.of("P0", "P1"));
+        RuleChecks.doesNotApply(rule, wrongArity);
     }
 
     public static void main(String[] args) {
-        System.out.println("Running ProjectCalcMerge test...");
-        runTest();
+        System.out.println("Running RULE test...");
+        var rule = new ProjectCalcMerge();
+        RuleChecks.rewritesPattern(rule);
+        RuleChecks.rewritesConcretePredicates(rule);
+        RuleChecks.rejectsNearMisses(rule);
+        ordinaryTables(rule);
+        if (CalciteTester.failures() > 0) {
+            System.exit(1);
+        }
     }
 }

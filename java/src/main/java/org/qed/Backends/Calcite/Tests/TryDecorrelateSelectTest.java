@@ -1,42 +1,39 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.TryDecorrelateSelect;
-import org.qed.RuleBuilder;
 
 public class TryDecorrelateSelectTest {
-
     public static void runTest() {
         var rule = new TryDecorrelateSelect();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
-    }
 
-    private static void ordinaryTables(TryDecorrelateSelect rule) {
-        var base = RuleBuilder.create();
-        var l = RuleChecks.table(base, 1, false);
-        var r = RuleChecks.table(base, 1, false);
-        var on = base.genericPredicateOp("on_cond", true);
-        var pred = base.genericPredicateOp("select_filter", true);
-        var b = RuleChecks.ruleBuilder(base);
+        var builder = org.qed.RuleBuilder.create();
+        var leftName = RuleChecks.table(builder, 1, false);
+        var rightName = RuleChecks.table(builder, 1, false);
+        var b = RuleChecks.ruleBuilder(builder);
+        var left = b.scan(leftName).build();
+        var right = b.scan(rightName).build();
+        var leftRef = b.getRexBuilder().makeInputRef(left.getRowType().getFieldList().get(0).getType(), 0);
+        var rightRef = b.getRexBuilder().makeInputRef(right.getRowType().getFieldList().get(0).getType(), 1);
+        var on = RuleChecks.eq(b, leftRef, rightRef);
+        var selectedRight = org.apache.calcite.rel.logical.LogicalFilter.create(right,
+                RuleChecks.gt(b, b.getRexBuilder().makeInputRef(right.getRowType().getFieldList().get(0).getType(), 0), 10));
+        var handBuilt = org.apache.calcite.rel.logical.LogicalJoin.create(left, selectedRight, java.util.List.of(), on,
+                java.util.Set.of(), JoinRelType.INNER);
+        var expected = org.apache.calcite.rel.logical.LogicalJoin.create(left, right, java.util.List.of(),
+                b.call(SqlStdOperatorTable.AND, on, RuleChecks.gt(b,
+                        b.getRexBuilder().makeInputRef(right.getRowType().getFieldList().get(0).getType(), 1), 10)),
+                java.util.Set.of(), JoinRelType.INNER);
+        RuleChecks.rewrites(rule, handBuilt, expected);
 
-        var before = b.scan(l).scan(r)
-                .filter(b.call(pred, b.field(0)))
-                .join(JoinRelType.INNER, b.call(on, b.field(2, 0, 0), b.field(2, 1, 0)))
-                .build();
-        var plain = RuleChecks.ruleBuilder(base);
-        var after = plain.scan(l).scan(r)
-                .join(JoinRelType.INNER, plain.and(
-                        plain.call(on, plain.field(2, 0, 0), plain.field(2, 1, 0)),
-                        plain.call(pred, plain.field(2, 1, 0))))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
-
-        RuleChecks.doesNotApply(rule, b.scan(l).scan(r)
-                .join(JoinRelType.INNER, b.call(on, b.field(2, 0, 0), b.field(2, 1, 0)))
-                .build());
+        var wrongJoin = org.apache.calcite.rel.logical.LogicalJoin.create(left, selectedRight, java.util.List.of(), on,
+                java.util.Set.of(), JoinRelType.LEFT);
+        RuleChecks.doesNotApply(rule, wrongJoin);
     }
 
     public static void main(String[] args) {

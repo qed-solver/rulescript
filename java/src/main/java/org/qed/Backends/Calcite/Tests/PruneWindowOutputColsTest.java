@@ -1,14 +1,18 @@
 package org.qed.Backends.Calcite.Tests;
 
+import kala.collection.Seq;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.tools.RelBuilder;
+import org.qed.Backends.Calcite.CalciteRuntime;
 import org.qed.RRuleInstances.PruneWindowOutputCols;
 import org.qed.RuleBuilder;
 
 import java.util.List;
 
-public class PruneWindowOutputColsTest {
-
+public final class PruneWindowOutputColsTest {
     public static void runTest() {
         var rule = new PruneWindowOutputCols();
         RuleChecks.rewritesPattern(rule);
@@ -18,40 +22,46 @@ public class PruneWindowOutputColsTest {
     }
 
     private static void ordinaryTables(PruneWindowOutputCols rule) {
-        var base = RuleBuilder.create();
-        var table = RuleChecks.table(base, 2, false, false);
-        var plain = RuleChecks.ruleBuilder(base);
+        var rules = RuleBuilder.create();
+        var builder = RuleChecks.ruleBuilder(rules);
+        var inputName = RuleChecks.table(rules, 2, true, false);
+        var before = windowPlan(builder, inputName, rules.genericAggregateOp("w1", org.qed.RelType.fromString("INTEGER", true)),
+                rules.genericAggregateOp("w2", org.qed.RelType.fromString("INTEGER", true)));
 
-        var input = base.scan(table).build();
-        var window = base.push(input)
-                .aggregate(base.groupKey(0),
-                        base.aggregateCall(SqlStdOperatorTable.SUM, base.field(1)),
-                        base.aggregateCall(SqlStdOperatorTable.MAX, base.field(1)))
-                .build();
-        var before = base.push(input).push(window)
-                .join(JoinRelType.INNER, RuleChecks.eq(base, base.field(2, 0, 0), base.field(2, 1, 0)))
-                .project(List.of(base.field(0), base.field(1), base.field(3)))
-                .build();
-
-        var leftIn = plain.scan(table).build();
-        var rightIn = plain.scan(table)
-                .aggregate(plain.groupKey(0), plain.aggregateCall(SqlStdOperatorTable.SUM, plain.field(1)))
-                .build();
-        var after = plain.push(leftIn).push(rightIn)
-                .join(JoinRelType.INNER, RuleChecks.eq(plain, plain.field(2, 0, 0), plain.field(2, 1, 0)))
-                .project(List.of(plain.field(0), plain.field(1), plain.field(3)))
-                .build();
+        var expectedRules = RuleBuilder.create();
+        var expectedBuilder = RuleChecks.ruleBuilder(expectedRules);
+        var expectedName = RuleChecks.table(expectedRules, 2, true, false);
+        var after = windowPlan(expectedBuilder, expectedName,
+                expectedRules.genericAggregateOp("w1", org.qed.RelType.fromString("INTEGER", true)), null);
         RuleChecks.rewrites(rule, before, after);
 
-        var misSelected = base.push(input).push(window)
-                .join(JoinRelType.INNER, RuleChecks.eq(base, base.field(2, 0, 0), base.field(2, 1, 0)))
-                .project(List.of(base.field(0), base.field(1), base.field(4)))
-                .build();
-        RuleChecks.doesNotApply(rule, misSelected);
+        var missRules = RuleBuilder.create();
+        var missBuilder = RuleChecks.ruleBuilder(missRules);
+        var missName = RuleChecks.table(missRules, 2, true, false);
+        RelNode noWindow = missBuilder.scan(missName).build();
+        RuleChecks.doesNotApply(rule, noWindow);
+    }
+
+    private static RelNode windowPlan(RelBuilder builder, String inputName, SqlAggFunction first, SqlAggFunction second) {
+        var input = builder.scan(inputName).build();
+        builder.push(input);
+        var calls = new java.util.ArrayList<RelBuilder.AggCall>();
+        calls.add(builder.aggregateCall(first, false, null, "w1", List.of(builder.field(1))));
+        if (second != null) {
+            calls.add(builder.aggregateCall(second, false, null, "w2", List.of(builder.field(1))));
+        }
+        builder.aggregate(builder.groupKey(builder.field(0)), calls);
+        var perPart = builder.build();
+        builder.push(input);
+        builder.push(perPart);
+        builder.join(JoinRelType.INNER, builder.call(SqlStdOperatorTable.EQUALS,
+                builder.field(2, 0, 0), builder.field(2, 1, 0)));
+        builder.project(builder.field(0), builder.field(1), builder.field(3));
+        return builder.build();
     }
 
     public static void main(String[] args) {
-        System.out.println("Running PruneWindowOutputCols test...");
+        System.out.println("Running RULE test...");
         runTest();
     }
 }

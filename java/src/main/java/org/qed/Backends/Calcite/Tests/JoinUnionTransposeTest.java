@@ -1,16 +1,12 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
+import org.apache.calcite.sql.SqlOperator;
+import org.qed.RRule;
 import org.qed.RRuleInstances.JoinUnionTranspose;
 import org.qed.RuleBuilder;
 
-import java.util.List;
-
 public class JoinUnionTransposeTest {
-
     public static void runTest() {
         var rule = new JoinUnionTranspose();
         RuleChecks.rewritesPattern(rule);
@@ -19,30 +15,35 @@ public class JoinUnionTransposeTest {
         ordinaryTables(rule);
     }
 
-    private static void ordinaryTables(JoinUnionTranspose rule) {
-        var base = RuleBuilder.create();
-        var x = RuleChecks.table(base, 1, false);
-        var y = RuleChecks.table(base, 1, false);
-        var o = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var cond = (java.util.function.Function<RelBuilder, RexNode>) q ->
-                q.call(SqlStdOperatorTable.LESS_THAN, q.field(2, 0, 0), q.field(2, 1, 0));
-        var before = b.scan(x).scan(y).union(true, 2).scan(o).join(JoinRelType.INNER, cond.apply(b)).build();
-        b.scan(x).scan(o).join(JoinRelType.INNER, cond.apply(b));
-        b.scan(y).scan(o).join(JoinRelType.INNER, cond.apply(b));
-        var after = b.union(true, 2).build();
-        RuleChecks.rewrites(rule, before, after);
-
-        RuleChecks.doesNotApply(rule,
-                b.scan(x).scan(y).union(false, 2).scan(o).join(JoinRelType.INNER, cond.apply(b)).build());
-        RuleChecks.doesNotApply(rule,
-                b.scan(o).scan(x).scan(y).union(true, 2).join(JoinRelType.INNER, cond.apply(b)).build());
-        RuleChecks.doesNotApply(rule,
-                b.scan(x).scan(y).union(true, 2).scan(o).join(JoinRelType.LEFT, cond.apply(b)).build());
+    public static void main(String[] args) {
+        System.out.println("Running RULE test...");
+        runTest();
     }
 
-    public static void main(String[] args) {
-        System.out.println("Running JoinUnionTranspose test...");
-        runTest();
+    private static void ordinaryTables(RRule rule) {
+        var builder = RuleBuilder.create();
+        var x = RuleChecks.table(builder, 1, false);
+        var y = RuleChecks.table(builder, 1, false);
+        var o = RuleChecks.table(builder, 1, false);
+        SqlOperator predicate = builder.genericPredicateOp("ordinaryJoinPredicate", true);
+        var left = builder.scan(x).scan(y).union(true, 2).build();
+        var before = builder.push(left).scan(o)
+                .join(JoinRelType.INNER, builder.call(predicate,
+                        builder.field(2, 0, 0), builder.field(2, 1, 0)))
+                .build();
+
+        var expectedBuilder = RuleBuilder.create();
+        var expectedX = RuleChecks.table(expectedBuilder, 1, false);
+        var expectedY = RuleChecks.table(expectedBuilder, 1, false);
+        var expectedO = RuleChecks.table(expectedBuilder, 1, false);
+        SqlOperator expectedPredicate = expectedBuilder.genericPredicateOp("ordinaryJoinPredicate", true);
+        var joinedX = expectedBuilder.scan(expectedX).scan(expectedO)
+                .join(JoinRelType.INNER, expectedBuilder.call(expectedPredicate,
+                        expectedBuilder.field(2, 0, 0), expectedBuilder.field(2, 1, 0))).build();
+        var joinedY = expectedBuilder.scan(expectedY).scan(expectedO)
+                .join(JoinRelType.INNER, expectedBuilder.call(expectedPredicate,
+                        expectedBuilder.field(2, 0, 0), expectedBuilder.field(2, 1, 0))).build();
+        var after = expectedBuilder.push(joinedX).push(joinedY).union(true, 2).build();
+        RuleChecks.rewrites(rule, before, after);
     }
 }

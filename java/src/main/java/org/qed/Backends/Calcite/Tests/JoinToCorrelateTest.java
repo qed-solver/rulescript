@@ -1,16 +1,18 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rel.logical.LogicalCorrelate;
+import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.tools.RelBuilder;
+import org.apache.calcite.util.ImmutableBitSet;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.JoinToCorrelate;
 import org.qed.RuleBuilder;
 
 import java.util.List;
 
 public class JoinToCorrelateTest {
-
     public static void runTest() {
         var rule = new JoinToCorrelate();
         RuleChecks.rewritesPattern(rule);
@@ -20,27 +22,46 @@ public class JoinToCorrelateTest {
     }
 
     private static void ordinaryTables(JoinToCorrelate rule) {
-        var base = RuleBuilder.create();
-        var l = RuleChecks.table(base, 1, false);
-        var r = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var before = b.scan(l).scan(r).join(JoinRelType.INNER, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
-                .build();
+        var source = RuleBuilder.create();
+        var left = RuleChecks.table(source, 1, false);
+        var right = RuleChecks.table(source, 1, false);
+        RelBuilder beforeBuilder = RuleChecks.ruleBuilder(source);
+        var beforeLeft = beforeBuilder.scan(left).build();
+        var beforeRight = beforeBuilder.scan(right).build();
+        beforeBuilder.push(beforeLeft).push(beforeRight);
+        var beforeCondition = beforeBuilder.getRexBuilder().makeCall(SqlStdOperatorTable.GREATER_THAN,
+                beforeBuilder.getRexBuilder().makeInputRef(beforeLeft.getRowType().getFieldList().get(0).getType(), 0),
+                beforeBuilder.getRexBuilder().makeInputRef(beforeRight.getRowType().getFieldList().get(0).getType(), 1));
+        var before = beforeBuilder.join(JoinRelType.INNER, beforeCondition).build();
 
-        var freshBase = RuleBuilder.create();
-        RuleChecks.table(freshBase, 1, false);
-        RuleChecks.table(freshBase, 1, false);
-        var fresh = RuleChecks.ruleBuilder(freshBase);
-        var after = RuleChecks.correlate(fresh, fresh.scan(l).build(), fresh.scan(r).build(), JoinRelType.INNER,
-                args -> fresh.call(SqlStdOperatorTable.EQUALS, args[0], args[1]));
-        RuleChecks.rewrites(rule, before, after);
+        var expectedBuilder = RuleChecks.ruleBuilder(source);
+        var expectedLeft = expectedBuilder.scan(left).build();
+        var expectedRight = expectedBuilder.scan(right).build();
+        var id = expectedBuilder.getCluster().createCorrel();
+        var correlation = expectedBuilder.getRexBuilder().makeCorrel(expectedLeft.getRowType(), id);
+        var leftField = expectedBuilder.getRexBuilder().makeFieldAccess(correlation, 0);
+        var rightField = expectedBuilder.getRexBuilder().makeInputRef(
+                expectedRight.getRowType().getFieldList().get(0).getType(), 0);
+        var condition = expectedBuilder.getRexBuilder().makeCall(SqlStdOperatorTable.GREATER_THAN,
+                leftField, rightField);
+        var expected = LogicalCorrelate.create(expectedLeft,
+                LogicalFilter.create(expectedRight, condition), List.of(), id,
+                ImmutableBitSet.range(expectedLeft.getRowType().getFieldCount()), JoinRelType.INNER);
+        RuleChecks.rewrites(rule, before, expected);
 
-        RuleChecks.doesNotApply(rule, b.scan(l).scan(r)
-                .join(JoinRelType.LEFT, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0))).build());
+        var nearMissBuilder = RuleChecks.ruleBuilder(source);
+        var nearMissLeft = nearMissBuilder.scan(left).build();
+        var nearMissRight = nearMissBuilder.scan(right).build();
+        nearMissBuilder.push(nearMissLeft).push(nearMissRight);
+        var nearMissCondition = nearMissBuilder.getRexBuilder().makeCall(SqlStdOperatorTable.GREATER_THAN,
+                nearMissBuilder.getRexBuilder().makeInputRef(nearMissLeft.getRowType().getFieldList().get(0).getType(), 0),
+                nearMissBuilder.getRexBuilder().makeInputRef(nearMissRight.getRowType().getFieldList().get(0).getType(), 1));
+        var nearMiss = nearMissBuilder.join(JoinRelType.LEFT, nearMissCondition).build();
+        RuleChecks.doesNotApply(rule, nearMiss);
     }
 
     public static void main(String[] args) {
-        System.out.println("Running JoinToCorrelate test...");
+        System.out.println("Running RULE test...");
         runTest();
     }
 }

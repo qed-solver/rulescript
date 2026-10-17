@@ -1,44 +1,63 @@
 package org.qed.Backends.Calcite.Tests;
 
+import kala.collection.Seq;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.logical.LogicalAggregate;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.util.ImmutableBitSet;
+import org.qed.Backends.Calcite.CalciteRuntime;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.FoldGroupingOperators;
+import org.qed.RelRN;
 import org.qed.RuleBuilder;
 
 import java.util.List;
 
 public class FoldGroupingOperatorsTest {
-
     public static void runTest() {
         var rule = new FoldGroupingOperators();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        handBuiltPositive();
+        handBuiltNoMatch();
     }
 
-    private static void ordinaryTables(FoldGroupingOperators rule) {
-        var base = RuleBuilder.create();
-        var t = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var inner = b.scan(t)
-                .project(List.of(b.field(0)), List.of("k"), true)
-                .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.SUM, b.field(0)))
-                .build();
-        var before = LogicalAggregate.create(inner, ImmutableBitSet.of(0), null, List.of());
-        var after = b.scan(t).aggregate(b.groupKey(0)).build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void handBuiltPositive() {
+        var pair = builderAndScan();
+        var b = pair.builder();
+        var scan = pair.scan();
+        var projected = b.push(scan).project(b.fields(), List.of(), true).build();
+        var inner = aggregate(projected, ImmutableBitSet.of(0), List.of(countCall(b, projected)));
+        var before = aggregate(inner, ImmutableBitSet.of(0), List.of());
+        var expected = aggregate(scan, ImmutableBitSet.of(0), List.of());
+        RuleChecks.rewrites(new FoldGroupingOperators(), before, expected);
+    }
 
-        var outerWithCall = b.scan(t)
-                .project(List.of(b.field(0)), List.of("k"), true)
-                .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.SUM, b.field(0)))
-                .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.MAX, b.field(1)))
-                .build();
-        RuleChecks.doesNotApply(rule, outerWithCall);
+    private static void handBuiltNoMatch() {
+        var pair = builderAndScan();
+        var b = pair.builder();
+        var scan = pair.scan();
+        RuleChecks.doesNotApply(new FoldGroupingOperators(), scan);
+    }
 
-        var plain = b.scan(t).aggregate(b.groupKey(0)).build();
-        RuleChecks.doesNotApply(rule, plain);
+    private record BuilderAndScan(RelBuilder builder, RelNode scan) {}
+
+    private static BuilderAndScan builderAndScan() {
+        var builder = RuleBuilder.create();
+        var table = RuleChecks.table(builder, 1, false);
+        var calciteBuilder = RuleChecks.ruleBuilder(builder);
+        return new BuilderAndScan(calciteBuilder, calciteBuilder.scan(table).build());
+    }
+
+    private static RelNode aggregate(RelNode input, ImmutableBitSet groups, List<org.apache.calcite.rel.core.AggregateCall> calls) {
+        return LogicalAggregate.create(input, List.of(), groups, null, calls);
+    }
+
+    private static org.apache.calcite.rel.core.AggregateCall countCall(RelBuilder b, RelNode input) {
+        return org.apache.calcite.rel.core.AggregateCall.create(org.apache.calcite.sql.fun.SqlStdOperatorTable.COUNT,
+                false, false, false, List.of(0), -1, null, org.apache.calcite.rel.RelCollations.EMPTY,
+                1, input, null, "v");
     }
 
     public static void main(String[] args) {

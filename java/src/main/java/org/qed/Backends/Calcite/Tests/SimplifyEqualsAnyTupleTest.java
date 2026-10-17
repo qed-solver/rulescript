@@ -1,39 +1,55 @@
 package org.qed.Backends.Calcite.Tests;
 
-import com.google.common.collect.ImmutableList;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.logical.LogicalFilter;
-import org.apache.calcite.rex.RexSubQuery;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.Backends.Calcite.CalciteRuntime;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.SimplifyEqualsAnyTuple;
 import org.qed.RuleBuilder;
 
-public class SimplifyEqualsAnyTupleTest {
+import java.util.List;
 
+import static org.qed.Backends.Calcite.Tests.RuleChecks.*;
+
+public final class SimplifyEqualsAnyTupleTest {
     public static void runTest() {
         var rule = new SimplifyEqualsAnyTuple();
-        RuleChecks.rewritesPattern(rule);
-        RuleChecks.rewritesConcretePredicates(rule);
-        RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        rewritesPattern(rule);
+        rewritesConcretePredicates(rule);
+        rejectsNearMisses(rule);
+        handBuiltMatchAndExpected();
+        rejectsInnerJoin();
     }
 
-    private static void ordinaryTables(SimplifyEqualsAnyTuple rule) {
-        var base = RuleBuilder.create();
-        var s = RuleChecks.table(base, 1, false);
-        var v = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var outer = b.scan(s).build();
-        var tuple = b.scan(v).build();
-        var before = b.push(outer).push(tuple)
-                .join(JoinRelType.SEMI, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0))).build();
-        var membership = RexSubQuery.in(tuple, ImmutableList.of(b.push(outer).field(0)));
-        var after = LogicalFilter.create(b.build(), membership);
-        RuleChecks.rewrites(rule, before, after);
+    private static void handBuiltMatchAndExpected() {
+        var schema = RuleBuilder.create();
+        var sourceName = table(schema, 1, false, true);
+        var tupleName = table(schema, 1, false, true);
+        var b = schema.transform(CalciteRuntime::configure);
+        RelNode source = b.scan(sourceName).build();
+        RelNode tuple = b.scan(tupleName).build();
+        RexNode lhs = b.getRexBuilder().makeInputRef(source, 0);
+        RelNode input = org.apache.calcite.rel.logical.LogicalJoin.create(source, tuple,
+                List.of(), b.call(SqlStdOperatorTable.EQUALS, lhs,
+                        b.getRexBuilder().makeInputRef(tuple.getRowType().getFieldList().get(0).getType(), 1)),
+                java.util.Set.of(), JoinRelType.SEMI);
 
-        RuleChecks.doesNotApply(rule, b.push(outer).push(tuple)
-                .join(JoinRelType.INNER, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0))).build());
-        RuleChecks.doesNotApply(rule, b.push(outer).push(tuple)
-                .join(JoinRelType.ANTI, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0))).build());
+        RexNode expectedCondition = b.in(tuple, List.of(b.getRexBuilder().makeInputRef(source, 0)));
+        RelNode expected = LogicalFilter.create(source, expectedCondition);
+        rewrites(new SimplifyEqualsAnyTuple(), input, expected);
+    }
+
+    private static void rejectsInnerJoin() {
+        var schema = RuleBuilder.create();
+        var sourceName = table(schema, 1, false, true);
+        var tupleName = table(schema, 1, false, true);
+        var b = schema.transform(CalciteRuntime::configure);
+        b.scan(sourceName).scan(tupleName).join(JoinRelType.INNER,
+                b.call(SqlStdOperatorTable.EQUALS, b.field(2, 0, 0), b.field(2, 1, 0)));
+        doesNotApply(new SimplifyEqualsAnyTuple(), b.build());
     }
 
     public static void main(String[] args) {

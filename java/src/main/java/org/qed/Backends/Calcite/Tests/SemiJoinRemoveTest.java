@@ -1,38 +1,72 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rel.logical.LogicalJoin;
+import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.Backends.Calcite.CalciteRuntime;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.SemiJoinRemove;
 import org.qed.RuleBuilder;
 
-public class SemiJoinRemoveTest {
+import java.util.List;
+import java.util.Set;
 
+import static org.qed.Backends.Calcite.Tests.RuleChecks.*;
+
+public class SemiJoinRemoveTest {
     public static void runTest() {
         var rule = new SemiJoinRemove();
-        RuleChecks.rewritesPattern(rule);
-        RuleChecks.rewritesConcretePredicates(rule);
-        RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        rewritesPattern(rule);
+        rewritesConcretePredicates(rule);
+        rejectsNearMisses(rule);
+
+        handBuiltRepeatedRightAndCondition(rule);
+        rejectsDifferentOuterCondition(rule);
     }
 
-    private static void ordinaryTables(SemiJoinRemove rule) {
-        var base = RuleBuilder.create();
-        var x = RuleChecks.table(base, 1, false);
-        var y = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var cond = (java.util.function.Supplier<RexNode>) () -> RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0));
-        var before = b.scan(x).scan(y).join(JoinRelType.SEMI, cond.get()).scan(y).join(JoinRelType.INNER, cond.get()).build();
-        var after = b.scan(x).scan(y).join(JoinRelType.INNER, cond.get()).build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void handBuiltRepeatedRightAndCondition(SemiJoinRemove rule) {
+        var builder = RuleBuilder.create();
+        var leftName = table(builder, 1, false, false);
+        var rightName = table(builder, 1, false, false);
+        var b = builder.transform(CalciteRuntime::configure);
+        var left = b.scan(leftName).build();
+        var right = b.scan(rightName).build();
+        var rex = b.getRexBuilder();
+        var condition = rex.makeCall(SqlStdOperatorTable.EQUALS,
+                rex.makeInputRef(left.getRowType().getFieldList().get(0).getType(), 0),
+                rex.makeInputRef(right.getRowType().getFieldList().get(0).getType(), 1));
+        RelNode semi = LogicalJoin.create(left, right, List.of(), condition, Set.of(), JoinRelType.SEMI);
+        RelNode before = LogicalJoin.create(semi, right, List.of(), condition, Set.of(), JoinRelType.INNER);
+        RelNode expected = LogicalJoin.create(left, right, List.of(), condition, Set.of(), JoinRelType.INNER);
+        rewrites(rule, before, expected);
+    }
 
-        RuleChecks.doesNotApply(rule, b.scan(x).scan(y).join(JoinRelType.INNER, cond.get())
-                .scan(y).join(JoinRelType.INNER, cond.get()).build());
-        RuleChecks.doesNotApply(rule, b.scan(x).scan(y).join(JoinRelType.SEMI, cond.get())
-                .scan(y).join(JoinRelType.LEFT, cond.get()).build());
+    private static void rejectsDifferentOuterCondition(SemiJoinRemove rule) {
+        var builder = RuleBuilder.create();
+        var leftName = table(builder, 1, false, false);
+        var rightName = table(builder, 1, false, false);
+        var b = builder.transform(CalciteRuntime::configure);
+        var left = b.scan(leftName).build();
+        var right = b.scan(rightName).build();
+        var rex = b.getRexBuilder();
+        var semiCondition = rex.makeCall(SqlStdOperatorTable.EQUALS,
+                rex.makeInputRef(left.getRowType().getFieldList().get(0).getType(), 0),
+                rex.makeInputRef(right.getRowType().getFieldList().get(0).getType(), 1));
+        var outerCondition = rex.makeCall(SqlStdOperatorTable.GREATER_THAN,
+                rex.makeInputRef(left.getRowType().getFieldList().get(0).getType(), 0),
+                rex.makeInputRef(right.getRowType().getFieldList().get(0).getType(), 1));
+        RelNode semi = LogicalJoin.create(left, right, List.of(), semiCondition, Set.of(), JoinRelType.SEMI);
+        RelNode before = LogicalJoin.create(semi, right, List.of(), outerCondition, Set.of(), JoinRelType.INNER);
+        doesNotApply(rule, before);
     }
 
     public static void main(String[] args) {
         System.out.println("Running SemiJoinRemove test...");
         runTest();
+        if (CalciteTester.failures() != 0) {
+            throw new AssertionError("SemiJoinRemove had " + CalciteTester.failures() + " failure(s)");
+        }
     }
 }

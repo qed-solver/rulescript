@@ -1,34 +1,25 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
+import org.apache.calcite.rel.logical.LogicalUnion;
 import org.qed.RRuleInstances.UnionEliminator;
 import org.qed.RuleBuilder;
 
-import java.util.List;
-
-public class UnionEliminatorTest {
-
+public final class UnionEliminatorTest {
     public static void runTest() {
         var rule = new UnionEliminator();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
-    }
 
-    private static void ordinaryTables(UnionEliminator rule) {
-        var base = RuleBuilder.create();
-        var ta = RuleChecks.table(base, 1, false);
-        var tb = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var before = org.apache.calcite.rel.logical.LogicalUnion.create(List.of(b.scan(ta).build()), true);
-        var after = b.scan(ta).build();
-        RuleChecks.rewrites(rule, before, after);
+        var builder = RuleBuilder.create();
+        var table = RuleChecks.table(builder, 1, false);
+        var source = builder.scan(table).build();
+        var concreteBefore = LogicalUnion.create(java.util.List.of(source), true);
+        var expected = builder.scan(table).build();
+        RuleChecks.rewrites(rule, concreteBefore, expected);
 
-        RuleChecks.doesNotApply(rule, b.scan(ta).scan(tb).union(true, 2).build());
+        var distinctUnion = LogicalUnion.create(java.util.List.of(source), false);
+        RuleChecks.doesNotApply(rule, distinctUnion);
     }
 
     public static void main(String[] args) {

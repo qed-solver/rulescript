@@ -1,65 +1,43 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.DeduplicateSelectFilters;
 import org.qed.RuleBuilder;
 
 public class DeduplicateSelectFiltersTest {
-
     public static void runTest() {
         var rule = new DeduplicateSelectFilters();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
-    }
 
-    private static RexNode gt5(RelBuilder b) {
-        return RuleChecks.gt(b, b.field(0), 5);
-    }
+        var builder = RuleBuilder.create();
+        var table = RuleChecks.table(builder, 1, false, false);
+        var relBuilder = RuleChecks.ruleBuilder(builder);
+        RelNode scan = relBuilder.scan(table).build();
+        var input = relBuilder.getRexBuilder().makeInputRef(scan, 0);
+        var p = relBuilder.call(SqlStdOperatorTable.LESS_THAN, input, relBuilder.literal(7));
+        var q = relBuilder.call(SqlStdOperatorTable.GREATER_THAN, input, relBuilder.literal(2));
+        var r = relBuilder.call(SqlStdOperatorTable.EQUALS, input, relBuilder.literal(5));
 
-    private static RexNode lt10(RelBuilder b) {
-        return b.call(SqlStdOperatorTable.LESS_THAN, b.field(0), b.literal(10));
-    }
+        RelNode concreteBefore = LogicalFilter.create(
+                LogicalFilter.create(LogicalFilter.create(scan, p), q), p);
+        RelNode concreteAfter = LogicalFilter.create(LogicalFilter.create(scan, p), q);
+        RuleChecks.rewrites(rule, concreteBefore, concreteAfter);
 
-    private static RexNode gt7(RelBuilder b) {
-        return RuleChecks.gt(b, b.field(0), 7);
-    }
-
-    private static void ordinaryTables(DeduplicateSelectFilters rule) {
-        var base = RuleBuilder.create();
-        var table = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-
-        var before = b.scan(table)
-                .filter(gt5(b))
-                .filter(lt10(b))
-                .filter(gt5(b))
-                .build();
-        var after = b.scan(table)
-                .filter(gt5(b))
-                .filter(lt10(b))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
-
-        var twoFilters = b.scan(table)
-                .filter(gt5(b))
-                .filter(lt10(b))
-                .build();
-        RuleChecks.doesNotApply(rule, twoFilters);
-
-        var differentThird = b.scan(table)
-                .filter(gt5(b))
-                .filter(lt10(b))
-                .filter(gt7(b))
-                .build();
-        RuleChecks.doesNotApply(rule, differentThird);
+        RelNode nearMiss = LogicalFilter.create(
+                LogicalFilter.create(LogicalFilter.create(scan, p), q), r);
+        RuleChecks.doesNotApply(rule, nearMiss);
     }
 
     public static void main(String[] args) {
         System.out.println("Running DeduplicateSelectFilters test...");
         runTest();
+        if (CalciteTester.failures() > 0) {
+            System.exit(1);
+        }
     }
 }

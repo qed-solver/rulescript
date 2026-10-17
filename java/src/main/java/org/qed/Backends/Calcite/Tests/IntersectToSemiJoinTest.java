@@ -1,38 +1,46 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.IntersectToSemiJoin;
 import org.qed.RuleBuilder;
 
-import java.util.List;
-
-public class IntersectToSemiJoinTest {
-
+public final class IntersectToSemiJoinTest {
     public static void runTest() {
         var rule = new IntersectToSemiJoin();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        handBuiltPositive();
+        handBuiltNoMatch();
     }
 
-    private static void ordinaryTables(IntersectToSemiJoin rule) {
-        var base = RuleBuilder.create();
-        var ta = RuleChecks.table(base, 1, false);
-        var tb = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var before = b.scan(ta).scan(tb).intersect(false, 2).build();
-        var after = b.scan(ta).scan(tb)
-                .join(JoinRelType.SEMI, b.call(SqlStdOperatorTable.IS_NOT_DISTINCT_FROM, b.field(2, 0, 0),
-                        b.field(2, 1, 0)))
-                .aggregate(b.groupKey(0)).build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void handBuiltPositive() {
+        var qed = RuleBuilder.create();
+        var left = RuleChecks.table(qed, 1, false, true);
+        var right = RuleChecks.table(qed, 1, false, true);
+        var builder = RuleChecks.ruleBuilder(qed);
+        var before = builder.scan(left).scan(right).intersect(false, 2).build();
+        builder.scan(left).scan(right);
+        var leftRel = builder.peek(1);
+        var rightRel = builder.peek(0);
+        var rexBuilder = builder.getRexBuilder();
+        var condition = rexBuilder.makeCall(SqlStdOperatorTable.IS_NOT_DISTINCT_FROM,
+                rexBuilder.makeInputRef(leftRel.getRowType().getFieldList().get(0).getType(), 0),
+                rexBuilder.makeInputRef(rightRel.getRowType().getFieldList().get(0).getType(), 1));
+        var expected = builder.join(JoinRelType.SEMI, condition)
+                .aggregate(builder.groupKey(builder.field(0))).build();
+        RuleChecks.rewrites(new IntersectToSemiJoin(), before, expected);
+    }
 
-        RuleChecks.doesNotApply(rule, b.scan(ta).scan(tb).intersect(true, 2).build());
-        RuleChecks.doesNotApply(rule, b.scan(ta).scan(tb).minus(false, 2).build());
+    private static void handBuiltNoMatch() {
+        var qed = RuleBuilder.create();
+        var left = RuleChecks.table(qed, 1, false, true);
+        var right = RuleChecks.table(qed, 1, false, true);
+        var builder = RuleChecks.ruleBuilder(qed);
+        var allIntersect = builder.scan(left).scan(right).intersect(true, 2).build();
+        RuleChecks.doesNotApply(new IntersectToSemiJoin(), allIntersect);
     }
 
     public static void main(String[] args) {

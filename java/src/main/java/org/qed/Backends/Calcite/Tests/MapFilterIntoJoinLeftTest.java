@@ -2,11 +2,12 @@ package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.qed.RRuleInstances.MapFilterIntoJoinLeft;
+import org.apache.calcite.tools.RelBuilder;
+import org.qed.RRule;
 import org.qed.RuleBuilder;
+import org.qed.RRuleInstances.MapFilterIntoJoinLeft;
 
-public class MapFilterIntoJoinLeftTest {
-
+public final class MapFilterIntoJoinLeftTest {
     public static void runTest() {
         var rule = new MapFilterIntoJoinLeft();
         RuleChecks.rewritesPattern(rule);
@@ -15,33 +16,47 @@ public class MapFilterIntoJoinLeftTest {
         ordinaryTables(rule);
     }
 
-    private static void ordinaryTables(MapFilterIntoJoinLeft rule) {
-        var builder = RuleBuilder.create();
-        var left = RuleChecks.table(builder, 2, false, false);
-        var right = RuleChecks.table(builder, 1, false, false);
-        var before = builder.scan(left).scan(right)
-                .join(JoinRelType.INNER, builder.and(
-                        builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 0), builder.field(2, 1, 0)),
-                        builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(2, 1, 0), builder.field(2, 0, 1))))
-                .build();
-        var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(left).scan(right)
-                .join(JoinRelType.INNER, plain.and(
-                        plain.call(SqlStdOperatorTable.EQUALS, plain.field(2, 0, 0), plain.field(2, 1, 0)),
-                        plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(2, 0, 0), plain.field(2, 0, 1))))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void ordinaryTables(RRule rule) {
+        var beforeSchema = RuleBuilder.create();
+        var leftName = RuleChecks.table(beforeSchema, 2, false, false);
+        var rightName = RuleChecks.table(beforeSchema, 1, false, false);
+        var beforeBuilder = RuleChecks.ruleBuilder(beforeSchema);
+        var predicate = RuleBuilder.create().genericPredicateOp("filter_item", true);
+        var before = join(beforeBuilder, leftName, rightName, JoinRelType.INNER, predicate, false);
 
-        var outer = builder.scan(left).scan(right)
-                .join(JoinRelType.LEFT, builder.and(
-                        builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 0), builder.field(2, 1, 0)),
-                        builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(2, 1, 0), builder.field(2, 0, 1))))
-                .build();
-        RuleChecks.doesNotApply(rule, outer);
+        var expectedSchema = RuleBuilder.create();
+        var expectedLeftName = RuleChecks.table(expectedSchema, 2, false, false);
+        var expectedRightName = RuleChecks.table(expectedSchema, 1, false, false);
+        var expectedBuilder = RuleChecks.ruleBuilder(expectedSchema);
+        var expected = join(expectedBuilder, expectedLeftName, expectedRightName, JoinRelType.INNER, predicate, true);
+        RuleChecks.rewrites(rule, before, expected);
+
+        var nearMissSchema = RuleBuilder.create();
+        var nearMissLeftName = RuleChecks.table(nearMissSchema, 2, false, false);
+        var nearMissRightName = RuleChecks.table(nearMissSchema, 1, false, false);
+        var nearMissBuilder = RuleChecks.ruleBuilder(nearMissSchema);
+        var nearMiss = join(nearMissBuilder, nearMissLeftName, nearMissRightName, JoinRelType.LEFT, predicate, false);
+        RuleChecks.doesNotApply(rule, nearMiss);
+    }
+
+    private static org.apache.calcite.rel.RelNode join(RelBuilder builder, String leftName, String rightName,
+                                                       JoinRelType type, org.apache.calcite.sql.SqlOperator predicate,
+                                                       boolean rebound) {
+        builder.scan(leftName);
+        builder.scan(rightName);
+        var leftKey = builder.field(2, 0, 0);
+        var leftValue = builder.field(2, 0, 1);
+        var rightKey = builder.field(2, 1, 0);
+        var mappedKey = rebound ? leftKey : rightKey;
+        var condition = builder.and(
+                builder.call(SqlStdOperatorTable.EQUALS, leftKey, rightKey),
+                builder.call(predicate, mappedKey, leftValue));
+        builder.join(type, condition);
+        return builder.build();
     }
 
     public static void main(String[] args) {
-        System.out.println("Running MapFilterIntoJoinLeft test...");
+        System.out.println("Running RULE test...");
         runTest();
     }
 }

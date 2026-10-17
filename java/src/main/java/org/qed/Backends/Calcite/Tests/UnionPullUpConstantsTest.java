@@ -1,39 +1,39 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
+import kala.collection.Seq;
+import org.qed.Backends.Calcite.Tests.RuleChecks;
 import org.qed.RRuleInstances.UnionPullUpConstants;
-import org.qed.RuleBuilder;
+import org.qed.RelRN;
+import org.qed.RexRN;
 
-import java.util.List;
-
-public class UnionPullUpConstantsTest {
-
+public final class UnionPullUpConstantsTest {
     public static void runTest() {
         var rule = new UnionPullUpConstants();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        independentlyBuiltPlan();
+        rejectsDistinctUnion();
     }
 
-    private static void ordinaryTables(UnionPullUpConstants rule) {
-        var base = RuleBuilder.create();
-        var ta = RuleChecks.table(base, 2, false);
-        var tb = RuleChecks.table(base, 2, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var constant = (java.util.function.BiFunction<Boolean, Boolean, RelBuilder>) (first, second) ->
-                b.scan(ta).project(List.of(b.literal(first), b.field(1)), List.of(), true).scan(tb)
-                        .project(List.of(b.literal(second), b.field(1)), List.of(), true);
-        var before = constant.apply(true, true).union(true, 2).build();
-        var after = b.scan(ta).project(b.field(1)).scan(tb).project(b.field(1)).union(true, 2)
-                .project(b.literal(true), b.field(0)).build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void independentlyBuiltPlan() {
+        var left = RelRN.scanMany("IndependentLeft", Seq.of(
+                RexRN.varType("LeftKey", false), RexRN.varType("SharedValue", true)));
+        var right = RelRN.scanMany("IndependentRight", Seq.of(
+                RexRN.varType("RightKey", false), RexRN.varType("SharedValue", true)));
+        var constant = RexRN.trueLiteral();
+        var before = left.project(Seq.of(constant, left.field(1)))
+                .union(true, right.project(Seq.of(constant, right.field(1))));
+        var branchUnion = left.project(Seq.of(left.field(1)))
+                .union(true, right.project(Seq.of(right.field(1))));
+        var expected = branchUnion.project(Seq.of(constant, branchUnion.field(0)));
+        RuleChecks.rewrites(new UnionPullUpConstants(), FaithfulPlans.of(before), FaithfulPlans.expected(expected));
+    }
 
-        RuleChecks.doesNotApply(rule, constant.apply(true, false).union(true, 2).build());
-        RuleChecks.doesNotApply(rule, constant.apply(true, true).union(false, 2).build());
+    private static void rejectsDistinctUnion() {
+        var scan = RelRN.scanMany("DistinctInput", Seq.of(RexRN.varType("Value", true)));
+        var projected = scan.project(Seq.of(RexRN.trueLiteral()));
+        RuleChecks.doesNotApply(new UnionPullUpConstants(), FaithfulPlans.of(projected.union(false, projected)));
     }
 
     public static void main(String[] args) {

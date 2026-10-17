@@ -1,10 +1,12 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.logical.LogicalUnion;
+import org.apache.calcite.rel.logical.LogicalValues;
 import org.qed.RRuleInstances.EliminateDistinctSetLeft;
-import org.qed.RuleBuilder;
 
-public class EliminateDistinctSetLeftTest {
+import java.util.List;
 
+public final class EliminateDistinctSetLeftTest {
     public static void runTest() {
         var rule = new EliminateDistinctSetLeft();
         RuleChecks.rewritesPattern(rule);
@@ -14,21 +16,20 @@ public class EliminateDistinctSetLeftTest {
     }
 
     private static void ordinaryTables(EliminateDistinctSetLeft rule) {
-        var base = RuleBuilder.create();
-        var ta = RuleChecks.table(base, 3, false);
-        var tb = RuleChecks.table(base, 3, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var left = b.scan(ta).project(b.field(2), b.field(0), b.field(1)).build();
-        var emptyRight = b.scan(ta).project(b.field(2), b.field(0), b.field(1)).empty().build();
-        var before = b.push(left).push(emptyRight).union(false, 2).build();
-        var after = b.scan(ta).project(b.field(2), b.field(0), b.field(1))
-                .aggregate(b.groupKey(0, 1, 2)).build();
-        RuleChecks.rewrites(rule, before, after);
+        var builder = org.qed.RuleBuilder.create();
+        var left = RuleChecks.table(builder, 3, false);
+        var right = RuleChecks.table(builder, 3, false);
+        var input = builder.scan(left).project(builder.field(2), builder.field(0), builder.field(1)).build();
+        var empty = LogicalValues.createEmpty(builder.getCluster(), input.getRowType());
+        var plan = LogicalUnion.create(List.of(input, empty), false);
 
-        var allUnion = b.push(left).push(emptyRight).union(true, 2).build();
-        RuleChecks.doesNotApply(rule, allUnion);
-        var nonEmptyRight = b.push(left).scan(tb).union(false, 2).build();
-        RuleChecks.doesNotApply(rule, nonEmptyRight);
+        var plain = RuleChecks.ruleBuilder(builder);
+        var expected = plain.scan(left).project(plain.field(2), plain.field(0), plain.field(1))
+                .aggregate(plain.groupKey(plain.field(0), plain.field(1), plain.field(2))).build();
+        RuleChecks.rewrites(rule, plan, expected);
+
+        var nonempty = builder.scan(right).project(builder.field(2), builder.field(0), builder.field(1)).build();
+        RuleChecks.doesNotApply(rule, LogicalUnion.create(List.of(input, nonempty), false));
     }
 
     public static void main(String[] args) {

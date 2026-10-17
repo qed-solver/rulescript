@@ -1,42 +1,54 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.tools.RelBuilder;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.AggregateUnionTranspose;
 import org.qed.RuleBuilder;
 
 import java.util.List;
 
-public class AggregateUnionTransposeTest {
-
+public final class AggregateUnionTransposeTest {
     public static void runTest() {
         var rule = new AggregateUnionTranspose();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+
+        var tables = RuleBuilder.create();
+        var left = RuleChecks.table(tables, 2, false);
+        var right = RuleChecks.table(tables, 2, false);
+        var builder = RuleChecks.ruleBuilder(tables);
+
+        var beforeUnion = builder.scan(left).scan(right).union(true, 2).build();
+        builder.push(beforeUnion);
+        var before = dedup(builder);
+
+        var expectedLeft = dedup(builder.scan(left).build(), builder);
+        var expectedRight = dedup(builder.scan(right).build(), builder);
+        var expectedUnion = builder.push(expectedLeft).push(expectedRight).union(true, 2).build();
+        builder.push(expectedUnion);
+        var expected = dedup(builder);
+
+        RuleChecks.rewrites(rule, before, expected);
+
+        var nearUnion = builder.scan(left).scan(right).union(false, 2).build();
+        builder.push(nearUnion);
+        RuleChecks.doesNotApply(rule, dedup(builder));
     }
 
-    private static void ordinaryTables(AggregateUnionTranspose rule) {
-        var base = RuleBuilder.create();
-        var a = RuleChecks.table(base, 2, false);
-        var c = RuleChecks.table(base, 2, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var before = b.scan(a).scan(c).union(true, 2).aggregate(b.groupKey(0, 1)).build();
-        var after = b.scan(a).aggregate(b.groupKey(0, 1)).scan(c).aggregate(b.groupKey(0, 1)).union(true, 2)
-                .aggregate(b.groupKey(0, 1)).build();
-        RuleChecks.rewrites(rule, before, after);
-
-        RuleChecks.doesNotApply(rule,
-                b.scan(a).scan(c).union(false, 2).aggregate(b.groupKey(0, 1)).build());
-        RuleChecks.doesNotApply(rule, b.scan(a).scan(c).union(true, 2)
-                .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.SUM, b.field(1))).build());
+    private static RelNode dedup(RelBuilder builder) {
+        builder.aggregate(builder.groupKey(0, 1), List.<org.apache.calcite.rel.core.AggregateCall>of());
+        return builder.build();
     }
 
-    public static void main(String[] args) {
+    private static RelNode dedup(RelNode input, RelBuilder builder) {
+        builder.push(input);
+        return dedup(builder);
+    }
+
+    public static void main(String[] args) throws Exception {
         System.out.println("Running AggregateUnionTranspose test...");
-        runTest();
+        CalciteTester.main(new String[]{"AggregateUnionTranspose"});
     }
 }

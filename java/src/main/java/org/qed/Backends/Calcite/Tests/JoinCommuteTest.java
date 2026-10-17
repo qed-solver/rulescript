@@ -1,35 +1,58 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.tools.RelBuilder;
+import org.qed.Backends.Calcite.CalciteRuntime;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.JoinCommute;
 import org.qed.RuleBuilder;
 
 public class JoinCommuteTest {
-
     public static void runTest() {
         var rule = new JoinCommute();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        handBuiltJoinRewrites();
+        rejectsOuterJoin();
+        if (CalciteTester.failures() != 0) {
+            throw new AssertionError("JoinCommute checks failed");
+        }
     }
 
-    private static void ordinaryTables(JoinCommute rule) {
-        var builder = RuleBuilder.create();
-        var l = RuleChecks.table(builder, 1, false);
-        var r = RuleChecks.table(builder, 1, false);
-        var lessThan = builder.call(SqlStdOperatorTable.LESS_THAN, builder.scan(l).scan(r).field(2, 0, 0),
-                builder.field(2, 1, 0));
-        var plan = builder.join(JoinRelType.INNER, lessThan).build();
-        var plain = RuleChecks.ruleBuilder(builder);
-        var swapped = plain.scan(r).scan(l).join(JoinRelType.INNER,
-                plain.call(SqlStdOperatorTable.LESS_THAN, plain.field(2, 1, 0), plain.field(2, 0, 0)))
-                .project(plain.field(1), plain.field(0)).build();
-        RuleChecks.rewrites(rule, plan, swapped);
-        var left = builder.scan(l).scan(r).join(JoinRelType.LEFT, builder.call(SqlStdOperatorTable.LESS_THAN,
-                builder.field(2, 0, 0), builder.field(2, 1, 0))).build();
-        RuleChecks.doesNotApply(rule, left);
+    private static void handBuiltJoinRewrites() {
+        RuleBuilder builder = RuleBuilder.create();
+        var left = RuleChecks.table(builder, 1, false);
+        var right = RuleChecks.table(builder, 1, false);
+        var rel = builder.scan(left).scan(right)
+                .join(JoinRelType.INNER, builder.call(SqlStdOperatorTable.EQUALS,
+                        builder.field(2, 0, 0), builder.field(2, 1, 0)))
+                .build();
+        RuleBuilder expectedBuilder = RuleBuilder.create();
+        var expectedLeft = RuleChecks.table(expectedBuilder, 1, false);
+        var expectedRight = RuleChecks.table(expectedBuilder, 1, false);
+        var expected = expectedBuilder.scan(expectedRight).scan(expectedLeft)
+                .join(JoinRelType.INNER, expectedBuilder.call(SqlStdOperatorTable.EQUALS,
+                        expectedBuilder.field(2, 0, 0), expectedBuilder.field(2, 1, 0)))
+                .project(expectedBuilder.fields(java.util.List.of(1, 0))).build();
+        RuleChecks.rewrites(rule(), rel, expected);
+    }
+
+    private static void rejectsOuterJoin() {
+        RuleBuilder builder = RuleBuilder.create();
+        var left = RuleChecks.table(builder, 2, false);
+        var right = RuleChecks.table(builder, 2, false);
+        RelNode plan = builder.scan(left).scan(right)
+                .join(JoinRelType.LEFT, builder.call(SqlStdOperatorTable.EQUALS,
+                        builder.field(2, 0, 0), builder.field(2, 1, 0)))
+                .build();
+        RuleChecks.doesNotApply(rule(), plan);
+    }
+
+    private static JoinCommute rule() {
+        return new JoinCommute();
     }
 
     public static void main(String[] args) {

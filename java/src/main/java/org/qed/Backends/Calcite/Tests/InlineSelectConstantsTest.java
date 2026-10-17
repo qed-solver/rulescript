@@ -1,10 +1,13 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.InlineSelectConstants;
 import org.qed.RuleBuilder;
 
-public class InlineSelectConstantsTest {
+public final class InlineSelectConstantsTest {
+    private InlineSelectConstantsTest() {}
 
     public static void runTest() {
         var rule = new InlineSelectConstants();
@@ -15,26 +18,21 @@ public class InlineSelectConstantsTest {
     }
 
     private static void ordinaryTables(InlineSelectConstants rule) {
-        var builder = RuleBuilder.create();
-        var source = RuleChecks.table(builder, 1, false);
-        var constant = RuleChecks.table(builder, 1, true, false);
-        var predicate = builder.genericPredicateOp("g", true);
-        var before = builder.scan(source).scan(constant)
-                .join(JoinRelType.INNER, RuleChecks.eq(builder, builder.field(2, 0, 0), builder.field(2, 1, 0)))
-                .filter(builder.call(predicate, builder.field(0)))
-                .build();
-        var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(source).scan(constant)
-                .join(JoinRelType.INNER, RuleChecks.eq(plain, plain.field(2, 0, 0), plain.field(2, 1, 0)))
-                .filter(plain.call(predicate, plain.field(1)))
-                .build();
+        var before = concretePlan(false, true, JoinRelType.INNER);
+        var after = concretePlan(true, true, JoinRelType.INNER);
         RuleChecks.rewrites(rule, before, after);
+        RuleChecks.doesNotApply(rule, concretePlan(false, false, JoinRelType.INNER));
+    }
 
-        var nonUnique = RuleChecks.table(builder, 1, false);
-        RuleChecks.doesNotApply(rule, builder.scan(source).scan(nonUnique)
-                .join(JoinRelType.INNER, RuleChecks.eq(builder, builder.field(2, 0, 0), builder.field(2, 1, 0)))
-                .filter(builder.call(predicate, builder.field(0)))
-                .build());
+    private static RelNode concretePlan(boolean inline, boolean uniqueConstant, JoinRelType joinType) {
+        var builder = RuleBuilder.create();
+        var source = RuleChecks.table(builder, 1, false, true);
+        var constant = RuleChecks.table(builder, 1, uniqueConstant, false);
+        builder.scan(source).scan(constant).join(joinType,
+                builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 0), builder.field(2, 1, 0)));
+        var predicate = builder.genericPredicateOp("g", true);
+        builder.filter(builder.call(predicate, builder.field(inline ? 1 : 0)));
+        return builder.build();
     }
 
     public static void main(String[] args) {

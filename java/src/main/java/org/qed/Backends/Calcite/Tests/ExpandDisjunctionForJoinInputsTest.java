@@ -1,45 +1,71 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
 import org.qed.RRuleInstances.ExpandDisjunctionForJoinInputs;
 import org.qed.RuleBuilder;
 
 import java.util.List;
+import java.util.Set;
 
-public class ExpandDisjunctionForJoinInputsTest {
-
+public final class ExpandDisjunctionForJoinInputsTest {
     public static void runTest() {
         var rule = new ExpandDisjunctionForJoinInputs();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        rewritesHandBuiltJoin();
+        rejectsHandBuiltNearMiss();
     }
 
-    private static void ordinaryTables(ExpandDisjunctionForJoinInputs rule) {
-        var base = RuleBuilder.create();
-        var l = RuleChecks.table(base, 2, false);
-        var r = RuleChecks.table(base, 2, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var join = (java.util.function.BiFunction<JoinRelType, java.util.function.Function<RelBuilder, RexNode>,
-                RelBuilder>) (type, cond) -> b.scan(l).scan(r).join(type, cond.apply(b));
-        java.util.function.Function<RelBuilder, RexNode> disjunction = x -> x.or(
-                x.and(RuleChecks.gt(x, x.field(2, 0, 0), 1), RuleChecks.gt(x, x.field(2, 1, 0), 3)),
-                x.and(RuleChecks.gt(x, x.field(2, 0, 1), 2), RuleChecks.gt(x, x.field(2, 1, 1), 4)));
-        var before = join.apply(JoinRelType.INNER, disjunction).build();
+    private static void rewritesHandBuiltJoin() {
+        var builder = RuleBuilder.create();
+        var leftName = RuleChecks.table(builder, 2, false);
+        var rightName = RuleChecks.table(builder, 2, false);
+        var b = RuleChecks.ruleBuilder(builder);
+        RelNode left = b.scan(leftName).build();
+        RelNode right = b.scan(rightName).build();
+        var rex = b.getRexBuilder();
+        RexNode l0 = rex.makeInputRef(left.getRowType().getFieldList().get(0).getType(), 0);
+        RexNode l1 = rex.makeInputRef(left.getRowType().getFieldList().get(1).getType(), 1);
+        RexNode r0 = rex.makeInputRef(right.getRowType().getFieldList().get(0).getType(), 2);
+        RexNode r1 = rex.makeInputRef(right.getRowType().getFieldList().get(1).getType(), 3);
+        RexNode p = RuleChecks.gt(b, l0, 1);
+        RexNode q = RuleChecks.gt(b, l1, 2);
+        RexNode u = RuleChecks.gt(b, r0, 3);
+        RexNode v = RuleChecks.gt(b, r1, 4);
+        RexNode original = rex.makeCall(SqlStdOperatorTable.OR,
+                rex.makeCall(SqlStdOperatorTable.AND, p, u), rex.makeCall(SqlStdOperatorTable.AND, q, v));
+        RelNode before = LogicalJoin.create(left, right, List.of(), original, Set.of(), JoinRelType.INNER);
+        RexNode expectedCondition = rex.makeCall(SqlStdOperatorTable.AND, original,
+                rex.makeCall(SqlStdOperatorTable.OR, p, q), rex.makeCall(SqlStdOperatorTable.OR, u, v));
+        RelNode expected = LogicalJoin.create(left, right, List.of(), expectedCondition, Set.of(), JoinRelType.INNER);
+        RuleChecks.rewrites(new ExpandDisjunctionForJoinInputs(), before, expected);
+    }
 
-        b.scan(l).scan(r);
-        var after = b.join(JoinRelType.INNER, b.and(disjunction.apply(b),
-                b.or(RuleChecks.gt(b, b.field(2, 0, 0), 1), RuleChecks.gt(b, b.field(2, 0, 1), 2)),
-                b.or(RuleChecks.gt(b, b.field(2, 1, 0), 3), RuleChecks.gt(b, b.field(2, 1, 1), 4)))).build();
-        RuleChecks.rewrites(rule, before, after);
-
-        RuleChecks.doesNotApply(rule, join.apply(JoinRelType.LEFT, disjunction).build());
-        RuleChecks.doesNotApply(rule, join.apply(JoinRelType.INNER,
-                x -> x.and(RuleChecks.gt(x, x.field(2, 0, 0), 1), RuleChecks.gt(x, x.field(2, 1, 0), 3))).build());
+    private static void rejectsHandBuiltNearMiss() {
+        var builder = RuleBuilder.create();
+        var leftName = RuleChecks.table(builder, 2, false);
+        var rightName = RuleChecks.table(builder, 2, false);
+        var b = RuleChecks.ruleBuilder(builder);
+        RelNode left = b.scan(leftName).build();
+        RelNode right = b.scan(rightName).build();
+        var rex = b.getRexBuilder();
+        RexNode l0 = rex.makeInputRef(left.getRowType().getFieldList().get(0).getType(), 0);
+        RexNode l1 = rex.makeInputRef(left.getRowType().getFieldList().get(1).getType(), 1);
+        RexNode r0 = rex.makeInputRef(right.getRowType().getFieldList().get(0).getType(), 2);
+        RexNode r1 = rex.makeInputRef(right.getRowType().getFieldList().get(1).getType(), 3);
+        RexNode p = RuleChecks.gt(b, l0, 1);
+        RexNode q = RuleChecks.gt(b, l1, 2);
+        RexNode u = RuleChecks.gt(b, r0, 3);
+        RexNode v = RuleChecks.gt(b, r1, 4);
+        RexNode condition = rex.makeCall(SqlStdOperatorTable.OR,
+                rex.makeCall(SqlStdOperatorTable.AND, p, q), rex.makeCall(SqlStdOperatorTable.AND, u, v));
+        RelNode nearMiss = LogicalJoin.create(left, right, List.of(), condition, Set.of(), JoinRelType.INNER);
+        RuleChecks.doesNotApply(new ExpandDisjunctionForJoinInputs(), nearMiss);
     }
 
     public static void main(String[] args) {

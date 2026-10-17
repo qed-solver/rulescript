@@ -1,38 +1,47 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.SimplifyTrueAnd;
 import org.qed.RuleBuilder;
 
 public class SimplifyTrueAndTest {
-
     public static void runTest() {
         var rule = new SimplifyTrueAnd();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        dropsLeadingTrueConjunct(rule);
+
+        handBuiltMatch();
+        meaningfulNoMatch();
     }
 
-    private static void dropsLeadingTrueConjunct(SimplifyTrueAnd rule) {
-        var builder = RuleBuilder.create();
-        var table = RuleChecks.table(builder, 1, false);
-        var scanned = builder.scan(table);
-        var predicate = RuleChecks.gt(builder, builder.field(0), 5);
-        var before = LogicalFilter.create(scanned.build(),
-                builder.call(SqlStdOperatorTable.AND, builder.literal(true), predicate));
-        var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(table)
-                .filter(RuleChecks.gt(plain, plain.field(0), 5))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void handBuiltMatch() {
+        var qed = RuleBuilder.create();
+        var table = RuleChecks.table(qed, 1, false, false);
+        var builder = RuleChecks.ruleBuilder(qed);
+        var scan = builder.scan(table).build();
+        var rex = builder.getRexBuilder();
+        var column = rex.makeInputRef(scan, 0);
+        var predicate = rex.makeCall(SqlStdOperatorTable.GREATER_THAN, column, rex.makeExactLiteral(
+                java.math.BigDecimal.ONE));
+        var condition = rex.makeCall(SqlStdOperatorTable.AND, rex.makeLiteral(true), predicate);
+        RelNode before = LogicalFilter.create(scan, condition);
+        RelNode expected = LogicalFilter.create(scan, predicate);
+        RuleChecks.rewrites(new SimplifyTrueAnd(), before, expected);
+    }
 
-        var rescanned = builder.scan(table);
-        var first = RuleChecks.gt(builder, builder.field(0), 5);
-        var trailingTrue = LogicalFilter.create(rescanned.build(),
-                builder.call(SqlStdOperatorTable.AND, first, builder.literal(true)));
-        RuleChecks.doesNotApply(rule, trailingTrue);
+    private static void meaningfulNoMatch() {
+        var qed = RuleBuilder.create();
+        var table = RuleChecks.table(qed, 1, false, false);
+        var builder = RuleChecks.ruleBuilder(qed);
+        var scan = builder.scan(table).build();
+        var rex = builder.getRexBuilder();
+        var column = rex.makeInputRef(scan, 0);
+        var predicate = rex.makeCall(SqlStdOperatorTable.GREATER_THAN, column, rex.makeExactLiteral(
+                java.math.BigDecimal.ONE));
+        RuleChecks.doesNotApply(new SimplifyTrueAnd(), LogicalFilter.create(scan, predicate));
     }
 
     public static void main(String[] args) {

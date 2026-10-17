@@ -1,50 +1,54 @@
 package org.qed.Backends.Calcite.Tests;
 
-import java.util.List;
-
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.tools.RelBuilder;
 import org.qed.Backends.Calcite.CalciteRuntime;
 import org.qed.RRuleInstances.EliminateJoinNoColsRight;
 import org.qed.RuleBuilder;
 
-public class EliminateJoinNoColsRightTest {
-
+public final class EliminateJoinNoColsRightTest {
     public static void runTest() {
         var rule = new EliminateJoinNoColsRight();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        oneRowZeroColumnRight(rule);
+        handBuiltPositive(rule);
+        rejectsMultipleRightRows(rule);
     }
 
-    private static void oneRowZeroColumnRight(EliminateJoinNoColsRight rule) {
-        var builder = RuleBuilder.create();
-        var table = RuleChecks.table(builder, 1, false);
-        var plain = RuleChecks.ruleBuilder(builder);
-        var raw = builder.transform(config -> CalciteRuntime.configure(config).withSimplifyValues(false));
-        var before = raw.scan(table)
-                .values(new String[]{"_r"}, true)
-                .project(List.of(), List.of(), true)
-                .join(JoinRelType.INNER, RuleChecks.gt(raw, raw.field(2, 0, 0), 5))
+    private static void handBuiltPositive(EliminateJoinNoColsRight rule) {
+        var raw = RuleBuilder.create();
+        var leftName = RuleChecks.table(raw, 1, false);
+        var b = raw.transform(CalciteRuntime::configure);
+        var left = b.scan(leftName).build();
+        var oneBase = b.values(new String[] {"r"}, true).build();
+        var one = org.apache.calcite.rel.logical.LogicalProject.create(oneBase, java.util.List.of(),
+                java.util.List.of(), java.util.List.of());
+        var actual = b.push(left).push(one)
+                .join(JoinRelType.INNER, b.call(SqlStdOperatorTable.GREATER_THAN,
+                        b.field(2, 0, 0), b.literal(7)))
                 .build();
-        var after = plain.scan(table)
-                .filter(RuleChecks.gt(plain, plain.field(0), 5))
+        var eb = builder();
+        var expected = eb.push(left)
+                .filter(eb.call(SqlStdOperatorTable.GREATER_THAN, eb.field(0), eb.literal(7)))
                 .build();
-        RuleChecks.rewrites(rule, before, after);
+        RuleChecks.rewrites(rule, actual, expected);
+    }
 
-        var manyRows = raw.scan(table)
-                .values(new String[]{"_r"}, true, false)
-                .project(List.of(), List.of(), true)
-                .join(JoinRelType.INNER, RuleChecks.gt(raw, raw.field(2, 0, 0), 5))
-                .build();
-        RuleChecks.doesNotApply(rule, manyRows);
+    private static void rejectsMultipleRightRows(EliminateJoinNoColsRight rule) {
+        var raw = RuleBuilder.create();
+        var leftName = RuleChecks.table(raw, 1, false);
+        var b = raw.transform(CalciteRuntime::configure);
+        var left = b.scan(leftName).build();
+        var twoRows = b.values(new String[] {"r"}, 1, 2).build();
+        var plan = b.push(left).push(twoRows).join(JoinRelType.INNER, b.literal(true)).build();
+        RuleChecks.doesNotApply(rule, plan);
+    }
 
-        var leftJoin = raw.scan(table)
-                .values(new String[]{"_r"}, true)
-                .project(List.of(), List.of(), true)
-                .join(JoinRelType.LEFT, RuleChecks.gt(raw, raw.field(2, 0, 0), 5))
-                .build();
-        RuleChecks.doesNotApply(rule, leftJoin);
+    private static RelBuilder builder() {
+        return RuleBuilder.create().transform(CalciteRuntime::configure);
     }
 
     public static void main(String[] args) {

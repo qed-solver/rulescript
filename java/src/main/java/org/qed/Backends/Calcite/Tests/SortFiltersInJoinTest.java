@@ -1,41 +1,62 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.logical.LogicalJoin;
+import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.Backends.Calcite.CalciteRuntime;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.SortFiltersInJoin;
 import org.qed.RuleBuilder;
 
-public class SortFiltersInJoinTest {
+import java.util.List;
+import java.util.Set;
 
+public class SortFiltersInJoinTest {
     public static void runTest() {
         var rule = new SortFiltersInJoin();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        rewritesHandBuiltJoin();
+        rejectsNonInnerJoin();
     }
 
-    private static void ordinaryTables(SortFiltersInJoin rule) {
-        var base = RuleBuilder.create();
-        var l = RuleChecks.table(base, 1, false);
-        var r = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var before = b.scan(l).scan(r).join(JoinRelType.INNER, b.and(
-                RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)),
-                b.call(SqlStdOperatorTable.GREATER_THAN, b.field(2, 0, 0), b.field(2, 1, 0)))).build();
-        var after = b.scan(l).scan(r).join(JoinRelType.INNER, b.and(
-                b.call(SqlStdOperatorTable.GREATER_THAN, b.field(2, 0, 0), b.field(2, 1, 0)),
-                RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))).build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void rewritesHandBuiltJoin() {
+        var builder = RuleBuilder.create();
+        var leftName = RuleChecks.table(builder, 1, false, false);
+        var rightName = RuleChecks.table(builder, 1, false, false);
+        var b = RuleChecks.ruleBuilder(builder);
+        RelNode left = b.scan(leftName).build();
+        RelNode right = b.scan(rightName).build();
+        var rex = b.getRexBuilder();
+        var left0 = rex.makeInputRef(left.getRowType().getFieldList().get(0).getType(), 0);
+        var right0 = rex.makeInputRef(right.getRowType().getFieldList().get(0).getType(), 1);
+        RexNode first = rex.makeCall(SqlStdOperatorTable.GREATER_THAN, left0, right0);
+        RexNode second = rex.makeCall(SqlStdOperatorTable.LESS_THAN, left0, right0);
+        var before = LogicalJoin.create(left, right, List.of(),
+                rex.makeCall(SqlStdOperatorTable.AND, first, second), Set.of(), JoinRelType.INNER);
+        var expected = LogicalJoin.create(left, right, List.of(),
+                rex.makeCall(SqlStdOperatorTable.AND, second, first), Set.of(), JoinRelType.INNER);
+        RuleChecks.rewrites(new SortFiltersInJoin(), before, expected);
+    }
 
-        var single = b.scan(l).scan(r).join(JoinRelType.INNER,
-                RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0))).build();
-        RuleChecks.doesNotApply(rule, single);
-
-        var outer = b.scan(l).scan(r).join(JoinRelType.LEFT, b.and(
-                RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)),
-                b.call(SqlStdOperatorTable.GREATER_THAN, b.field(2, 0, 0), b.field(2, 1, 0)))).build();
-        RuleChecks.doesNotApply(rule, outer);
+    private static void rejectsNonInnerJoin() {
+        var builder = RuleBuilder.create();
+        var leftName = RuleChecks.table(builder, 1, false, false);
+        var rightName = RuleChecks.table(builder, 1, false, false);
+        var b = RuleChecks.ruleBuilder(builder);
+        RelNode left = b.scan(leftName).build();
+        RelNode right = b.scan(rightName).build();
+        var rex = b.getRexBuilder();
+        var left0 = rex.makeInputRef(left.getRowType().getFieldList().get(0).getType(), 0);
+        var right0 = rex.makeInputRef(right.getRowType().getFieldList().get(0).getType(), 1);
+        RexNode first = rex.makeCall(SqlStdOperatorTable.GREATER_THAN, left0, right0);
+        RexNode second = rex.makeCall(SqlStdOperatorTable.LESS_THAN, left0, right0);
+        var plan = LogicalJoin.create(left, right, List.of(),
+                rex.makeCall(SqlStdOperatorTable.AND, first, second), Set.of(), JoinRelType.LEFT);
+        RuleChecks.doesNotApply(new SortFiltersInJoin(), plan);
     }
 
     public static void main(String[] args) {

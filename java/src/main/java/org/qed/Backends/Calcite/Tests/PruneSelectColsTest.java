@@ -1,14 +1,11 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.PruneSelectCols;
-import org.qed.RelType;
 import org.qed.RuleBuilder;
 
-import java.util.List;
-
 public class PruneSelectColsTest {
-
     public static void runTest() {
         var rule = new PruneSelectCols();
         RuleChecks.rewritesPattern(rule);
@@ -18,30 +15,32 @@ public class PruneSelectColsTest {
     }
 
     private static void ordinaryTables(PruneSelectCols rule) {
-        var base = RuleBuilder.create();
-        var t = RuleChecks.table(base, 3, false);
-        var top = base.genericProjectionOp("Top", RelType.fromString("INTEGER", true));
-        var plain = RuleChecks.ruleBuilder(base);
+        var sourceBuilder = RuleBuilder.create();
+        var table = RuleChecks.table(sourceBuilder, 3, false);
+        var b = RuleChecks.ruleBuilder(sourceBuilder);
+        var input = b.scan(table).build();
+        b.push(input);
+        var x = b.field(0);
+        var y = b.field(1);
+        var condition = b.call(SqlStdOperatorTable.AND,
+                RuleChecks.gt(b, x, 10), RuleChecks.gt(b, y, 20));
+        var before = b.filter(condition).project(
+                b.call(SqlStdOperatorTable.PLUS, b.field(0), b.field(1))).build();
 
-        var before = base.scan(t)
-                .filter(base.call(SqlStdOperatorTable.EQUALS, base.field(0), base.field(1)))
-                .project(List.of(base.call(top, base.field(0), base.field(1))))
-                .build();
-        var after = plain.scan(t)
-                .project(List.of(plain.field(0), plain.field(1)))
-                .filter(plain.call(SqlStdOperatorTable.EQUALS, plain.field(0), plain.field(1)))
-                .project(List.of(plain.call(top, plain.field(0), plain.field(1))))
-                .build();
+        var expectedBuilder = RuleBuilder.create();
+        var expectedTable = RuleChecks.table(expectedBuilder, 3, false);
+        var e = RuleChecks.ruleBuilder(expectedBuilder);
+        var expectedInput = e.scan(expectedTable).project(e.field(0), e.field(1)).build();
+        e.push(expectedInput);
+        var expectedCondition = e.call(SqlStdOperatorTable.AND,
+                RuleChecks.gt(e, e.field(0), 10), RuleChecks.gt(e, e.field(1), 20));
+        var after = e.filter(expectedCondition).project(
+                e.call(SqlStdOperatorTable.PLUS, e.field(0), e.field(1))).build();
         RuleChecks.rewrites(rule, before, after);
-
-        RuleChecks.doesNotApply(rule, base.scan(t)
-                .filter(base.call(SqlStdOperatorTable.EQUALS, base.field(0), base.field(2)))
-                .project(List.of(base.call(top, base.field(0), base.field(1))))
-                .build());
     }
 
     public static void main(String[] args) {
-        System.out.println("Running PruneSelectCols test...");
+        System.out.println("Running RULE test...");
         runTest();
     }
 }

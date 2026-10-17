@@ -1,35 +1,49 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.sql.type.SqlTypeName;
 import org.qed.RRuleInstances.FoldNullBinaryLeft;
 import org.qed.RuleBuilder;
 
 public class FoldNullBinaryLeftTest {
-
     public static void runTest() {
         var rule = new FoldNullBinaryLeft();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        rewritesHandBuiltNullLeftComparison();
+        rejectsHandBuiltNonNullLeftComparison();
     }
 
-    private static void ordinaryTables(FoldNullBinaryLeft rule) {
-        var base = RuleBuilder.create();
-        var t = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        b.scan(t);
-        var nul = b.getRexBuilder().makeNullLiteral(b.field(0).getType());
-        var nullBool = b.getRexBuilder().makeNullLiteral(b.getTypeFactory().createSqlType(SqlTypeName.BOOLEAN));
-        var comparison = b.call(SqlStdOperatorTable.LESS_THAN, nul, b.field(0));
-        var before = LogicalFilter.create(b.build(), comparison);
-        var after = b.scan(t).filter(nullBool).build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void rewritesHandBuiltNullLeftComparison() {
+        var rule = new FoldNullBinaryLeft();
+        var sourceBuilder = RuleBuilder.create();
+        var sourceTable = RuleChecks.table(sourceBuilder, 1, false);
+        var source = RuleChecks.ruleBuilder(sourceBuilder);
+        var sourceRel = source.scan(sourceTable).build();
+        var sourceRex = source.getRexBuilder();
+        var comparison = sourceRex.makeCall(SqlStdOperatorTable.LESS_THAN,
+                sourceRex.makeNullLiteral(sourceRel.getRowType().getFieldList().get(0).getType()),
+                sourceRex.makeInputRef(sourceRel.getRowType().getFieldList().get(0).getType(), 0));
+        var before = org.apache.calcite.rel.logical.LogicalFilter.create(sourceRel, comparison);
 
-        RuleChecks.doesNotApply(rule, b.scan(t).filter(b.call(SqlStdOperatorTable.LESS_THAN, b.literal(1), b.field(0))).build());
-        RuleChecks.doesNotApply(rule, b.scan(t).filter(b.call(SqlStdOperatorTable.GREATER_THAN, nul, b.field(0))).build());
+        var expectedBuilder = RuleBuilder.create();
+        var expectedTable = RuleChecks.table(expectedBuilder, 1, false);
+        var expected = RuleChecks.ruleBuilder(expectedBuilder);
+        var expectedRel = expected.scan(expectedTable).build();
+        var after = org.apache.calcite.rel.logical.LogicalFilter.create(expectedRel,
+                expected.getRexBuilder().makeNullLiteral(
+                        expected.getTypeFactory().createSqlType(org.apache.calcite.sql.type.SqlTypeName.BOOLEAN)));
+        RuleChecks.rewrites(rule, before, after);
+    }
+
+    private static void rejectsHandBuiltNonNullLeftComparison() {
+        var builder = RuleBuilder.create();
+        var table = RuleChecks.table(builder, 1, false);
+        var rel = RuleChecks.ruleBuilder(builder);
+        var plan = rel.scan(table)
+                .filter(rel.call(SqlStdOperatorTable.LESS_THAN, rel.literal(7), rel.field(0)))
+                .build();
+        RuleChecks.doesNotApply(new FoldNullBinaryLeft(), plan);
     }
 
     public static void main(String[] args) {

@@ -1,16 +1,14 @@
 package org.qed.Backends.Calcite.Tests;
 
+import kala.collection.Seq;
+import kala.tuple.Tuple;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
+import org.qed.RelType;
 import org.qed.RRuleInstances.PruneSingleValue;
 import org.qed.RuleBuilder;
 
-import java.util.List;
-
-public class PruneSingleValueTest {
-
+public final class PruneSingleValueTest {
     public static void runTest() {
         var rule = new PruneSingleValue();
         RuleChecks.rewritesPattern(rule);
@@ -20,20 +18,22 @@ public class PruneSingleValueTest {
     }
 
     private static void ordinaryTables(PruneSingleValue rule) {
-        var base = RuleBuilder.create();
-        var o = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var withValues = (java.util.function.BiFunction<JoinRelType, Object[], RelBuilder>) (type, rows) -> {
-            b.scan(o).values(new String[]{"v"}, rows);
-            return b.join(type, RuleChecks.gt(b, b.field(2, 0, 0), 5));
-        };
-        var before = withValues.apply(JoinRelType.INNER, new Object[]{true}).build();
-        var after = b.scan(o).filter(RuleChecks.gt(b, b.field(0), 5)).project(b.field(0), b.literal(true)).build();
-        RuleChecks.rewrites(rule, before, after);
-
-        RuleChecks.doesNotApply(rule, withValues.apply(JoinRelType.INNER, new Object[]{false}).build());
-        RuleChecks.doesNotApply(rule, withValues.apply(JoinRelType.INNER, new Object[]{true, true}).build());
-        RuleChecks.doesNotApply(rule, withValues.apply(JoinRelType.LEFT, new Object[]{true}).build());
+        var builder = RuleBuilder.create();
+        var table = builder.createQedTable(Seq.of(Tuple.of(RelType.fromString("BOOLEAN", false), false)));
+        builder.addTable(table);
+        var left = builder.scan(table.getName()).build();
+        var plan = builder.push(left).values(new String[]{"v"}, true)
+                .join(JoinRelType.INNER, builder.call(SqlStdOperatorTable.AND,
+                        builder.field(2, 0, 0), builder.field(2, 1, 0))).build();
+        var plain = RuleChecks.ruleBuilder(builder);
+        var expected = plain.push(left)
+                .filter(plain.call(SqlStdOperatorTable.AND, plain.field(0), plain.literal(true)))
+                .project(plain.field(0), plain.literal(true)).build();
+        RuleChecks.rewrites(rule, plan, expected);
+        var nearMiss = builder.push(left).values(new String[]{"v"}, true)
+                .join(JoinRelType.LEFT, builder.call(SqlStdOperatorTable.AND,
+                        builder.field(2, 0, 0), builder.field(2, 1, 0))).build();
+        RuleChecks.doesNotApply(rule, nearMiss);
     }
 
     public static void main(String[] args) {

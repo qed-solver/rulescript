@@ -1,16 +1,17 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
+import org.apache.calcite.rel.logical.LogicalJoin;
+import org.apache.calcite.rel.logical.LogicalProject;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.qed.RRuleInstances.ProjectJoinTranspose;
+import org.qed.RelType;
 import org.qed.RuleBuilder;
 
 import java.util.List;
+import java.util.Set;
 
 public class ProjectJoinTransposeTest {
-
     public static void runTest() {
         var rule = new ProjectJoinTranspose();
         RuleChecks.rewritesPattern(rule);
@@ -20,29 +21,41 @@ public class ProjectJoinTransposeTest {
     }
 
     private static void ordinaryTables(ProjectJoinTranspose rule) {
-        var base = RuleBuilder.create();
-        var l = RuleChecks.table(base, 1, false);
-        var r = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var onSides = (java.util.function.BiFunction<JoinRelType, Integer, RelBuilder>) (type, offset) -> {
-            b.scan(l).scan(r);
-            var tl = b.call(SqlStdOperatorTable.PLUS, b.field(2, 0, 0), b.literal(1));
-            var tr = b.call(SqlStdOperatorTable.MULTIPLY, b.field(2, 1, 0), b.literal(2));
-            b.join(type, b.call(SqlStdOperatorTable.LESS_THAN, tl, tr));
-            var top = b.call(SqlStdOperatorTable.PLUS, b.call(SqlStdOperatorTable.PLUS, b.field(0), b.literal(offset)),
-                    b.call(SqlStdOperatorTable.MULTIPLY, b.field(1), b.literal(2)));
-            return b.project(top);
-        };
-        var before = onSides.apply(JoinRelType.INNER, 1).build();
+        var qed = RuleBuilder.create();
+        var leftTable = RuleChecks.table(qed, 1, false);
+        var rightTable = RuleChecks.table(qed, 1, false);
+        var integer = new RelType.BaseType(SqlTypeName.INTEGER, true);
+        var tl = qed.genericProjectionOp("TL", integer);
+        var tr = qed.genericProjectionOp("TR", integer);
+        var g = qed.genericProjectionOp("G", integer);
+        var c = qed.genericPredicateOp("C", true);
+        var b = RuleChecks.ruleBuilder(qed);
+        var rex = b.getRexBuilder();
+        var left = b.scan(leftTable).build();
+        var right = b.scan(rightTable).build();
 
-        b.scan(l).project(b.call(SqlStdOperatorTable.PLUS, b.field(0), b.literal(1)));
-        b.scan(r).project(b.call(SqlStdOperatorTable.MULTIPLY, b.field(0), b.literal(2)));
-        b.join(JoinRelType.INNER, b.call(SqlStdOperatorTable.LESS_THAN, b.field(2, 0, 0), b.field(2, 1, 0)));
-        var after = b.project(b.call(SqlStdOperatorTable.PLUS, b.field(0), b.field(1))).build();
+        var tlOfLeft = rex.makeCall(tl, rex.makeInputRef(left, 0));
+        var trOfRight = rex.makeCall(tr, rex.makeInputRef(right.getRowType().getFieldList().get(0).getType(), 1));
+        var join = LogicalJoin.create(left, right, List.of(), rex.makeCall(c, tlOfLeft, trOfRight), Set.of(),
+                JoinRelType.INNER);
+        var before = LogicalProject.create(join, List.of(), List.of(rex.makeCall(g, tlOfLeft, trOfRight)),
+                List.of("g"));
+
+        var projectedLeft = LogicalProject.create(left, List.of(), List.of(rex.makeCall(tl, rex.makeInputRef(left, 0))),
+                List.of("tl"));
+        var projectedRight = LogicalProject.create(right, List.of(),
+                List.of(rex.makeCall(tr, rex.makeInputRef(right, 0))), List.of("tr"));
+        var l0 = rex.makeInputRef(projectedLeft.getRowType().getFieldList().get(0).getType(), 0);
+        var r0 = rex.makeInputRef(projectedRight.getRowType().getFieldList().get(0).getType(), 1);
+        var transposed = LogicalJoin.create(projectedLeft, projectedRight, List.of(), rex.makeCall(c, l0, r0),
+                Set.of(), JoinRelType.INNER);
+        var after = LogicalProject.create(transposed, List.of(), List.of(rex.makeCall(g, l0, r0)), List.of("g"));
         RuleChecks.rewrites(rule, before, after);
 
-        RuleChecks.doesNotApply(rule, onSides.apply(JoinRelType.LEFT, 1).build());
-        RuleChecks.doesNotApply(rule, onSides.apply(JoinRelType.INNER, 2).build());
+        var leftJoin = LogicalJoin.create(left, right, List.of(), rex.makeCall(c, tlOfLeft, trOfRight), Set.of(),
+                JoinRelType.LEFT);
+        RuleChecks.doesNotApply(rule, LogicalProject.create(leftJoin, List.of(),
+                List.of(rex.makeCall(g, tlOfLeft, trOfRight)), List.of("g")));
     }
 
     public static void main(String[] args) {

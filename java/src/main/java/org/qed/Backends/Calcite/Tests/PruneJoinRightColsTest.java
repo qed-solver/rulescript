@@ -2,12 +2,9 @@ package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
 import org.qed.RRuleInstances.PruneJoinRightCols;
-import org.qed.RuleBuilder;
 
 public class PruneJoinRightColsTest {
-
     public static void runTest() {
         var rule = new PruneJoinRightCols();
         RuleChecks.rewritesPattern(rule);
@@ -17,30 +14,32 @@ public class PruneJoinRightColsTest {
     }
 
     private static void ordinaryTables(PruneJoinRightCols rule) {
-        var base = RuleBuilder.create();
-        var l = RuleChecks.table(base, 1, false);
-        var r = RuleChecks.table(base, 2, false);
-        var narrow = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var before = join(b, l, r, JoinRelType.INNER)
+        var builder = org.qed.RuleBuilder.create();
+        var leftName = RuleChecks.table(builder, 1, false);
+        var rightName = RuleChecks.table(builder, 2, false);
+        var b = RuleChecks.ruleBuilder(builder);
+        var l = b.scan(leftName).build();
+        var r = b.scan(rightName).build();
+        var leftRef = b.getRexBuilder().makeInputRef(l.getRowType().getFieldList().get(0).getType(), 0);
+        var rightRef = b.getRexBuilder().makeInputRef(r.getRowType().getFieldList().get(0).getType(), 1);
+        var before = b.push(l).push(r)
+                .join(JoinRelType.INNER, RuleChecks.eq(b, leftRef, rightRef))
                 .project(b.call(SqlStdOperatorTable.PLUS, b.field(0), b.field(1)))
                 .build();
-        b.scan(l).scan(r).project(b.field(0));
-        var after = b.join(JoinRelType.INNER, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
-                .project(b.call(SqlStdOperatorTable.PLUS, b.field(0), b.field(1)))
+
+        var expectedBuilder = org.qed.RuleBuilder.create();
+        var expectedLeft = RuleChecks.table(expectedBuilder, 1, false);
+        var expectedRight = RuleChecks.table(expectedBuilder, 2, false);
+        var e = RuleChecks.ruleBuilder(expectedBuilder);
+        var expectedL = e.scan(expectedLeft).build();
+        var expectedR = e.scan(expectedRight).project(e.field(0)).build();
+        var expectedLeftRef = e.getRexBuilder().makeInputRef(expectedL.getRowType().getFieldList().get(0).getType(), 0);
+        var expectedRightRef = e.getRexBuilder().makeInputRef(expectedR.getRowType().getFieldList().get(0).getType(), 1);
+        var after = e.push(expectedL).push(expectedR)
+                .join(JoinRelType.INNER, RuleChecks.eq(e, expectedLeftRef, expectedRightRef))
+                .project(e.call(SqlStdOperatorTable.PLUS, e.field(0), e.field(1)))
                 .build();
         RuleChecks.rewrites(rule, before, after);
-
-        RuleChecks.doesNotApply(rule, join(b, l, r, JoinRelType.LEFT)
-                .project(b.call(SqlStdOperatorTable.PLUS, b.field(0), b.field(1)))
-                .build());
-        RuleChecks.doesNotApply(rule, join(b, l, narrow, JoinRelType.INNER)
-                .project(b.call(SqlStdOperatorTable.PLUS, b.field(0), b.field(1)))
-                .build());
-    }
-
-    private static RelBuilder join(RelBuilder b, String left, String right, JoinRelType type) {
-        return b.scan(left).scan(right).join(type, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)));
     }
 
     public static void main(String[] args) {

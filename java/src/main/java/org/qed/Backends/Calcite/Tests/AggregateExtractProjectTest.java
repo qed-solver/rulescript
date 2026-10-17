@@ -1,43 +1,42 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.AggregateExtractProject;
 import org.qed.RuleBuilder;
 
-import java.util.List;
-
 public class AggregateExtractProjectTest {
-
     public static void runTest() {
         var rule = new AggregateExtractProject();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
-    }
 
-    private static void ordinaryTables(AggregateExtractProject rule) {
-        var base = RuleBuilder.create();
-        var a = RuleChecks.table(base, 1, false);
-        var bb = RuleChecks.table(base, 1, false);
-        var c = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var threeColumns = (java.util.function.Supplier<RelBuilder>) () ->
-                b.scan(a).scan(bb).join(JoinRelType.INNER, b.literal(true)).scan(c)
-                        .join(JoinRelType.INNER, b.literal(true));
-        var before = threeColumns.get().aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.SUM, b.field(1)))
-                .build();
-        var after = threeColumns.get().project(b.field(0), b.field(1))
-                .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.SUM, b.field(1))).build();
-        RuleChecks.rewrites(rule, before, after);
+        var builder = RuleBuilder.create();
+        var a = RuleChecks.table(builder, 1, false);
+        var b = RuleChecks.table(builder, 1, false);
+        var c = RuleChecks.table(builder, 1, false);
+        var beforeBuilder = RuleChecks.ruleBuilder(builder);
+        var before = beforeBuilder.scan(a).scan(b).join(org.apache.calcite.rel.core.JoinRelType.INNER,
+                beforeBuilder.literal(true)).scan(c).join(org.apache.calcite.rel.core.JoinRelType.INNER,
+                beforeBuilder.literal(true)).aggregate(beforeBuilder.groupKey(beforeBuilder.field(0)),
+                beforeBuilder.aggregateCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.SUM,
+                        false, null, "EXPR$0", beforeBuilder.field(1))).build();
+        var expectedBuilder = RuleChecks.ruleBuilder(builder);
+        var expected = expectedBuilder.scan(a).scan(b).join(org.apache.calcite.rel.core.JoinRelType.INNER,
+                expectedBuilder.literal(true)).scan(c).join(org.apache.calcite.rel.core.JoinRelType.INNER,
+                expectedBuilder.literal(true)).project(expectedBuilder.field(0), expectedBuilder.field(1))
+                .aggregate(expectedBuilder.groupKey(expectedBuilder.field(0)),
+                        expectedBuilder.aggregateCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.SUM,
+                                false, null, "EXPR$0", expectedBuilder.field(1))).build();
+        RuleChecks.rewrites(rule, before, expected);
 
-        RuleChecks.doesNotApply(rule, threeColumns.get()
-                .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.SUM, b.field(2))).build());
-        RuleChecks.doesNotApply(rule, threeColumns.get()
-                .aggregate(b.groupKey(1), b.aggregateCall(SqlStdOperatorTable.SUM, b.field(0))).build());
+        var nearMissBuilder = RuleChecks.ruleBuilder(builder);
+        var nearMiss = nearMissBuilder.scan(a).scan(b).join(org.apache.calcite.rel.core.JoinRelType.LEFT,
+                nearMissBuilder.literal(true)).scan(c).join(org.apache.calcite.rel.core.JoinRelType.INNER,
+                nearMissBuilder.literal(true)).aggregate(nearMissBuilder.groupKey(nearMissBuilder.field(0)),
+                nearMissBuilder.aggregateCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.SUM,
+                        false, null, "EXPR$0", nearMissBuilder.field(1))).build();
+        RuleChecks.doesNotApply(rule, nearMiss);
     }
 
     public static void main(String[] args) {

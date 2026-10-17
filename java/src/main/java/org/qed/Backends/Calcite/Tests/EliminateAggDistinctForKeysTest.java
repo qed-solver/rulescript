@@ -1,43 +1,43 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.EliminateAggDistinctForKeys;
-import org.qed.RuleBuilder;
+import org.qed.RelType;
+
+import static org.qed.Backends.Calcite.Tests.RuleChecks.doesNotApply;
+import static org.qed.Backends.Calcite.Tests.RuleChecks.rejectsNearMisses;
+import static org.qed.Backends.Calcite.Tests.RuleChecks.rewrites;
+import static org.qed.Backends.Calcite.Tests.RuleChecks.rewritesConcretePredicates;
+import static org.qed.Backends.Calcite.Tests.RuleChecks.rewritesPattern;
+import static org.qed.Backends.Calcite.Tests.RuleChecks.table;
 
 public class EliminateAggDistinctForKeysTest {
-
     public static void runTest() {
         var rule = new EliminateAggDistinctForKeys();
-        RuleChecks.rewritesPattern(rule);
-        RuleChecks.rewritesConcretePredicates(rule);
-        RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        rewritesPattern(rule);
+        rewritesConcretePredicates(rule);
+        rejectsNearMisses(rule);
+
+        var before = aggregate(true, true);
+        var after = aggregate(true, false);
+        rewrites(rule, before, after);
+        doesNotApply(rule, aggregate(false, true));
     }
 
-    private static void ordinaryTables(EliminateAggDistinctForKeys rule) {
-        var builder = RuleBuilder.create();
-        var keyed = RuleChecks.table(builder, 1, true, false);
-        var plain = RuleChecks.table(builder, 1, false, false);
-        var before = builder.scan(keyed)
-                .aggregate(builder.groupKey(0),
-                        builder.aggregateCall(SqlStdOperatorTable.COUNT, true, null, null, builder.field(0)))
-                .build();
-        var rewritten = RuleChecks.ruleBuilder(builder);
-        var after = rewritten.scan(keyed)
-                .aggregate(rewritten.groupKey(0),
-                        rewritten.aggregateCall(SqlStdOperatorTable.COUNT, false, null, null, rewritten.field(0)))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
-
-        var nonKey = builder.scan(plain)
-                .aggregate(builder.groupKey(0),
-                        builder.aggregateCall(SqlStdOperatorTable.COUNT, true, null, null, builder.field(0)))
-                .build();
-        RuleChecks.doesNotApply(rule, nonKey);
+    private static org.apache.calcite.rel.RelNode aggregate(boolean unique, boolean distinct) {
+        var builder = org.qed.RuleBuilder.create();
+        var source = table(builder, 1, unique, false);
+        var type = RelType.fromString("INTEGER", true);
+        builder.scan(source).aggregate(builder.groupKey(builder.field(0)), builder.aggregateCall(
+                builder.genericAggregateOp("f", type), distinct, null, "f", java.util.List.of(builder.field(0))));
+        return builder.build();
     }
 
     public static void main(String[] args) {
         System.out.println("Running EliminateAggDistinctForKeys test...");
         runTest();
+        if (CalciteTester.failures() > 0) {
+            System.exit(1);
+        }
     }
 }

@@ -1,38 +1,53 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
 import org.qed.RRuleInstances.JoinAddRedundantSemiJoin;
 import org.qed.RuleBuilder;
 
-import java.util.List;
-
 public class JoinAddRedundantSemiJoinTest {
-
     public static void runTest() {
         var rule = new JoinAddRedundantSemiJoin();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        handBuiltJoin(rule);
+        handBuiltNoMatch(rule);
     }
 
-    private static void ordinaryTables(JoinAddRedundantSemiJoin rule) {
-        var base = RuleBuilder.create();
-        var x = RuleChecks.table(base, 1, false);
-        var y = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var cond = (java.util.function.Function<RelBuilder, RexNode>) q ->
-                RuleChecks.eq(q, q.field(2, 0, 0), q.field(2, 1, 0));
-        var before = b.scan(x).scan(y).join(JoinRelType.INNER, cond.apply(b)).build();
-        b.scan(x).scan(y).join(JoinRelType.SEMI, cond.apply(b)).scan(y);
-        var after = b.join(JoinRelType.INNER, cond.apply(b)).build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void handBuiltJoin(JoinAddRedundantSemiJoin rule) {
+        var beforeBuilder = RuleBuilder.create();
+        var left = RuleChecks.table(beforeBuilder, 1, false);
+        var right = RuleChecks.table(beforeBuilder, 1, false);
+        beforeBuilder.scan(left).scan(right);
+        var condition = beforeBuilder.call(beforeBuilder.genericPredicateOp("matches", true),
+                beforeBuilder.joinFields().asJava());
+        RelNode before = beforeBuilder.join(JoinRelType.INNER, condition).build();
 
-        RuleChecks.doesNotApply(rule, b.scan(x).scan(y).join(JoinRelType.LEFT, cond.apply(b)).build());
-        RuleChecks.doesNotApply(rule, b.scan(x).scan(y).join(JoinRelType.SEMI, cond.apply(b)).build());
+        var expectedBuilder = RuleBuilder.create();
+        left = RuleChecks.table(expectedBuilder, 1, false);
+        right = RuleChecks.table(expectedBuilder, 1, false);
+        expectedBuilder.scan(left);
+        var leftScan = expectedBuilder.build();
+        expectedBuilder.scan(right);
+        var rightScan = expectedBuilder.build();
+        expectedBuilder.push(leftScan).push(rightScan);
+        condition = expectedBuilder.call(expectedBuilder.genericPredicateOp("matches", true),
+                expectedBuilder.joinFields().asJava());
+        expectedBuilder.join(JoinRelType.SEMI, condition)
+                .push(rightScan).join(JoinRelType.INNER, condition);
+        RelNode expected = expectedBuilder.build();
+        RuleChecks.rewrites(rule, before, expected);
+    }
+
+    private static void handBuiltNoMatch(JoinAddRedundantSemiJoin rule) {
+        var builder = RuleBuilder.create();
+        var left = RuleChecks.table(builder, 1, false);
+        var right = RuleChecks.table(builder, 1, false);
+        builder.scan(left).scan(right);
+        var condition = builder.call(builder.genericPredicateOp("matches", true), builder.joinFields().asJava());
+        RelNode plan = builder.join(JoinRelType.LEFT, condition).build();
+        RuleChecks.doesNotApply(rule, plan);
     }
 
     public static void main(String[] args) {

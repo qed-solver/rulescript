@@ -1,11 +1,11 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.NormalizeNestedAnds;
 import org.qed.RuleBuilder;
 
 public class NormalizeNestedAndsTest {
-
     public static void runTest() {
         var rule = new NormalizeNestedAnds();
         RuleChecks.rewritesPattern(rule);
@@ -16,26 +16,34 @@ public class NormalizeNestedAndsTest {
 
     private static void ordinaryTables(NormalizeNestedAnds rule) {
         var builder = RuleBuilder.create();
-        var table = RuleChecks.table(builder, 1, false);
-        var plain = RuleChecks.ruleBuilder(builder);
-        plain.scan(table);
-        var p = plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(0), plain.literal(5));
-        var q = plain.call(SqlStdOperatorTable.LESS_THAN, plain.field(0), plain.literal(10));
-        var r = plain.call(SqlStdOperatorTable.NOT_EQUALS, plain.field(0), plain.literal(7));
-        var before = plain.filter(plain.and(p, plain.and(q, r))).build();
-        var after = plain.scan(table)
-                .filter(plain.and(plain.and(p, q), r))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
+        var table = RuleChecks.table(builder, 1, false, false);
+        var b = RuleChecks.ruleBuilder(builder);
+        b.scan(table);
+        var value = b.field(0);
+        var low = b.call(SqlStdOperatorTable.GREATER_THAN, value, b.literal(0));
+        var middle = b.call(SqlStdOperatorTable.LESS_THAN, value, b.literal(10));
+        var high = b.call(SqlStdOperatorTable.NOT_EQUALS, value, b.literal(5));
+        var before = b.filter(b.and(low, b.and(middle, high))).build();
 
-        var twoConjuncts = plain.scan(table)
-                .filter(plain.and(p, q))
+        var expectedRuleBuilder = RuleBuilder.create();
+        var expectedTable = RuleChecks.table(expectedRuleBuilder, 1, false, false);
+        var expectedScanBuilder = RuleChecks.ruleBuilder(expectedRuleBuilder);
+        expectedScanBuilder.scan(expectedTable);
+        var expectedValue = expectedScanBuilder.field(0);
+        var expectedLow = expectedScanBuilder.call(SqlStdOperatorTable.GREATER_THAN, expectedValue,
+                expectedScanBuilder.literal(0));
+        var expectedMiddle = expectedScanBuilder.call(SqlStdOperatorTable.LESS_THAN, expectedValue,
+                expectedScanBuilder.literal(10));
+        var expectedHigh = expectedScanBuilder.call(SqlStdOperatorTable.NOT_EQUALS, expectedValue,
+                expectedScanBuilder.literal(5));
+        var expected = expectedScanBuilder
+                .filter(expectedScanBuilder.and(expectedScanBuilder.and(expectedLow, expectedMiddle), expectedHigh))
                 .build();
-        RuleChecks.doesNotApply(rule, twoConjuncts);
+        RuleChecks.rewrites(rule, before, expected);
     }
 
     public static void main(String[] args) {
-        System.out.println("Running NormalizeNestedAnds test...");
+        System.out.println("Running RULE test...");
         runTest();
     }
 }

@@ -1,16 +1,14 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rel.logical.LogicalAggregate;
+import org.apache.calcite.rel.logical.LogicalJoin;
+import org.apache.calcite.rel.logical.LogicalMinus;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
+import org.apache.calcite.util.ImmutableBitSet;
 import org.qed.RRuleInstances.MinusToAntiJoin;
-import org.qed.RuleBuilder;
-
-import java.util.List;
 
 public class MinusToAntiJoinTest {
-
     public static void runTest() {
         var rule = new MinusToAntiJoin();
         RuleChecks.rewritesPattern(rule);
@@ -20,19 +18,29 @@ public class MinusToAntiJoinTest {
     }
 
     private static void ordinaryTables(MinusToAntiJoin rule) {
-        var base = RuleBuilder.create();
-        var ta = RuleChecks.table(base, 1, false);
-        var tb = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var before = b.scan(ta).scan(tb).minus(false, 2).build();
-        var after = b.scan(ta).scan(tb)
-                .join(JoinRelType.ANTI, b.call(SqlStdOperatorTable.IS_NOT_DISTINCT_FROM, b.field(2, 0, 0),
-                        b.field(2, 1, 0)))
-                .aggregate(b.groupKey(0)).build();
-        RuleChecks.rewrites(rule, before, after);
+        var source = org.qed.RuleBuilder.create();
+        var left = RuleChecks.table(source, 1, false);
+        var right = RuleChecks.table(source, 1, false);
+        var leftScan = source.scan(left).build();
+        var rightScan = source.scan(right).build();
+        var before = LogicalMinus.create(java.util.List.of(leftScan, rightScan), false);
 
-        RuleChecks.doesNotApply(rule, b.scan(ta).scan(tb).minus(true, 2).build());
-        RuleChecks.doesNotApply(rule, b.scan(ta).scan(tb).intersect(false, 2).build());
+        var expectedBuilder = org.qed.RuleBuilder.create();
+        var expectedLeft = RuleChecks.table(expectedBuilder, 1, false);
+        var expectedRight = RuleChecks.table(expectedBuilder, 1, false);
+        expectedBuilder.scan(expectedLeft).scan(expectedRight);
+        var expectedRightScan = expectedBuilder.peek();
+        var expectedLeftScan = expectedBuilder.peek(2, 0);
+        var expectedRelBuilder = RuleChecks.ruleBuilder(expectedBuilder);
+        var rexBuilder = expectedRelBuilder.getRexBuilder();
+        var condition = rexBuilder.makeCall(SqlStdOperatorTable.IS_NOT_DISTINCT_FROM,
+                rexBuilder.makeInputRef(expectedLeftScan.getRowType().getFieldList().get(0).getType(), 0),
+                rexBuilder.makeInputRef(expectedRightScan.getRowType().getFieldList().get(0).getType(), 1));
+        var expectedInput = LogicalJoin.create(expectedLeftScan, expectedRightScan, java.util.List.of(), condition,
+                java.util.Set.of(), JoinRelType.ANTI);
+        var after = LogicalAggregate.create(expectedInput, java.util.List.of(), ImmutableBitSet.of(0), null,
+                java.util.List.of());
+        RuleChecks.rewrites(rule, before, after);
     }
 
     public static void main(String[] args) {

@@ -1,16 +1,14 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.tools.RelBuilder;
+import org.qed.Backends.Calcite.CalciteRuntime;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.PruneEmpty;
 import org.qed.RuleBuilder;
 
-import java.util.List;
-
 public class PruneEmptyTest {
-
     public static void runTest() {
         var rule = new PruneEmpty();
         RuleChecks.rewritesPattern(rule);
@@ -20,21 +18,33 @@ public class PruneEmptyTest {
     }
 
     private static void ordinaryTables(PruneEmpty rule) {
-        var base = RuleBuilder.create();
-        var t = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var before = org.apache.calcite.rel.logical.LogicalFilter.create(b.scan(t).empty().build(),
-                RuleChecks.gt(b, b.scan(t).field(0), 5));
-        var after = b.scan(t).empty().build();
-        RuleChecks.rewrites(rule, before, after);
+        var ruleBuilder = RuleBuilder.create();
+        var table = RuleChecks.table(ruleBuilder, 1, false);
+        var builder = ruleBuilder.transform(CalciteRuntime::configure);
+        var source = builder.scan(table).build();
+        var condition = builder.getRexBuilder().makeLiteral(true);
+        RelNode ordinaryInput = LogicalFilter.create(source, condition);
+        RuleChecks.doesNotApply(rule, ordinaryInput);
 
-        RuleChecks.doesNotApply(rule, b.scan(t).filter(RuleChecks.gt(b, b.field(0), 5)).build());
-        RuleChecks.doesNotApply(rule, b.scan(t).empty().project(b.call(SqlStdOperatorTable.PLUS, b.field(0),
-                b.literal(1))).build());
+        var expectedRuleBuilder = RuleBuilder.create();
+        var expectedTable = RuleChecks.table(expectedRuleBuilder, 1, false);
+        var expectedBuilder = expectedRuleBuilder.transform(CalciteRuntime::configure);
+        var expectedSource = expectedBuilder.scan(expectedTable).build();
+        var matchingRuleBuilder = RuleBuilder.create();
+        var matchingTable = RuleChecks.table(matchingRuleBuilder, 1, false);
+        var matchingBuilder = matchingRuleBuilder.transform(CalciteRuntime::configure);
+        var matchingSource = matchingBuilder.scan(matchingTable).build();
+        RelNode before = LogicalFilter.create(matchingBuilder.values(matchingSource.getRowType()).build(),
+                matchingBuilder.getRexBuilder().makeLiteral(true));
+        RelNode after = expectedBuilder.values(expectedSource.getRowType()).build();
+        RuleChecks.rewrites(rule, before, after);
     }
 
     public static void main(String[] args) {
         System.out.println("Running PruneEmpty test...");
         runTest();
+        if (CalciteTester.failures() != 0) {
+            throw new AssertionError(CalciteTester.failures() + " check(s) failed");
+        }
     }
 }

@@ -1,9 +1,19 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rel.logical.LogicalIntersect;
+import org.apache.calcite.rel.logical.LogicalUnion;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.tools.RelBuilder;
 import org.qed.RRuleInstances.PushFilterIntoSetOp;
 import org.qed.RuleBuilder;
 
 public class PushFilterIntoSetOpTest {
+    public static void main(String[] args) {
+        System.out.println("Running PushFilterIntoSetOp test...");
+        runTest();
+    }
 
     public static void runTest() {
         var rule = new PushFilterIntoSetOp();
@@ -14,24 +24,22 @@ public class PushFilterIntoSetOpTest {
     }
 
     private static void ordinaryTables(PushFilterIntoSetOp rule) {
-        var base = RuleBuilder.create();
-        var l = RuleChecks.table(base, 1, false);
-        var r = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var before = b.scan(l).scan(r).intersect(false, 2).filter(RuleChecks.gt(b, b.field(0), 5)).build();
-        var after = b.scan(l).filter(RuleChecks.gt(b, b.field(0), 5))
-                .scan(r).filter(RuleChecks.gt(b, b.field(0), 5))
-                .intersect(false, 2).build();
-        RuleChecks.rewrites(rule, before, after);
+        var builder = RuleBuilder.create();
+        var l = RuleChecks.table(builder, 1, false, false);
+        var r = RuleChecks.table(builder, 1, false, false);
+        var inputs = java.util.List.of(builder.scan(l).build(), builder.scan(r).build());
+        var intersection = LogicalIntersect.create(inputs, false);
+        var condition = builder.call(SqlStdOperatorTable.IS_NOT_NULL, builder.getRexBuilder().makeInputRef(intersection, 0));
+        var plan = LogicalFilter.create(intersection, condition);
 
-        RuleChecks.doesNotApply(rule, b.scan(l).scan(r).intersect(true, 2)
-                .filter(RuleChecks.gt(b, b.field(0), 5)).build());
-        RuleChecks.doesNotApply(rule, b.scan(l).scan(r).union(false, 2)
-                .filter(RuleChecks.gt(b, b.field(0), 5)).build());
-    }
+        var plain = RuleChecks.ruleBuilder(builder);
+        var expectedLeft = plain.scan(l).filter(plain.call(SqlStdOperatorTable.IS_NOT_NULL, plain.field(0))).build();
+        var expectedRight = plain.scan(r).filter(plain.call(SqlStdOperatorTable.IS_NOT_NULL, plain.field(0))).build();
+        var expected = LogicalIntersect.create(java.util.List.of(expectedLeft, expectedRight), false);
+        RuleChecks.rewrites(rule, plan, expected);
 
-    public static void main(String[] args) {
-        System.out.println("Running PushFilterIntoSetOp test...");
-        runTest();
+        var union = LogicalUnion.create(inputs, false);
+        var nearMiss = LogicalFilter.create(union, condition);
+        RuleChecks.doesNotApply(rule, nearMiss);
     }
 }

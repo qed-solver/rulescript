@@ -1,37 +1,34 @@
 package org.qed.Backends.Calcite.Tests;
 
+import kala.collection.Seq;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.tools.RelBuilder;
+import org.qed.Backends.Calcite.CalciteTester;
+import org.qed.RelRN;
 import org.qed.RRuleInstances.EliminateJoinUnderGroupByLeft;
-import org.qed.RuleBuilder;
 
-import java.util.function.Supplier;
-
-public class EliminateJoinUnderGroupByLeftTest {
-
+public final class EliminateJoinUnderGroupByLeftTest {
     public static void runTest() {
         var rule = new EliminateJoinUnderGroupByLeft();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
-    }
 
-    private static void ordinaryTables(EliminateJoinUnderGroupByLeft rule) {
-        var base = RuleBuilder.create();
-        var l = RuleChecks.table(base, 1, false);
-        var r = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        Supplier<RelBuilder> leftJoin = () -> b.scan(l).scan(r)
-                .join(JoinRelType.LEFT, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)));
-        var before = leftJoin.get().aggregate(b.groupKey(0)).build();
-        var after = b.scan(l).aggregate(b.groupKey(0)).build();
-        RuleChecks.rewrites(rule, before, after);
+        var builder = org.qed.RuleBuilder.create();
+        var leftName = RuleChecks.table(builder, 1, false);
+        var rightName = RuleChecks.table(builder, 1, false);
+        var left = builder.scan(leftName).build();
+        var right = builder.scan(rightName).build();
+        var matchingJoin = builder.scan(leftName).scan(rightName)
+                .join(JoinRelType.LEFT, builder.literal(true)).build();
+        var matchingAggregate = builder.push(matchingJoin).aggregate(builder.groupKey(0)).build();
+        var expectedLeft = builder.scan(leftName).build();
+        var expected = builder.push(expectedLeft).aggregate(builder.groupKey(0)).build();
+        RuleChecks.rewrites(rule, matchingAggregate, expected);
 
-        RuleChecks.doesNotApply(rule, leftJoin.get().aggregate(b.groupKey(1)).build());
-        RuleChecks.doesNotApply(rule, b.scan(l).scan(r)
-                .join(JoinRelType.INNER, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
-                .aggregate(b.groupKey(0)).build());
+        var innerJoin = builder.push(left).push(right)
+                .join(JoinRelType.INNER, builder.literal(true)).build();
+        var nonMatch = builder.push(innerJoin).aggregate(builder.groupKey(0)).build();
+        RuleChecks.doesNotApply(rule, nonMatch);
     }
 
     public static void main(String[] args) {

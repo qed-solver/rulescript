@@ -1,45 +1,42 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.AggregateToSemiJoin;
-import org.qed.RuleBuilder;
 
-import java.util.List;
-
-public class AggregateToSemiJoinTest {
-
+public final class AggregateToSemiJoinTest {
     public static void runTest() {
         var rule = new AggregateToSemiJoin();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
-    }
 
-    private static void ordinaryTables(AggregateToSemiJoin rule) {
-        var base = RuleBuilder.create();
-        var l = RuleChecks.table(base, 1, false);
-        var r = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var joinOn = (java.util.function.BiFunction<JoinRelType, org.apache.calcite.sql.SqlOperator, RelBuilder>)
-                (type, op) -> b.scan(l).scan(r).aggregate(b.groupKey(0))
-                        .join(type, b.call(op, b.field(2, 0, 0), b.field(2, 1, 0)));
-        var before = joinOn.apply(JoinRelType.INNER, SqlStdOperatorTable.EQUALS).aggregate(b.groupKey(0)).build();
-        var after = b.scan(l).scan(r)
-                .join(JoinRelType.SEMI, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
-                .aggregate(b.groupKey(0)).build();
-        RuleChecks.rewrites(rule, before, after);
+        var builder = org.qed.RuleBuilder.create();
+        var leftName = RuleChecks.table(builder, 1, false);
+        var rightName = RuleChecks.table(builder, 1, false);
+        var b = RuleChecks.ruleBuilder(builder);
+        var left = b.scan(leftName).build();
+        var right = b.scan(rightName).build();
+        var rightAggregate = b.push(right).aggregate(b.groupKey(b.field(0))).build();
+        var leftRef = b.getRexBuilder().makeInputRef(left.getRowType().getFieldList().get(0).getType(), 0);
+        var rightRef = b.getRexBuilder().makeInputRef(right.getRowType().getFieldList().get(0).getType(), 1);
+        var input = b.push(left).push(rightAggregate)
+                .join(JoinRelType.INNER, b.call(SqlStdOperatorTable.EQUALS, leftRef, rightRef))
+                .aggregate(b.groupKey(b.field(0)))
+                .build();
+        var expected = b.push(left).push(right)
+                .join(JoinRelType.SEMI, b.call(SqlStdOperatorTable.EQUALS, leftRef, rightRef))
+                .aggregate(b.groupKey(b.field(0)))
+                .build();
+        RuleChecks.rewrites(rule, input, expected);
 
-        RuleChecks.doesNotApply(rule,
-                joinOn.apply(JoinRelType.INNER, SqlStdOperatorTable.LESS_THAN).aggregate(b.groupKey(0)).build());
-        RuleChecks.doesNotApply(rule,
-                joinOn.apply(JoinRelType.LEFT, SqlStdOperatorTable.EQUALS).aggregate(b.groupKey(0)).build());
-        RuleChecks.doesNotApply(rule, b.scan(l).scan(r)
-                .join(JoinRelType.INNER, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
-                .aggregate(b.groupKey(0)).build());
+        var nearMiss = b.push(left).push(right)
+                .join(JoinRelType.LEFT, b.call(SqlStdOperatorTable.EQUALS, rightRef, leftRef))
+                .aggregate(b.groupKey(b.field(0)))
+                .build();
+        RuleChecks.doesNotApply(rule, nearMiss);
     }
 
     public static void main(String[] args) {

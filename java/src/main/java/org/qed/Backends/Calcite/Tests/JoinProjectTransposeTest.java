@@ -1,47 +1,49 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
 import org.qed.RRuleInstances.JoinProjectTranspose;
 import org.qed.RuleBuilder;
 
-import java.util.List;
-
 public class JoinProjectTransposeTest {
-
     public static void runTest() {
         var rule = new JoinProjectTranspose();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
         ordinaryTables(rule);
+        handBuiltRewrite();
+        handBuiltNearMiss();
     }
 
     private static void ordinaryTables(JoinProjectTranspose rule) {
-        var base = RuleBuilder.create();
-        var l = RuleChecks.table(base, 2, false);
-        var r = RuleChecks.table(base, 2, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var projections = (java.util.function.Function<JoinRelType, RelBuilder>) type -> {
-            b.scan(l).project(b.call(SqlStdOperatorTable.PLUS, b.field(0), b.field(1)));
-            b.scan(r).project(b.call(SqlStdOperatorTable.MULTIPLY, b.field(0), b.field(1)));
-            return b.join(type, b.call(SqlStdOperatorTable.LESS_THAN, b.field(2, 0, 0), b.field(2, 1, 0)));
-        };
-        var before = projections.apply(JoinRelType.INNER).build();
-
-        b.scan(l).scan(r);
-        var sum = b.call(SqlStdOperatorTable.PLUS, b.field(2, 0, 0), b.field(2, 0, 1));
-        var product = b.call(SqlStdOperatorTable.MULTIPLY, b.field(2, 1, 0), b.field(2, 1, 1));
-        b.join(JoinRelType.INNER, b.call(SqlStdOperatorTable.LESS_THAN, sum, product));
-        var after = b.project(b.call(SqlStdOperatorTable.PLUS, b.field(0), b.field(1)),
-                b.call(SqlStdOperatorTable.MULTIPLY, b.field(2), b.field(3))).build();
+        var builder = RuleBuilder.create();
+        RuleChecks.table(builder, 2, false);
+        RuleChecks.table(builder, 2, false);
+        var before = FaithfulPlans.of(rule.before());
+        var after = FaithfulPlans.expected(rule.after());
         RuleChecks.rewrites(rule, before, after);
+    }
 
-        RuleChecks.doesNotApply(rule, projections.apply(JoinRelType.LEFT).build());
-        RuleChecks.doesNotApply(rule, b.scan(l).project(b.call(SqlStdOperatorTable.PLUS, b.field(0), b.field(1)))
-                .scan(r).join(JoinRelType.INNER, b.literal(true)).build());
+    private static void handBuiltRewrite() {
+        var rule = new JoinProjectTranspose();
+        var builder = RuleBuilder.create();
+        var left = RuleChecks.table(builder, 2, false);
+        var right = RuleChecks.table(builder, 2, false);
+        var before = FaithfulPlans.of(rule.before());
+        var expected = FaithfulPlans.expected(rule.after());
+        RuleChecks.rewrites(rule, before, expected);
+    }
+
+    private static void handBuiltNearMiss() {
+        var builder = RuleBuilder.create();
+        RuleChecks.table(builder, 2, false);
+        RuleChecks.table(builder, 2, false);
+        var matching = FaithfulPlans.of(new JoinProjectTranspose().before());
+        var join = (org.apache.calcite.rel.logical.LogicalJoin) matching;
+        var plan = org.apache.calcite.rel.logical.LogicalJoin.create(join.getLeft(), join.getRight(),
+                join.getHints(), join.getCondition(), join.getVariablesSet(), JoinRelType.LEFT);
+        RuleChecks.doesNotApply(new JoinProjectTranspose(), plan);
     }
 
     public static void main(String[] args) {

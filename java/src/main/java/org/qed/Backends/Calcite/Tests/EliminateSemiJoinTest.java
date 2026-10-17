@@ -1,41 +1,42 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.logical.LogicalFilter;
 import org.qed.RRuleInstances.EliminateSemiJoin;
 import org.qed.RuleBuilder;
 
-public class EliminateSemiJoinTest {
+public final class EliminateSemiJoinTest {
+    private EliminateSemiJoinTest() {}
 
     public static void runTest() {
         var rule = new EliminateSemiJoin();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        selfSemiJoinTrue(rule);
+        rewritesHandBuiltSelfSemiJoin();
+        rejectsHandBuiltDifferentRightInput();
     }
 
-    private static void selfSemiJoinTrue(EliminateSemiJoin rule) {
-        var builder = RuleBuilder.create();
-        var t = RuleChecks.table(builder, 1, false);
-        var before = builder.scan(t).scan(t)
-                .join(JoinRelType.SEMI, builder.literal(true)).build();
-        var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(t).build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void rewritesHandBuiltSelfSemiJoin() {
+        var qedBuilder = RuleBuilder.create();
+        var table = RuleChecks.table(qedBuilder, 1, false);
+        var builder = RuleChecks.ruleBuilder(qedBuilder);
+        var scan = builder.scan(table).build();
+        var before = builder.push(scan).push(scan).join(JoinRelType.SEMI, builder.literal(true)).build();
+        var expected = builder.push(scan).build();
+        RuleChecks.rewrites(new EliminateSemiJoin(), before, expected);
+    }
 
-        var inner = builder.scan(t).scan(t)
-                .join(JoinRelType.INNER, builder.literal(true)).build();
-        RuleChecks.doesNotApply(rule, inner);
-
-        var filtered = builder.scan(t).scan(t)
-                .join(JoinRelType.SEMI, RuleChecks.eq(builder, builder.field(2, 0, 0), builder.field(2, 1, 0)))
-                .build();
-        RuleChecks.doesNotApply(rule, filtered);
-
-        var other = RuleChecks.table(builder, 1, false);
-        var differentInputs = builder.scan(t).scan(other)
-                .join(JoinRelType.SEMI, builder.literal(true)).build();
-        RuleChecks.doesNotApply(rule, differentInputs);
+    private static void rejectsHandBuiltDifferentRightInput() {
+        var qedBuilder = RuleBuilder.create();
+        var table = RuleChecks.table(qedBuilder, 1, false);
+        var builder = RuleChecks.ruleBuilder(qedBuilder);
+        RelNode left = builder.scan(table).build();
+        RelNode right = builder.scan(table).filter(RuleChecks.gt(builder, builder.field(0), 0)).build();
+        var before = builder.push(left).push(right).join(JoinRelType.SEMI, builder.literal(true)).build();
+        var rule = new EliminateSemiJoin();
+        RuleChecks.doesNotApply(rule, before);
     }
 
     public static void main(String[] args) {

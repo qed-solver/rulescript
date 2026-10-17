@@ -1,47 +1,54 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
+import org.apache.calcite.rel.RelCollations;
+import org.apache.calcite.rel.core.AggregateCall;
+import org.apache.calcite.rel.logical.LogicalAggregate;
+import org.apache.calcite.rel.logical.LogicalProject;
+import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.util.ImmutableBitSet;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.AggregateMerge;
-import org.qed.RuleBuilder;
-
-import java.util.List;
 
 public class AggregateMergeTest {
-
     public static void runTest() {
         var rule = new AggregateMerge();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
-    }
 
-    private static void ordinaryTables(AggregateMerge rule) {
-        var base = RuleBuilder.create();
-        var t = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var inner = (java.util.function.Supplier<RelBuilder>) () -> {
-            b.scan(t);
-            var c = b.field(0);
-            return b.aggregate(b.groupKey(b.call(SqlStdOperatorTable.PLUS, c, b.literal(1)),
-                            b.call(SqlStdOperatorTable.MULTIPLY, c, b.literal(2))),
-                    b.aggregateCall(SqlStdOperatorTable.SUM, c));
-        };
-        var before = inner.get().aggregate(b.groupKey(0)).build();
-        b.scan(t);
-        var after = b.aggregate(b.groupKey(b.call(SqlStdOperatorTable.PLUS, b.field(0), b.literal(1)))).build();
-        RuleChecks.rewrites(rule, before, after);
+        var builder = org.qed.RuleBuilder.create();
+        var table = RuleChecks.table(builder, 1, false, false);
+        var b = RuleChecks.ruleBuilder(builder);
+        var scan = b.scan(table).build();
+        var inputRef = new RexInputRef(0, scan.getRowType().getFieldList().get(0).getType());
+        var source = LogicalProject.create(scan, java.util.List.of(),
+                java.util.List.of(inputRef, inputRef, inputRef), java.util.List.of("key1", "key2", "value"));
+        var bottomGroupSet = ImmutableBitSet.of(0);
+        var aggregateCall = AggregateCall.create(builder.genericAggregateOp("aggregateValue",
+                        org.qed.RelType.fromString("INTEGER", true)), false, false, false,
+                java.util.List.of(2), -1, null, RelCollations.EMPTY, 2, source, null, "aggregateValue");
+        var bottom = LogicalAggregate.create(source, java.util.List.of(), ImmutableBitSet.of(0, 1),
+                null, java.util.List.of(aggregateCall));
+        var top = LogicalAggregate.create(bottom, java.util.List.of(), ImmutableBitSet.of(0),
+                null, java.util.List.of());
+        var merged = LogicalAggregate.create(scan, java.util.List.of(), bottomGroupSet, null,
+                java.util.List.of());
+        var mergedValue = new RexInputRef(0, merged.getRowType().getFieldList().get(0).getType());
+        var expected = LogicalProject.create(merged, java.util.List.of(),
+                java.util.List.of(b.getRexBuilder().makeCast(scan.getRowType().getFieldList().get(0).getType(),
+                        mergedValue)), java.util.List.of("key1"));
+        RuleChecks.rewrites(rule, top, expected);
 
-        RuleChecks.doesNotApply(rule, inner.get().aggregate(b.groupKey(1)).build());
-        RuleChecks.doesNotApply(rule, inner.get()
-                .aggregate(b.groupKey(0), b.aggregateCall(SqlStdOperatorTable.MAX, b.field(2))).build());
+        var nearMiss = LogicalAggregate.create(bottom, java.util.List.of(), ImmutableBitSet.of(1),
+                null, java.util.List.of());
+        RuleChecks.doesNotApply(rule, nearMiss);
     }
 
     public static void main(String[] args) {
         System.out.println("Running AggregateMerge test...");
         runTest();
+        if (CalciteTester.failures() > 0) {
+            throw new AssertionError(CalciteTester.failures() + " test failures");
+        }
     }
 }

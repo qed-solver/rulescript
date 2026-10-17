@@ -1,13 +1,10 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.PruneWithScanCols;
-import org.qed.RelType;
 import org.qed.RuleBuilder;
 
-import java.util.List;
-
 public class PruneWithScanColsTest {
-
     public static void runTest() {
         var rule = new PruneWithScanCols();
         RuleChecks.rewritesPattern(rule);
@@ -17,27 +14,20 @@ public class PruneWithScanColsTest {
     }
 
     private static void ordinaryTables(PruneWithScanCols rule) {
-        var base = RuleBuilder.create();
-        var t = RuleChecks.table(base, 3, false);
-        var two = RuleChecks.table(base, 2, false);
-        var top = base.genericProjectionOp("Top", new RelType.VarType("Top_Type", true));
-        var b = RuleChecks.ruleBuilder(base);
+        var builder = RuleBuilder.create();
+        var table = RuleChecks.table(builder, 3, false, false);
+        var plan = builder.scan(table).project(builder.call(SqlStdOperatorTable.PLUS,
+                builder.field(0), builder.field(1))).build();
+        var plain = RuleChecks.ruleBuilder(builder);
+        var expected = plain.scan(table).project(plain.field(0), plain.field(1))
+                .project(plain.call(SqlStdOperatorTable.PLUS, plain.field(0), plain.field(1))).build();
+        RuleChecks.rewrites(rule, plan, expected);
 
-        var before = base.scan(t)
-                .project(base.call(top, base.field(0), base.field(1)))
-                .build();
-        var after = b.scan(t)
-                .project(List.of(b.field(0), b.field(1)))
-                .project(b.call(top, b.field(0), b.field(1)))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
-
-        RuleChecks.doesNotApply(rule, base.scan(t)
-                .project(base.call(top, base.field(0), base.field(2)))
-                .build());
-        RuleChecks.doesNotApply(rule, base.scan(two)
-                .project(base.call(top, base.field(0), base.field(1)))
-                .build());
+        var fourBuilder = RuleBuilder.create();
+        var four = RuleChecks.table(fourBuilder, 4, false, false);
+        var fourColumnPlan = fourBuilder.scan(four).project(fourBuilder.call(SqlStdOperatorTable.PLUS,
+                fourBuilder.field(0), fourBuilder.field(1))).build();
+        RuleChecks.doesNotApply(rule, fourColumnPlan);
     }
 
     public static void main(String[] args) {

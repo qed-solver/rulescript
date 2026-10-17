@@ -1,16 +1,14 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
+import kala.collection.Seq;
+import kala.tuple.Tuple;
 import org.qed.RRuleInstances.ProjectFilterTranspose;
+import org.qed.RelRN;
+import org.qed.RelType;
+import org.qed.RexRN;
 import org.qed.RuleBuilder;
 
-import java.util.List;
-
 public class ProjectFilterTransposeTest {
-
     public static void runTest() {
         var rule = new ProjectFilterTranspose();
         RuleChecks.rewritesPattern(rule);
@@ -20,38 +18,33 @@ public class ProjectFilterTransposeTest {
     }
 
     private static void ordinaryTables(ProjectFilterTranspose rule) {
-        var base = RuleBuilder.create();
-        var s = RuleChecks.table(base, 2, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var filtered = (java.util.function.Function<RexNode, RelBuilder>) cond -> {
-            b.scan(s);
-            return b.filter(cond);
-        };
-        b.scan(s);
-        var e = b.call(SqlStdOperatorTable.PLUS, b.field(0), b.field(1));
-        var f = b.call(SqlStdOperatorTable.MULTIPLY, b.field(0), b.literal(2));
-        var before = filtered.apply(b.call(SqlStdOperatorTable.LESS_THAN, e, b.field(1))).project(e, f).build();
+        var builder = RuleBuilder.create();
+        var table = builder.createQedTable(Seq.of(
+                Tuple.of(new RelType.BaseType(org.apache.calcite.sql.type.SqlTypeName.INTEGER, true), false),
+                Tuple.of(new RelType.BaseType(org.apache.calcite.sql.type.SqlTypeName.INTEGER, true), false)));
+        builder.addTable(table);
+        var source = RelRN.scanMany(table.getName(), Seq.of(
+                new RelType.VarType("X_Type", true), new RelType.VarType("Y_Type", true)));
+        var x = source.field(0);
+        var y = source.field(1);
+        var eOp = builder.genericProjectionOp("E", new RelType.VarType("E_Type", true));
+        var fOp = builder.genericProjectionOp("F", new RelType.VarType("F_Type", true));
+        var pOp = builder.genericPredicateOp("P", true);
+        var e = new RexRN.Proj(eOp, Seq.of(x, y));
+        var f = new RexRN.Proj(fOp, Seq.of(x));
+        var condition = new RexRN.Pred(pOp, Seq.of(e, y));
+        var before = source.filter(condition).project(Seq.of(e, f));
+        var lowered = source.project(Seq.of(x, y, e, f));
+        var afterCondition = new RexRN.Pred(pOp, Seq.of(lowered.field(2), lowered.field(1)));
+        var after = lowered.filter(afterCondition).project(Seq.of(lowered.field(2), lowered.field(3)));
+        RuleChecks.rewrites(rule, FaithfulPlans.of(before), FaithfulPlans.expected(after));
 
-        b.scan(s);
-        e = b.call(SqlStdOperatorTable.PLUS, b.field(0), b.field(1));
-        f = b.call(SqlStdOperatorTable.MULTIPLY, b.field(0), b.literal(2));
-        var after = b.project(b.field(0), b.field(1), e, f)
-                .filter(b.call(SqlStdOperatorTable.LESS_THAN, b.field(2), b.field(1)))
-                .project(b.field(2), b.field(3)).build();
-        RuleChecks.rewrites(rule, before, after);
-
-        b.scan(s);
-        e = b.call(SqlStdOperatorTable.PLUS, b.field(0), b.field(1));
-        f = b.call(SqlStdOperatorTable.MULTIPLY, b.field(0), b.literal(2));
-        RuleChecks.doesNotApply(rule, filtered.apply(RuleChecks.gt(b, b.field(0), 5)).project(e, f).build());
-        b.scan(s);
-        e = b.call(SqlStdOperatorTable.PLUS, b.field(0), b.field(1));
-        RuleChecks.doesNotApply(rule, filtered.apply(b.call(SqlStdOperatorTable.LESS_THAN, e, b.field(1)))
-                .project(e).build());
+        var nearMiss = source.filter(new RexRN.Pred(pOp, Seq.of(e, x))).project(Seq.of(e, f));
+        RuleChecks.doesNotApply(rule, FaithfulPlans.of(nearMiss));
     }
 
     public static void main(String[] args) {
-        System.out.println("Running ProjectFilterTranspose test...");
+        System.out.println("Running RULE test...");
         runTest();
     }
 }

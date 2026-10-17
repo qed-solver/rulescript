@@ -1,39 +1,35 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rel.logical.LogicalValues;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.tools.RelBuilder;
-import org.qed.RRuleInstances.RemoveEmptySingle;
+import com.google.common.collect.ImmutableList;
 import org.qed.RuleBuilder;
 
-import java.util.List;
-
 public class RemoveEmptySingleTest {
-
     public static void runTest() {
-        var rule = new RemoveEmptySingle();
+        var rule = new org.qed.RRuleInstances.RemoveEmptySingle();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
         ordinaryTables(rule);
     }
 
-    private static void ordinaryTables(RemoveEmptySingle rule) {
-        var base = RuleBuilder.create();
-        var t = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var keepValues = b.transform(config -> config.withSimplifyValues(false));
-        var emptyInput = (java.util.function.Supplier<RelBuilder>) () -> keepValues.scan(t).empty();
-        var before = emptyInput.get().aggregate(keepValues.groupKey(0),
-                keepValues.aggregateCall(SqlStdOperatorTable.SUM, keepValues.field(0))).build();
-        var after = b.push(before).empty().build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void ordinaryTables(org.qed.RRuleInstances.RemoveEmptySingle rule) {
+        var builder = RuleBuilder.create();
+        var table = RuleChecks.table(builder, 1, false, false);
+        var input = builder.scan(table).build();
+        var plan = LogicalValues.create(builder.getCluster(), input.getRowType(), ImmutableList.of());
+        var grouped = builder.push(plan).aggregate(builder.groupKey(builder.field(0)),
+                builder.aggregateCall(SqlStdOperatorTable.SUM, false, null, "sum",
+                        java.util.List.of(builder.field(0)))).build();
+        var plain = RuleChecks.ruleBuilder(builder);
+        var expected = LogicalValues.create(plain.getCluster(), grouped.getRowType(), ImmutableList.of());
+        RuleChecks.rewrites(rule, grouped, expected);
 
-        RuleChecks.doesNotApply(rule, keepValues.scan(t).aggregate(keepValues.groupKey(0),
-                keepValues.aggregateCall(SqlStdOperatorTable.SUM, keepValues.field(0))).build());
-        RuleChecks.doesNotApply(rule, emptyInput.get().aggregate(keepValues.groupKey(),
-                keepValues.aggregateCall(SqlStdOperatorTable.COUNT, keepValues.field(0))).build());
+        var total = builder.push(plan).aggregate(builder.groupKey(),
+                builder.aggregateCall(SqlStdOperatorTable.SUM, false, null, "sum",
+                        java.util.List.of(builder.field(0)))).build();
+        RuleChecks.doesNotApply(rule, total);
     }
 
     public static void main(String[] args) {

@@ -1,49 +1,96 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.plan.RelOptUtil;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.SqlAggFunction;
+import org.apache.calcite.sql.SqlOperator;
+import org.apache.calcite.sql.SqlOperator;
+import org.apache.calcite.tools.RelBuilder;
+import org.qed.RRule;
 import org.qed.RRuleInstances.ProjectWindowTranspose;
 import org.qed.RuleBuilder;
 
-public class ProjectWindowTransposeTest {
+import java.util.List;
 
+public final class ProjectWindowTransposeTest {
     public static void runTest() {
-        var rule = new ProjectWindowTranspose();
+        System.out.println("Running RULE test...");
+        RRule rule = new ProjectWindowTranspose();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
-    }
 
-    private static void ordinaryTables(ProjectWindowTranspose rule) {
-        var base = RuleBuilder.create();
-        var t = RuleChecks.table(base, 3, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var input = b.scan(t).build();
-        var needed = b.push(input).project(b.field(0), b.field(1)).build();
-        var perPart = b.push(needed).aggregate(b.groupKey(0),
-                b.aggregateCall(SqlStdOperatorTable.SUM, b.field(1)).as("f"),
-                b.aggregateCall(SqlStdOperatorTable.MAX, b.field(1)).as("g")).build();
-        var top = (java.util.function.Function<Integer[], RexNode>) c -> b.call(SqlStdOperatorTable.PLUS,
-                b.call(SqlStdOperatorTable.PLUS, b.field(c[0]), b.field(c[1])),
-                b.call(SqlStdOperatorTable.PLUS, b.field(c[2]), b.field(c[3])));
-        var winFull = b.push(input).push(perPart)
-                .join(JoinRelType.INNER, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)));
-        var before = winFull.project(top.apply(new Integer[]{0, 1, 4, 5})).build();
-        var winPruned = b.push(needed).push(perPart)
-                .join(JoinRelType.INNER, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)));
-        var after = winPruned.project(top.apply(new Integer[]{0, 1, 3, 4})).build();
-        RuleChecks.rewrites(rule, before, after);
+        var inputBuilder = RuleBuilder.create();
+        var table = RuleChecks.table(inputBuilder, 3, false);
+        var builder = RuleChecks.ruleBuilder(inputBuilder);
+        builder.scan(table);
+        var input = builder.build();
 
-        var usesPassthrough = b.push(input).push(perPart)
-                .join(JoinRelType.INNER, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
-                .project(top.apply(new Integer[]{0, 1, 2, 4})).build();
-        RuleChecks.doesNotApply(rule, usesPassthrough);
+        builder.push(input);
+        builder.project(List.of(builder.field(0), builder.field(1)));
+        var projected = builder.build();
+
+        builder.push(projected);
+        var key = builder.groupKey(builder.field(0));
+        var ops = RuleBuilder.create();
+        SqlOperator top = ops.genericProjectionOp("Top", new org.qed.RelType.VarType("Top_Type", true));
+        var f = (SqlAggFunction) ops.genericAggregateOp("f", new org.qed.RelType.VarType("F_Type", true));
+        var g = (SqlAggFunction) ops.genericAggregateOp("g", new org.qed.RelType.VarType("G_Type", true));
+        builder.aggregate(key, builder.aggregateCall(f, builder.field(1)), builder.aggregateCall(g, builder.field(1)));
+        var aggregate = builder.build();
+
+        builder.push(input);
+        builder.push(aggregate);
+        builder.join(JoinRelType.INNER, builder.getRexBuilder().makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.EQUALS,
+                builder.getRexBuilder().makeInputRef(input.getRowType().getFieldList().get(0).getType(), 0),
+                builder.getRexBuilder().makeInputRef(aggregate.getRowType().getFieldList().get(0).getType(), 3)));
+        builder.project(List.of(builder.call(top, builder.field(0), builder.field(1), builder.field(4), builder.field(5))), List.of(), true);
+        RelNode concreteBefore = builder.build();
+
+        var expectedBuilder = RuleChecks.ruleBuilder(inputBuilder);
+        expectedBuilder.push(input);
+        expectedBuilder.project(List.of(expectedBuilder.field(0), expectedBuilder.field(1)));
+        var reduced = expectedBuilder.build();
+        expectedBuilder.push(reduced);
+        expectedBuilder.aggregate(expectedBuilder.groupKey(expectedBuilder.field(0)),
+                expectedBuilder.aggregateCall(f, expectedBuilder.field(1)),
+                expectedBuilder.aggregateCall(g, expectedBuilder.field(1)));
+        var expectedAggregate = expectedBuilder.build();
+        expectedBuilder.push(reduced);
+        expectedBuilder.push(expectedAggregate);
+        expectedBuilder.join(JoinRelType.INNER,
+                expectedBuilder.getRexBuilder().makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.EQUALS,
+                expectedBuilder.getRexBuilder().makeInputRef(reduced.getRowType().getFieldList().get(0).getType(), 0),
+                expectedBuilder.getRexBuilder().makeInputRef(expectedAggregate.getRowType().getFieldList().get(0).getType(), 2)));
+        expectedBuilder.project(List.of(expectedBuilder.call(top, expectedBuilder.field(0), expectedBuilder.field(1),
+                expectedBuilder.field(3), expectedBuilder.field(4))), List.of(), true);
+        RelNode concreteAfter = expectedBuilder.build();
+        RuleChecks.rewrites(rule, concreteBefore, concreteAfter);
+
+        var nearInputBuilder = RuleBuilder.create();
+        var nearTable = RuleChecks.table(nearInputBuilder, 3, false);
+        var nearBuilder = RuleChecks.ruleBuilder(nearInputBuilder);
+        nearBuilder.scan(nearTable);
+        var nearInput = nearBuilder.build();
+        nearBuilder.push(nearInput);
+        nearBuilder.project(List.of(nearBuilder.field(0), nearBuilder.field(1)));
+        var nearProjected = nearBuilder.build();
+        nearBuilder.push(nearProjected);
+        nearBuilder.aggregate(nearBuilder.groupKey(nearBuilder.field(1)),
+                nearBuilder.aggregateCall(f, nearBuilder.field(0)),
+                nearBuilder.aggregateCall(g, nearBuilder.field(0)));
+        var nearAggregate = nearBuilder.build();
+        nearBuilder.push(nearInput);
+        nearBuilder.push(nearAggregate);
+        nearBuilder.join(JoinRelType.INNER, nearBuilder.getRexBuilder().makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.EQUALS,
+                nearBuilder.getRexBuilder().makeInputRef(nearInput.getRowType().getFieldList().get(0).getType(), 0),
+                nearBuilder.getRexBuilder().makeInputRef(nearAggregate.getRowType().getFieldList().get(0).getType(), 2)));
+        nearBuilder.project(List.of(nearBuilder.call(top, nearBuilder.field(0), nearBuilder.field(1), nearBuilder.field(4), nearBuilder.field(5))), List.of(), true);
+        RuleChecks.doesNotApply(rule, nearBuilder.build());
     }
 
     public static void main(String[] args) {
-        System.out.println("Running ProjectWindowTranspose test...");
         runTest();
     }
 }

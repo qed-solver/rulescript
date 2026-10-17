@@ -1,12 +1,13 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.tools.RelBuilder;
+import org.apache.calcite.rel.RelNode;
+import org.qed.Backends.Calcite.CalciteRuntime;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.PruneSemiAntiJoinRightCols;
 import org.qed.RuleBuilder;
 
 public class PruneSemiAntiJoinRightColsTest {
-
     public static void runTest() {
         var rule = new PruneSemiAntiJoinRightCols();
         RuleChecks.rewritesPattern(rule);
@@ -16,27 +17,53 @@ public class PruneSemiAntiJoinRightColsTest {
     }
 
     private static void ordinaryTables(PruneSemiAntiJoinRightCols rule) {
-        var base = RuleBuilder.create();
-        var l = RuleChecks.table(base, 1, false);
-        var r = RuleChecks.table(base, 2, false);
-        var single = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var before = join(b, l, r, JoinRelType.ANTI).build();
-        var after = b.scan(l).scan(r).project(b.field(0))
-                .join(JoinRelType.ANTI, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
-                .build();
+        var builder = RuleBuilder.create();
+        var leftTable = RuleChecks.table(builder, 1, false);
+        var rightTable = RuleChecks.table(builder, 2, false);
+        var left = builder.scan(leftTable).build();
+        var right = builder.scan(rightTable).build();
+        builder.push(left);
+        builder.push(right);
+        var beforeCondition = RuleChecks.eq(builder, CalciteRuntime.field(builder, 2, 0),
+                CalciteRuntime.field(builder, 2, 1));
+        RelNode before = org.apache.calcite.rel.logical.LogicalJoin.create(left, right, java.util.List.of(),
+                beforeCondition, java.util.Set.of(), JoinRelType.ANTI);
+
+        var expectedBuilder = RuleBuilder.create();
+        var expectedLeft = RuleChecks.table(expectedBuilder, 1, false);
+        var expectedRight = RuleChecks.table(expectedBuilder, 2, false);
+        var expectedRightScan = expectedBuilder.scan(expectedRight).build();
+        expectedBuilder.push(expectedRightScan);
+        expectedBuilder.project(java.util.List.of(expectedBuilder.field(0)), java.util.List.of());
+        var projectedRight = expectedBuilder.build();
+        var expectedLeftScan = expectedBuilder.scan(expectedLeft).build();
+        expectedBuilder.push(expectedLeftScan);
+        expectedBuilder.push(projectedRight);
+        var expectedCondition = RuleChecks.eq(expectedBuilder, expectedBuilder.field(2, 0, 0),
+                expectedBuilder.field(2, 1, 0));
+        RelNode after = org.apache.calcite.rel.logical.LogicalJoin.create(expectedLeftScan, projectedRight,
+                java.util.List.of(), expectedCondition, java.util.Set.of(), JoinRelType.ANTI);
         RuleChecks.rewrites(rule, before, after);
 
-        RuleChecks.doesNotApply(rule, join(b, l, r, JoinRelType.SEMI).build());
-        RuleChecks.doesNotApply(rule, join(b, l, single, JoinRelType.ANTI).build());
-    }
-
-    private static RelBuilder join(RelBuilder b, String left, String right, JoinRelType type) {
-        return b.scan(left).scan(right).join(type, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)));
+        var nearMissBuilder = RuleBuilder.create();
+        var nearLeft = RuleChecks.table(nearMissBuilder, 1, false);
+        var nearRight = RuleChecks.table(nearMissBuilder, 2, false);
+        var nearLeftScan = nearMissBuilder.scan(nearLeft).build();
+        var nearRightScan = nearMissBuilder.scan(nearRight).build();
+        nearMissBuilder.push(nearLeftScan);
+        nearMissBuilder.push(nearRightScan);
+        var nearCondition = RuleChecks.eq(nearMissBuilder, CalciteRuntime.field(nearMissBuilder, 2, 0),
+                CalciteRuntime.field(nearMissBuilder, 2, 1));
+        RelNode nearMiss = org.apache.calcite.rel.logical.LogicalJoin.create(nearLeftScan, nearRightScan,
+                java.util.List.of(), nearCondition, java.util.Set.of(), JoinRelType.INNER);
+        RuleChecks.doesNotApply(rule, nearMiss);
     }
 
     public static void main(String[] args) {
         System.out.println("Running PruneSemiAntiJoinRightCols test...");
         runTest();
+        if (CalciteTester.failures() > 0) {
+            System.exit(1);
+        }
     }
 }

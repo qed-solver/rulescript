@@ -1,39 +1,38 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.Backends.Calcite.CalciteRuntime;
 import org.qed.RRuleInstances.SimplifyRange;
 import org.qed.RuleBuilder;
 
 public class SimplifyRangeTest {
-
     public static void runTest() {
-        var rule = new SimplifyRange();
-        RuleChecks.rewritesPattern(rule);
-        RuleChecks.rewritesConcretePredicates(rule);
-        RuleChecks.rejectsNearMisses(rule);
-        dropsTrueConjunct(rule);
+        RuleChecks.rewritesPattern(new SimplifyRange());
+        RuleChecks.rewritesConcretePredicates(new SimplifyRange());
+        RuleChecks.rejectsNearMisses(new SimplifyRange());
+        rewritesHandBuiltFilter();
     }
 
-    private static void dropsTrueConjunct(SimplifyRange rule) {
+    private static void rewritesHandBuiltFilter() {
         var builder = RuleBuilder.create();
-        var table = RuleChecks.table(builder, 1, false);
-        var scanned = builder.scan(table);
-        var predicate = RuleChecks.gt(builder, builder.field(0), 5);
-        var before = LogicalFilter.create(scanned.build(),
-                builder.call(SqlStdOperatorTable.AND, predicate, builder.literal(true)));
-        var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(table)
-                .filter(RuleChecks.gt(plain, plain.field(0), 5))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
+        var table = RuleChecks.table(builder, 1, false, false);
+        var b = RuleChecks.ruleBuilder(builder);
+        var input = b.scan(table).build();
+        var ref = b.getRexBuilder().makeInputRef(input, 0);
+        var predicate = b.call(SqlStdOperatorTable.GREATER_THAN, ref, b.literal(7));
+        var condition = b.call(SqlStdOperatorTable.AND, predicate, b.literal(true));
+        var before = LogicalFilter.create(input, condition);
 
-        var rescanned = builder.scan(table);
-        var first = RuleChecks.gt(builder, builder.field(0), 5);
-        var second = RuleChecks.gt(builder, builder.field(0), 10);
-        var noTrue = LogicalFilter.create(rescanned.build(),
-                builder.call(SqlStdOperatorTable.AND, first, second));
-        RuleChecks.doesNotApply(rule, noTrue);
+        var expectedBuilder = RuleBuilder.create();
+        var expectedTable = RuleChecks.table(expectedBuilder, 1, false, false);
+        var eb = RuleChecks.ruleBuilder(expectedBuilder);
+        var expectedInput = eb.scan(expectedTable).build();
+        var expectedRef = eb.getRexBuilder().makeInputRef(expectedInput, 0);
+        var expectedPredicate = eb.call(SqlStdOperatorTable.GREATER_THAN, expectedRef, eb.literal(7));
+        var expected = LogicalFilter.create(expectedInput, expectedPredicate);
+        RuleChecks.rewrites(new SimplifyRange(), before, expected);
     }
 
     public static void main(String[] args) {

@@ -2,17 +2,11 @@ package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rel.logical.LogicalFilter;
-import org.apache.calcite.rel.logical.LogicalUnion;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.MarkToSemiOrAntiJoin;
 import org.qed.RuleBuilder;
 
-import java.util.List;
-
 public class MarkToSemiOrAntiJoinTest {
-
     public static void runTest() {
         var rule = new MarkToSemiOrAntiJoin();
         RuleChecks.rewritesPattern(rule);
@@ -22,26 +16,50 @@ public class MarkToSemiOrAntiJoinTest {
     }
 
     private static void ordinaryTables(MarkToSemiOrAntiJoin rule) {
-        var base = RuleBuilder.create();
-        var l = RuleChecks.table(base, 1, false);
-        var r = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var cond = (java.util.function.Supplier<RexNode>) () -> RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0));
-        var semi = (java.util.function.Supplier<RelNode>) () -> b.scan(l).scan(r).join(JoinRelType.SEMI, cond.get()).build();
-        var anti = (java.util.function.Supplier<RelNode>) () -> b.scan(l).scan(r).join(JoinRelType.ANTI, cond.get()).build();
-        var marked = LogicalUnion.create(List.of(
-                b.push(semi.get()).project(b.field(0), b.literal(true)).build(),
-                b.push(anti.get()).project(b.field(0), b.literal(false)).build()), true);
-        var filter = b.push(marked).and(b.field(1), RuleChecks.gt(b, b.field(0), 0));
-        var before = b.push(LogicalFilter.create(marked, filter))
-                .project(b.call(SqlStdOperatorTable.UNARY_MINUS, b.field(0))).build();
-        var after = b.push(semi.get()).filter(RuleChecks.gt(b, b.field(0), 0))
-                .project(b.call(SqlStdOperatorTable.UNARY_MINUS, b.field(0))).build();
-        RuleChecks.rewrites(rule, before, after);
+        var builder = RuleBuilder.create();
+        var leftTable = builder.createQedTable(kala.collection.Seq.of(
+                kala.tuple.Tuple.of(org.qed.RelType.fromString("INTEGER", true), false)));
+        var rightTable = builder.createQedTable(kala.collection.Seq.of(
+                kala.tuple.Tuple.of(org.qed.RelType.fromString("INTEGER", true), false)));
+        builder.addTable(leftTable).addTable(rightTable);
+        var leftName = leftTable.getName();
+        var rightName = rightTable.getName();
+        var b = RuleChecks.ruleBuilder(builder);
+        var left = b.scan(leftName).build();
+        var right = b.scan(rightName).build();
+        var condition = b.getRexBuilder().makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.EQUALS,
+                b.getRexBuilder().makeInputRef(left.getRowType().getFieldList().get(0).getType(), 0),
+                b.getRexBuilder().makeInputRef(right.getRowType().getFieldList().get(0).getType(), 1));
+        var semi = b.push(left).push(right).join(JoinRelType.SEMI, condition).build();
+        var anti = b.push(left).push(right).join(JoinRelType.ANTI, condition).build();
+        var marked = b.push(semi).project(b.getRexBuilder().makeInputRef(semi.getRowType().getFieldList().get(0).getType(), 0), b.literal(true)).build();
+        var unmatched = b.push(anti).project(b.getRexBuilder().makeInputRef(anti.getRowType().getFieldList().get(0).getType(), 0), b.literal(false)).build();
+        var union = b.push(marked).push(unmatched).union(true).build();
+        var before = b.push(union).filter(b.and(
+                b.getRexBuilder().makeInputRef(union.getRowType().getFieldList().get(1).getType(), 1),
+                RuleChecks.gt(b, b.getRexBuilder().makeInputRef(union.getRowType().getFieldList().get(0).getType(), 0), 0)))
+                .project(b.getRexBuilder().makeInputRef(union.getRowType().getFieldList().get(0).getType(), 0)).build();
 
-        var unmarked = b.push(LogicalFilter.create(marked, RuleChecks.gt(b.push(marked), b.field(0), 0)))
-                .project(b.call(SqlStdOperatorTable.UNARY_MINUS, b.field(0))).build();
-        RuleChecks.doesNotApply(rule, unmarked);
+        var expectedTables = RuleBuilder.create();
+        expectedTables.addTable(leftTable).addTable(rightTable);
+        var expectedBuilder = RuleChecks.ruleBuilder(expectedTables);
+        var l = expectedBuilder.scan(leftName).build();
+        var r = expectedBuilder.scan(rightName).build();
+        var eq = expectedBuilder.getRexBuilder().makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.EQUALS,
+                expectedBuilder.getRexBuilder().makeInputRef(l.getRowType().getFieldList().get(0).getType(), 0),
+                expectedBuilder.getRexBuilder().makeInputRef(r.getRowType().getFieldList().get(0).getType(), 1));
+        var expected = expectedBuilder.push(l).push(r).join(JoinRelType.SEMI, eq)
+                .filter(RuleChecks.gt(expectedBuilder, expectedBuilder.getRexBuilder().makeInputRef(l, 0), 0))
+                .project(expectedBuilder.getRexBuilder().makeInputRef(l, 0)).build();
+        RuleChecks.rewrites(rule, before, expected);
+
+        var nearBuilder = RuleChecks.ruleBuilder(builder);
+        var nearCondition = nearBuilder.getRexBuilder().makeCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.EQUALS,
+                nearBuilder.getRexBuilder().makeInputRef(left.getRowType().getFieldList().get(0).getType(), 0),
+                nearBuilder.getRexBuilder().makeInputRef(right.getRowType().getFieldList().get(0).getType(), 1));
+        nearBuilder.push(left).push(right);
+        var near = nearBuilder.join(JoinRelType.LEFT, nearCondition).build();
+        RuleChecks.doesNotApply(rule, near);
     }
 
     public static void main(String[] args) {

@@ -1,46 +1,57 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.SimplifyLeftJoin;
 import org.qed.RuleBuilder;
 
-public class SimplifyLeftJoinTest {
+import static org.qed.Backends.Calcite.Tests.RuleChecks.doesNotApply;
+import static org.qed.Backends.Calcite.Tests.RuleChecks.eq;
+import static org.qed.Backends.Calcite.Tests.RuleChecks.rewrites;
+import static org.qed.Backends.Calcite.Tests.RuleChecks.rewritesConcretePredicates;
+import static org.qed.Backends.Calcite.Tests.RuleChecks.rewritesPattern;
+import static org.qed.Backends.Calcite.Tests.RuleChecks.table;
+import static org.qed.Backends.Calcite.Tests.RuleChecks.rejectsNearMisses;
 
+public class SimplifyLeftJoinTest {
     public static void runTest() {
         var rule = new SimplifyLeftJoin();
-        RuleChecks.rewritesPattern(rule);
-        RuleChecks.rewritesConcretePredicates(rule);
-        RuleChecks.rejectsNearMisses(rule);
-        selfJoin(rule);
+        rewritesPattern(rule);
+        rewritesConcretePredicates(rule);
+        rejectsNearMisses(rule);
+        handBuiltSelfJoin();
+        inequalityJoinDoesNotMatch();
     }
 
-    private static void selfJoin(SimplifyLeftJoin rule) {
+    private static void handBuiltSelfJoin() {
         var builder = RuleBuilder.create();
-        var table = RuleChecks.table(builder, 1, false, false);
-        var before = builder.scan(table).scan(table)
-                .join(JoinRelType.LEFT, builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 0), builder.field(2, 1, 0)))
-                .build();
-        var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(table).scan(table)
-                .join(JoinRelType.INNER, plain.call(SqlStdOperatorTable.EQUALS, plain.field(2, 0, 0), plain.field(2, 1, 0)))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
+        var name = table(builder, 1, false, false);
+        var input = builder.scan(name).scan(name).join(JoinRelType.LEFT,
+                eq(builder, builder.joinFields().get(0), builder.joinFields().get(1))).build();
 
-        var nullable = RuleChecks.table(builder, 1, false);
-        var nullableLeft = builder.scan(nullable).scan(nullable)
-                .join(JoinRelType.LEFT, builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 0), builder.field(2, 1, 0)))
-                .build();
-        RuleChecks.doesNotApply(rule, nullableLeft);
+        var expected = LogicalJoin.create(((LogicalJoin) input).getLeft(), ((LogicalJoin) input).getRight(),
+                ((LogicalJoin) input).getHints(), ((LogicalJoin) input).getCondition(),
+                ((LogicalJoin) input).getVariablesSet(), JoinRelType.INNER);
+        rewrites(new SimplifyLeftJoin(), input, expected);
+    }
 
-        var innerJoin = builder.scan(table).scan(table)
-                .join(JoinRelType.INNER, builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 0), builder.field(2, 1, 0)))
-                .build();
-        RuleChecks.doesNotApply(rule, innerJoin);
+    private static void inequalityJoinDoesNotMatch() {
+        var builder = RuleBuilder.create();
+        var name = table(builder, 1, false, false);
+        RelNode plan = builder.scan(name).scan(name).join(JoinRelType.LEFT,
+                builder.call(SqlStdOperatorTable.NOT_EQUALS,
+                        builder.joinFields().get(0), builder.joinFields().get(1))).build();
+        doesNotApply(new SimplifyLeftJoin(), plan);
     }
 
     public static void main(String[] args) {
         System.out.println("Running SimplifyLeftJoin test...");
         runTest();
+        if (CalciteTester.failures() != 0) {
+            throw new AssertionError("SimplifyLeftJoin test failed: " + CalciteTester.failures());
+        }
     }
 }

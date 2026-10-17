@@ -1,46 +1,68 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rel.logical.LogicalJoin;
+import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.FilterJoin;
 import org.qed.RuleBuilder;
 
-public class FilterJoinTest {
+import java.util.List;
+import java.util.Set;
 
+public final class FilterJoinTest {
     public static void runTest() {
+        System.out.println("Running FilterJoin test...");
         var rule = new FilterJoin();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        rewritesHandBuiltPlan(rule);
+        rejectsOuterJoin(rule);
     }
 
-    private static void ordinaryTables(FilterJoin rule) {
-        var builder = RuleBuilder.create();
-        var l = RuleChecks.table(builder, 1, false);
-        var r = RuleChecks.table(builder, 1, false);
-        for (var type : JoinRelType.values()) {
-            if (type != JoinRelType.INNER && type != JoinRelType.LEFT) {
-                continue;
-            }
-            var on = builder.call(SqlStdOperatorTable.EQUALS, builder.scan(l).scan(r).field(2, 0, 0),
-                    builder.field(2, 1, 0));
-            var above = builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), builder.literal(1));
-            var plan = builder.join(type, on).filter(above).build();
-            if (type == JoinRelType.LEFT) {
-                RuleChecks.doesNotApply(rule, plan);
-                continue;
-            }
-            var plain = RuleChecks.ruleBuilder(builder);
-            var merged = plain.scan(l).scan(r).join(JoinRelType.INNER,
-                    plain.and(plain.call(SqlStdOperatorTable.EQUALS, plain.field(2, 0, 0), plain.field(2, 1, 0)),
-                            plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(2, 0, 0), plain.literal(1)))).build();
-            RuleChecks.rewrites(rule, plan, merged);
-        }
+    private static void rewritesHandBuiltPlan(FilterJoin rule) {
+        var tables = RuleBuilder.create();
+        var leftName = RuleChecks.table(tables, 1, false);
+        var rightName = RuleChecks.table(tables, 1, false);
+        var builder = RuleChecks.ruleBuilder(tables);
+        var left = builder.scan(leftName).build();
+        var right = builder.scan(rightName).build();
+        var rex = builder.getRexBuilder();
+        var leftRef = rex.makeInputRef(left.getRowType().getFieldList().get(0).getType(), 0);
+        var rightRef = rex.makeInputRef(right.getRowType().getFieldList().get(0).getType(), 1);
+        var joinCondition = rex.makeCall(SqlStdOperatorTable.EQUALS, leftRef, rightRef);
+        var aboveFilter = rex.makeCall(SqlStdOperatorTable.GREATER_THAN, leftRef, rex.makeExactLiteral(java.math.BigDecimal.TEN));
+        var before = LogicalFilter.create(LogicalJoin.create(left, right, List.of(), joinCondition, Set.of(),
+                JoinRelType.INNER), aboveFilter);
+        RexNode expectedCondition = rex.makeCall(SqlStdOperatorTable.AND, joinCondition, aboveFilter);
+        var expected = LogicalJoin.create(left, right, List.of(), expectedCondition, Set.of(), JoinRelType.INNER);
+        RuleChecks.rewrites(rule, before, expected);
+    }
+
+    private static void rejectsOuterJoin(FilterJoin rule) {
+        var tables = RuleBuilder.create();
+        var leftName = RuleChecks.table(tables, 1, false);
+        var rightName = RuleChecks.table(tables, 1, false);
+        var builder = RuleChecks.ruleBuilder(tables);
+        var left = builder.scan(leftName).build();
+        var right = builder.scan(rightName).build();
+        var rex = builder.getRexBuilder();
+        var leftRef = rex.makeInputRef(left.getRowType().getFieldList().get(0).getType(), 0);
+        var rightRef = rex.makeInputRef(right.getRowType().getFieldList().get(0).getType(), 1);
+        var joinCondition = rex.makeCall(SqlStdOperatorTable.EQUALS, leftRef, rightRef);
+        var aboveFilter = rex.makeCall(SqlStdOperatorTable.GREATER_THAN, leftRef, rex.makeExactLiteral(java.math.BigDecimal.TEN));
+        var noMatch = LogicalFilter.create(LogicalJoin.create(left, right, List.of(), joinCondition, Set.of(),
+                JoinRelType.LEFT), aboveFilter);
+        RuleChecks.doesNotApply(rule, noMatch);
     }
 
     public static void main(String[] args) {
-        System.out.println("Running FilterJoin test...");
         runTest();
+        if (CalciteTester.failures() != 0) {
+            throw new AssertionError("FilterJoin test failed with " + CalciteTester.failures() + " failure(s)");
+        }
     }
 }

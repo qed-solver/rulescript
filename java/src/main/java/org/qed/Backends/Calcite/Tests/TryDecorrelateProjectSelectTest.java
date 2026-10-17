@@ -1,52 +1,56 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.TryDecorrelateProjectSelect;
 import org.qed.RuleBuilder;
 
 public class TryDecorrelateProjectSelectTest {
-
     public static void runTest() {
         var rule = new TryDecorrelateProjectSelect();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        rewritesHandBuiltPlan(rule);
+        rejectsUnfilteredRightInput(rule);
     }
 
-    private static void ordinaryTables(TryDecorrelateProjectSelect rule) {
-        var base = RuleBuilder.create();
-        var left = RuleChecks.table(base, 1, false, false);
-        var inner = RuleChecks.table(base, 2, false, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var keepV = b.scan(inner)
-                .filter(RuleChecks.gt(b, b.field(0), 5))
-                .project(b.field(1))
-                .build();
-        var before = b.scan(left).push(keepV)
-                .join(JoinRelType.LEFT, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
-                .build();
-        var after = b.scan(left).scan(inner)
-                .join(JoinRelType.LEFT, b.and(
-                        RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 1)),
-                        RuleChecks.gt(b, b.field(2, 1, 0), 5)))
-                .project(b.field(0), b.field(2))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void rewritesHandBuiltPlan(TryDecorrelateProjectSelect rule) {
+        var builder = RuleBuilder.create();
+        var l = RuleChecks.table(builder, 1, false, false);
+        var r = RuleChecks.table(builder, 2, false, false);
+        var b = RuleChecks.ruleBuilder(builder);
+        RelNode left = b.scan(l).build();
+        RelNode sourceRight = b.scan(r)
+                .filter(b.call(SqlStdOperatorTable.GREATER_THAN, b.field(0), b.literal(0)))
+                .project(b.field(1)).build();
+        var rex = b.getRexBuilder();
+        var source = b.push(left).push(sourceRight).join(JoinRelType.LEFT,
+                RuleChecks.eq(b, rex.makeInputRef(left.getRowType().getFieldList().get(0).getType(), 0),
+                        rex.makeInputRef(sourceRight.getRowType().getFieldList().get(0).getType(), 1))).build();
 
-        var innerJoin = b.scan(left).push(keepV)
-                .join(JoinRelType.INNER, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
-                .build();
-        RuleChecks.doesNotApply(rule, innerJoin);
+        RelNode right = b.scan(r).project(b.field(0), b.field(1)).build();
+        var condition = rex.makeCall(SqlStdOperatorTable.AND,
+                RuleChecks.eq(b, rex.makeInputRef(left.getRowType().getFieldList().get(0).getType(), 0),
+                        rex.makeInputRef(right.getRowType().getFieldList().get(1).getType(), 2)),
+                rex.makeCall(SqlStdOperatorTable.GREATER_THAN,
+                        rex.makeInputRef(right.getRowType().getFieldList().get(0).getType(), 1), b.literal(0)));
+        RelNode expected = b.push(left).push(right).join(JoinRelType.LEFT, condition)
+                .project(b.field(0), b.field(2)).build();
+        RuleChecks.rewrites(rule, source, expected);
+    }
 
-        var keepK = b.scan(inner)
-                .filter(RuleChecks.gt(b, b.field(0), 5))
-                .project(b.field(0))
-                .build();
-        var keepKJoin = b.scan(left).push(keepK)
-                .join(JoinRelType.LEFT, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
-                .build();
-        RuleChecks.doesNotApply(rule, keepKJoin);
+    private static void rejectsUnfilteredRightInput(TryDecorrelateProjectSelect rule) {
+        var builder = RuleBuilder.create();
+        var l = RuleChecks.table(builder, 1, false, false);
+        var r = RuleChecks.table(builder, 2, false, false);
+        var b = RuleChecks.ruleBuilder(builder);
+        RelNode left = b.scan(l).build();
+        RelNode right = b.scan(r).project(b.field(1)).build();
+        RelNode plan = RuleChecks.correlate(b, left, right, JoinRelType.LEFT,
+                fields -> RuleChecks.eq(b, fields[0], fields[1]));
+        RuleChecks.doesNotApply(rule, plan);
     }
 
     public static void main(String[] args) {

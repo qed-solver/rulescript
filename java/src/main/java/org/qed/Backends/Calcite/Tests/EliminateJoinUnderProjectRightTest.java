@@ -1,42 +1,49 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.tools.RelBuilder;
-import org.qed.RRuleInstances.EliminateJoinUnderProjectRight;
+import org.apache.calcite.rel.logical.LogicalProject;
+import org.qed.Backends.Calcite.CalciteRuntime;
+import org.qed.RelRN;
 import org.qed.RuleBuilder;
+import org.qed.RRuleInstances.EliminateJoinUnderProjectRight;
+
+import java.util.List;
 
 public class EliminateJoinUnderProjectRightTest {
-
     public static void runTest() {
         var rule = new EliminateJoinUnderProjectRight();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
-    }
 
-    private static void ordinaryTables(EliminateJoinUnderProjectRight rule) {
-        var base = RuleBuilder.create();
-        var t = RuleChecks.table(base, 1, true, false);
-        var other = RuleChecks.table(base, 1, true, false);
-        var plainKey = RuleChecks.table(base, 1, false, false);
-        var nullableKey = RuleChecks.table(base, 1, true, true);
-        var b = RuleChecks.ruleBuilder(base);
-        var before = selfJoin(b, t, JoinRelType.INNER).project(b.field(1)).build();
-        var after = b.scan(t).project(b.field(0)).build();
-        RuleChecks.rewrites(rule, before, after);
+        var schema = RuleBuilder.create();
+        var table = RuleChecks.table(schema, 1, true, false);
+        var b = schema.transform(CalciteRuntime::configure);
+        var scan = b.scan(table).build();
+        b.scan(table).scan(table);
+        var rex = b.getRexBuilder();
+        var condition = RuleChecks.eq(b,
+                rex.makeInputRef(scan.getRowType().getFieldList().get(0).getType(), 0),
+                rex.makeInputRef(scan.getRowType().getFieldList().get(0).getType(), 1));
+        b.join(JoinRelType.INNER, condition);
+        var joined = b.build();
+        RelNode input = LogicalProject.create(joined, List.of(), List.of(rex.makeInputRef(joined, 1)), (List<String>) null);
+        RelNode expected = b.scan(table).project(rex.makeInputRef(scan, 0)).build();
+        RuleChecks.rewrites(rule, input, expected);
 
-        RuleChecks.doesNotApply(rule, selfJoin(b, plainKey, JoinRelType.INNER).project(b.field(1)).build());
-        RuleChecks.doesNotApply(rule, selfJoin(b, nullableKey, JoinRelType.INNER).project(b.field(1)).build());
-        RuleChecks.doesNotApply(rule, selfJoin(b, t, JoinRelType.LEFT).project(b.field(1)).build());
-        RuleChecks.doesNotApply(rule, selfJoin(b, t, JoinRelType.INNER).project(b.field(0)).build());
-        RuleChecks.doesNotApply(rule, b.scan(t).scan(other)
-                .join(JoinRelType.INNER, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0))).project(b.field(1))
-                .build());
-    }
-
-    private static RelBuilder selfJoin(RelBuilder b, String table, JoinRelType type) {
-        return b.scan(table).scan(table).join(type, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)));
+        var nonUniqueSchema = RuleBuilder.create();
+        var nonUniqueTable = RuleChecks.table(nonUniqueSchema, 1, false, false);
+        var n = nonUniqueSchema.transform(CalciteRuntime::configure);
+        var nonUniqueScan = n.scan(nonUniqueTable).build();
+        n.scan(nonUniqueTable).scan(nonUniqueTable);
+        var nonUniqueCondition = RuleChecks.eq(n,
+                n.getRexBuilder().makeInputRef(nonUniqueScan.getRowType().getFieldList().get(0).getType(), 0),
+                n.getRexBuilder().makeInputRef(nonUniqueScan.getRowType().getFieldList().get(0).getType(), 1));
+        n.join(JoinRelType.INNER, nonUniqueCondition);
+        var nonUniqueJoin = n.build();
+        RuleChecks.doesNotApply(rule, LogicalProject.create(nonUniqueJoin, List.of(),
+                List.of(n.getRexBuilder().makeInputRef(nonUniqueJoin, 1)), (List<String>) null));
     }
 
     public static void main(String[] args) {

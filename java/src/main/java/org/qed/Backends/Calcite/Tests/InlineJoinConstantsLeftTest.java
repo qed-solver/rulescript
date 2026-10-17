@@ -1,45 +1,51 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.tools.RelBuilder;
+import org.qed.Backends.Calcite.CalciteRuntime;
 import org.qed.RRuleInstances.InlineJoinConstantsLeft;
 import org.qed.RuleBuilder;
 
-public class InlineJoinConstantsLeftTest {
-
+public final class InlineJoinConstantsLeftTest {
     public static void runTest() {
         var rule = new InlineJoinConstantsLeft();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        rewritesHandBuiltPlan();
+        rejectsHandBuiltOuterJoin();
     }
 
-    private static void ordinaryTables(InlineJoinConstantsLeft rule) {
-        var builder = RuleBuilder.create();
-        var source = RuleChecks.table(builder, 1, false);
-        var constant = RuleChecks.table(builder, 1, true, false);
-        var right = RuleChecks.table(builder, 1, false);
-        var before = builder.scan(source).scan(constant)
-                .join(JoinRelType.INNER, builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 0), builder.field(2, 1, 0)))
-                .scan(right)
-                .join(JoinRelType.INNER, builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(2, 0, 0), builder.field(2, 1, 0)))
-                .build();
-        var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(source).scan(constant)
-                .join(JoinRelType.INNER, plain.call(SqlStdOperatorTable.EQUALS, plain.field(2, 0, 0), plain.field(2, 1, 0)))
-                .scan(right)
-                .join(JoinRelType.INNER, plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(2, 0, 1), plain.field(2, 1, 0)))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void rewritesHandBuiltPlan() {
+        var before = handBuiltPlan(JoinRelType.INNER, false);
+        var expected = handBuiltPlan(JoinRelType.INNER, true);
+        RuleChecks.rewrites(new InlineJoinConstantsLeft(), before, expected);
+    }
 
-        var nonUniqueConstant = RuleChecks.table(builder, 1, false);
-        var nonKey = builder.scan(source).scan(nonUniqueConstant)
-                .join(JoinRelType.INNER, builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 0), builder.field(2, 1, 0)))
-                .scan(right)
-                .join(JoinRelType.INNER, builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(2, 0, 0), builder.field(2, 1, 0)))
-                .build();
-        RuleChecks.doesNotApply(rule, nonKey);
+    private static void rejectsHandBuiltOuterJoin() {
+        var plan = handBuiltPlan(JoinRelType.LEFT, false);
+        RuleChecks.doesNotApply(new InlineJoinConstantsLeft(), plan);
+    }
+
+    private static RelNode handBuiltPlan(JoinRelType outerType, boolean useConstantInOuterPredicate) {
+        RuleBuilder schema = RuleBuilder.create();
+        var sourceName = RuleChecks.table(schema, 1, false);
+        var constName = RuleChecks.table(schema, 1, true, false);
+        var rightName = RuleChecks.table(schema, 1, false);
+        RelBuilder b = schema.transform(CalciteRuntime::configure);
+        var source = b.scan(sourceName).build();
+        var constant = b.scan(constName).build();
+        var right = b.scan(rightName).build();
+        b.push(source).push(constant);
+        var eq = b.call(SqlStdOperatorTable.EQUALS, b.field(2, 0, 0), b.field(2, 1, 0));
+        var left = b.join(JoinRelType.INNER, eq).build();
+        b.push(left).push(right);
+        var leftOrdinal = useConstantInOuterPredicate ? 1 : 0;
+        var predicate = b.call(SqlStdOperatorTable.EQUALS,
+                b.field(2, 0, leftOrdinal), b.field(2, 1, 0));
+        return b.join(outerType, predicate).build();
     }
 
     public static void main(String[] args) {

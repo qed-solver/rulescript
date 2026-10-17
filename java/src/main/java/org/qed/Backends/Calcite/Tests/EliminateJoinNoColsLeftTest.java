@@ -1,47 +1,42 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
-import org.qed.Backends.Calcite.CalciteRuntime;
+import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rel.logical.LogicalJoin;
+import org.apache.calcite.rel.logical.LogicalProject;
 import org.qed.RRuleInstances.EliminateJoinNoColsLeft;
 import org.qed.RuleBuilder;
 
 import java.util.List;
 
 public class EliminateJoinNoColsLeftTest {
-
     public static void runTest() {
         var rule = new EliminateJoinNoColsLeft();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        oneRowZeroColumnLeft(rule);
+        ordinaryTables(rule);
     }
 
-    private static void oneRowZeroColumnLeft(EliminateJoinNoColsLeft rule) {
-        var builder = RuleBuilder.create();
-        var r = RuleChecks.table(builder, 1, false);
-        var raw = builder.transform(config -> CalciteRuntime.configure(config).withSimplifyValues(false));
-        var before = raw.values(new String[]{"_r"}, true).project(List.of())
-                .scan(r)
-                .join(JoinRelType.INNER, RuleChecks.gt(raw, raw.field(0), 5))
-                .build();
-        var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(r)
-                .filter(RuleChecks.gt(plain, plain.field(0), 5))
-                .build();
+    private static void ordinaryTables(EliminateJoinNoColsLeft rule) {
+        var qed = RuleBuilder.create();
+        var table = RuleChecks.table(qed, 1, false);
+        var b = RuleChecks.ruleBuilder(qed);
+        var rex = b.getRexBuilder();
+        var scan = b.scan(table).build();
+        var condition = RuleChecks.gt(b, rex.makeInputRef(scan, 0), 0);
+
+        var oneRow = LogicalProject.create(b.values(new String[]{"_r"}, true).build(), List.of(), List.of(), List.of());
+        var before = LogicalJoin.create(oneRow, scan, List.of(), condition, java.util.Set.of(), JoinRelType.INNER);
+        var after = LogicalFilter.create(scan, condition);
         RuleChecks.rewrites(rule, before, after);
 
-        var multiRow = raw.values(new String[]{"_r"}, true, false).project(List.of())
-                .scan(r)
-                .join(JoinRelType.INNER, RuleChecks.gt(raw, raw.field(0), 5))
-                .build();
-        RuleChecks.doesNotApply(rule, multiRow);
+        var twoRows = LogicalProject.create(b.values(new String[]{"_r"}, false).build(), List.of(), List.of(), List.of());
+        var other = LogicalJoin.create(twoRows, scan, List.of(), condition, java.util.Set.of(), JoinRelType.INNER);
+        RuleChecks.doesNotApply(rule, other);
 
-        var leftOuter = raw.values(new String[]{"_r"}, true).project(List.of())
-                .scan(r)
-                .join(JoinRelType.LEFT, RuleChecks.gt(raw, raw.field(0), 5))
-                .build();
-        RuleChecks.doesNotApply(rule, leftOuter);
+        var left = LogicalJoin.create(oneRow, scan, List.of(), condition, java.util.Set.of(), JoinRelType.LEFT);
+        RuleChecks.doesNotApply(rule, left);
     }
 
     public static void main(String[] args) {

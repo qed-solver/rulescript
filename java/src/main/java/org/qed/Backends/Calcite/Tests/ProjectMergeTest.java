@@ -1,16 +1,15 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.tools.RelBuilder;
+import org.apache.calcite.rel.RelNode;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.ProjectMerge;
 import org.qed.RuleBuilder;
 
 import java.util.List;
 
 public class ProjectMergeTest {
-
     public static void runTest() {
         var rule = new ProjectMerge();
         RuleChecks.rewritesPattern(rule);
@@ -20,21 +19,28 @@ public class ProjectMergeTest {
     }
 
     private static void ordinaryTables(ProjectMerge rule) {
-        var base = RuleBuilder.create();
-        var t = RuleChecks.table(base, 1, false);
-        var two = RuleChecks.table(base, 2, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var before = b.scan(t).project(b.call(SqlStdOperatorTable.PLUS, b.field(0), b.literal(1)))
-                .project(b.call(SqlStdOperatorTable.MULTIPLY, b.field(0), b.literal(2))).build();
-        b.scan(t);
-        var after = b.project(b.call(SqlStdOperatorTable.MULTIPLY,
-                b.call(SqlStdOperatorTable.PLUS, b.field(0), b.literal(1)), b.literal(2))).build();
-        RuleChecks.rewrites(rule, before, after);
+        var builder = RuleBuilder.create();
+        var table = RuleChecks.table(builder, 1, false);
+        var beforeBuilder = RuleChecks.ruleBuilder(builder);
+        beforeBuilder.scan(table);
+        beforeBuilder.project(List.of(beforeBuilder.call(SqlStdOperatorTable.ABS, beforeBuilder.field(0))));
+        beforeBuilder.project(List.of(beforeBuilder.call(SqlStdOperatorTable.ABS, beforeBuilder.field(0))));
+        RelNode before = beforeBuilder.build();
 
-        RuleChecks.doesNotApply(rule, b.scan(t).project(b.call(SqlStdOperatorTable.PLUS, b.field(0), b.literal(1)))
-                .build());
-        RuleChecks.doesNotApply(rule, b.scan(two).project(b.field(0), b.field(1))
-                .project(b.call(SqlStdOperatorTable.MULTIPLY, b.field(0), b.literal(2))).build());
+        var expectedBuilder = RuleChecks.ruleBuilder(builder);
+        expectedBuilder.scan(table);
+        var inner = expectedBuilder.call(SqlStdOperatorTable.ABS, expectedBuilder.field(0));
+        expectedBuilder.project(List.of(expectedBuilder.call(SqlStdOperatorTable.ABS, inner)));
+        RelNode expected = expectedBuilder.build();
+        RuleChecks.rewrites(rule, before, expected);
+
+        var wideBuilder = RuleBuilder.create();
+        var wideTable = RuleChecks.table(wideBuilder, 2, false);
+        var nearMissBuilder = RuleChecks.ruleBuilder(wideBuilder);
+        nearMissBuilder.scan(wideTable);
+        nearMissBuilder.project(List.of(nearMissBuilder.call(SqlStdOperatorTable.ABS, nearMissBuilder.field(0))));
+        nearMissBuilder.project(List.of(nearMissBuilder.call(SqlStdOperatorTable.ABS, nearMissBuilder.field(0))));
+        RuleChecks.doesNotApply(rule, nearMissBuilder.build());
     }
 
     public static void main(String[] args) {

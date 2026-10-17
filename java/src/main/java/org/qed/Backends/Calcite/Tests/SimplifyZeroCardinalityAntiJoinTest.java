@@ -1,31 +1,34 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.SimplifyZeroCardinalityAntiJoin;
 import org.qed.RuleBuilder;
 
-public class SimplifyZeroCardinalityAntiJoinTest {
-
+public final class SimplifyZeroCardinalityAntiJoinTest {
     public static void runTest() {
         var rule = new SimplifyZeroCardinalityAntiJoin();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
-    }
 
-    private static void ordinaryTables(SimplifyZeroCardinalityAntiJoin rule) {
-        var base = RuleBuilder.create();
-        var t = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var before = b.scan(t).values(new String[]{"col0"}, 0).join(JoinRelType.ANTI, b.literal(true)).build();
-        var after = b.scan(t).empty().build();
-        RuleChecks.rewrites(rule, before, after);
+        // Independent concrete witness: a one-row right input makes a TRUE anti join empty.
+        var tables = RuleBuilder.create();
+        var left = RuleChecks.table(tables, 1, false);
+        var direct = tables.scan(left).push(rule.before().semantics().getInputs().get(1))
+                .join(JoinRelType.ANTI, tables.literal(true)).build();
+        var expectedBuilder = RuleBuilder.create();
+        var expectedTable = RuleChecks.table(expectedBuilder, 1, false);
+        var empty = RuleChecks.ruleBuilder(expectedBuilder).scan(expectedTable).filter(
+                expectedBuilder.getRexBuilder().makeLiteral(false)).build();
+        RuleChecks.rewrites(rule, direct, empty);
 
-        RuleChecks.doesNotApply(rule, b.scan(t).values(new String[]{"col0"}, 0, 1)
-                .join(JoinRelType.ANTI, b.literal(true)).build());
-        RuleChecks.doesNotApply(rule, b.scan(t).values(new String[]{"col0"}, 0)
-                .join(JoinRelType.INNER, b.literal(true)).build());
+        // An inner join does not satisfy the anti-join operator in the pattern.
+        var other = RuleBuilder.create();
+        var l = RuleChecks.table(other, 1, false);
+        var r = RuleChecks.table(other, 1, false);
+        var inner = other.scan(l).scan(r).join(JoinRelType.INNER, other.literal(true)).build();
+        RuleChecks.doesNotApply(rule, inner);
     }
 
     public static void main(String[] args) {

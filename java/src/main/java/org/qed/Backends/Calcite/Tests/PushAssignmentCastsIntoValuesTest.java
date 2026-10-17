@@ -1,12 +1,12 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.rel.logical.LogicalProject;
 import org.qed.RRuleInstances.PushAssignmentCastsIntoValues;
 import org.qed.RuleBuilder;
 
-public class PushAssignmentCastsIntoValuesTest {
+import java.util.List;
 
+public class PushAssignmentCastsIntoValuesTest {
     public static void runTest() {
         var rule = new PushAssignmentCastsIntoValues();
         RuleChecks.rewritesPattern(rule);
@@ -16,15 +16,22 @@ public class PushAssignmentCastsIntoValuesTest {
     }
 
     private static void ordinaryTables(PushAssignmentCastsIntoValues rule) {
-        var base = RuleBuilder.create();
-        var t = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var cast = (java.util.function.Supplier<RexNode>) () -> b.cast(b.field(0), SqlTypeName.BIGINT);
-        var before = b.scan(t).project(cast.get(), b.literal(true)).build();
-        var after = b.scan(t).project(cast.get()).project(b.field(0), b.literal(true)).build();
-        RuleChecks.rewrites(rule, before, after);
+        var builder = RuleBuilder.create();
+        var table = RuleChecks.table(builder, 1, false, false);
+        var input = builder.scan(table).build();
+        var value = builder.getRexBuilder().makeInputRef(input, 0);
+        var cast = builder.getRexBuilder().makeCast(builder.getTypeFactory().createSqlType(org.apache.calcite.sql.type.SqlTypeName.BIGINT), value);
+        var before = LogicalProject.create(input, List.of(), List.of(cast, builder.literal(true)), List.of("casted", "other"));
+        var plain = RuleChecks.ruleBuilder(builder);
+        var expectedInput = plain.scan(table).build();
+        var expectedRef = plain.getRexBuilder().makeInputRef(expectedInput, 0);
+        var expectedValue = plain.getRexBuilder().makeCast(plain.getTypeFactory().createSqlType(org.apache.calcite.sql.type.SqlTypeName.BIGINT), expectedRef);
+        var pushed = LogicalProject.create(expectedInput, List.of(), List.of(expectedValue), List.of("casted"));
+        var expected = LogicalProject.create(pushed, List.of(), List.of(plain.getRexBuilder().makeInputRef(pushed, 0), plain.literal(true)), List.of("casted", "other"));
+        RuleChecks.rewrites(rule, before, expected);
 
-        RuleChecks.doesNotApply(rule, b.scan(t).project(cast.get(), b.literal(false)).build());
+        var nearMiss = LogicalProject.create(input, List.of(), List.of(cast, builder.literal(false)), List.of("casted", "other"));
+        RuleChecks.doesNotApply(rule, nearMiss);
     }
 
     public static void main(String[] args) {

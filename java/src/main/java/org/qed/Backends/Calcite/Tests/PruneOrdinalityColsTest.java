@@ -1,13 +1,17 @@
 package org.qed.Backends.Calcite.Tests;
 
-import java.util.List;
-
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.logical.LogicalProject;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.SqlOperator;
 import org.qed.RRuleInstances.PruneOrdinalityCols;
 import org.qed.RelType;
 import org.qed.RuleBuilder;
 
-public class PruneOrdinalityColsTest {
+import java.util.List;
+
+public final class PruneOrdinalityColsTest {
+    private PruneOrdinalityColsTest() {}
 
     public static void runTest() {
         var rule = new PruneOrdinalityCols();
@@ -19,37 +23,60 @@ public class PruneOrdinalityColsTest {
 
     private static void ordinaryTables(PruneOrdinalityCols rule) {
         var builder = RuleBuilder.create();
-        var three = RuleChecks.table(builder, 3, false);
-        var oOp = builder.genericProjectionOp("O", RelType.fromString("INTEGER", true));
-        var gOp = builder.genericProjectionOp("G", RelType.fromString("INTEGER", true));
-        var plain = RuleChecks.ruleBuilder(builder);
-        var rx = plain.getRexBuilder();
-        var scanned = plain.scan(three).build();
-        var ord = LogicalProject.create(scanned, List.of(), List.of(
-                rx.makeInputRef(scanned, 0), rx.makeInputRef(scanned, 1), rx.makeInputRef(scanned, 2),
-                rx.makeCall(oOp, rx.makeInputRef(scanned, 0), rx.makeInputRef(scanned, 1))), (List<String>) null);
-        var before = LogicalProject.create(ord, List.of(), List.of(
-                rx.makeCall(gOp, rx.makeInputRef(ord, 0), rx.makeInputRef(ord, 1), rx.makeInputRef(ord, 3))),
-                (List<String>) null);
-        var pruned = plain.scan(three).build();
-        var prunedOrd = LogicalProject.create(LogicalProject.create(pruned, List.of(), List.of(
-                rx.makeInputRef(pruned, 0), rx.makeInputRef(pruned, 1)), (List<String>) null), List.of(), List.of(
-                rx.makeInputRef(pruned, 0), rx.makeInputRef(pruned, 1),
-                rx.makeCall(oOp, rx.makeInputRef(pruned, 0), rx.makeInputRef(pruned, 1))), (List<String>) null);
-        var after = LogicalProject.create(prunedOrd, List.of(), List.of(
-                rx.makeCall(gOp, rx.makeInputRef(prunedOrd, 0), rx.makeInputRef(prunedOrd, 1),
-                        rx.makeInputRef(prunedOrd, 2))), (List<String>) null);
+        var table = RuleChecks.table(builder, 3, false);
+        var relBuilder = RuleChecks.ruleBuilder(builder);
+        var input = relBuilder.scan(table).build();
+        var rexBuilder = relBuilder.getRexBuilder();
+        var ordinality = RuleBuilder.create().genericProjectionOp("ORDINALITY", RelType.fromString("INTEGER", true));
+        var outer = RuleBuilder.create().genericProjectionOp("OUTPUT", RelType.fromString("INTEGER", true));
+
+        var beforeFields = fields(input, 0, 1, 2);
+        var beforeOrdinality = call(rexBuilder, ordinality, fields(input, 0, 1));
+        var beforeOrdinalityProject = project(input, append(beforeFields, beforeOrdinality));
+        var before = project(beforeOrdinalityProject,
+                List.of(call(rexBuilder, outer, List.of(
+                        ref(rexBuilder, beforeOrdinalityProject, 0), ref(rexBuilder, beforeOrdinalityProject, 1),
+                        ref(rexBuilder, beforeOrdinalityProject, 3)))));
+
+        var pruned = project(input, fields(input, 0, 1));
+        var afterOrdinality = call(rexBuilder, ordinality, fields(pruned, 0, 1));
+        var afterOrdinalityProject = project(pruned, append(fields(pruned, 0, 1), afterOrdinality));
+        var after = project(afterOrdinalityProject,
+                List.of(call(rexBuilder, outer, List.of(
+                        ref(rexBuilder, afterOrdinalityProject, 0), ref(rexBuilder, afterOrdinalityProject, 1),
+                        ref(rexBuilder, afterOrdinalityProject, 2)))));
         RuleChecks.rewrites(rule, before, after);
 
-        var nearMissScan = plain.scan(three).build();
-        var nearMissOrd = LogicalProject.create(nearMissScan, List.of(), List.of(
-                rx.makeInputRef(nearMissScan, 0), rx.makeInputRef(nearMissScan, 1), rx.makeInputRef(nearMissScan, 2),
-                rx.makeCall(oOp, rx.makeInputRef(nearMissScan, 0), rx.makeInputRef(nearMissScan, 2))),
-                (List<String>) null);
-        var nearMiss = LogicalProject.create(nearMissOrd, List.of(), List.of(
-                rx.makeCall(gOp, rx.makeInputRef(nearMissOrd, 0), rx.makeInputRef(nearMissOrd, 1),
-                        rx.makeInputRef(nearMissOrd, 3))), (List<String>) null);
-        RuleChecks.doesNotApply(rule, nearMiss);
+        var wrongOuter = project(beforeOrdinalityProject,
+                List.of(call(rexBuilder, outer, List.of(
+                        ref(rexBuilder, beforeOrdinalityProject, 0), ref(rexBuilder, beforeOrdinalityProject, 1),
+                        ref(rexBuilder, beforeOrdinalityProject, 2)))));
+        RuleChecks.doesNotApply(rule, wrongOuter);
+    }
+
+    private static List<RexNode> fields(RelNode input, int... ordinals) {
+        return java.util.Arrays.stream(ordinals)
+                .<RexNode>mapToObj(i -> input.getCluster().getRexBuilder().makeInputRef(input, i)).toList();
+    }
+
+    private static RexNode ref(org.apache.calcite.rex.RexBuilder rexBuilder, RelNode input, int ordinal) {
+        return rexBuilder.makeInputRef(input, ordinal);
+    }
+
+    private static RexNode call(org.apache.calcite.rex.RexBuilder rexBuilder, SqlOperator operator,
+                                List<RexNode> arguments) {
+        return rexBuilder.makeCall(operator, arguments);
+    }
+
+    private static List<RexNode> append(List<RexNode> fields, RexNode extra) {
+        var out = new java.util.ArrayList<>(fields);
+        out.add(extra);
+        return out;
+    }
+
+    private static RelNode project(RelNode input, List<RexNode> expressions) {
+        return LogicalProject.create(input, List.of(), expressions,
+                java.util.stream.IntStream.range(0, expressions.size()).mapToObj(i -> "c" + i).toList());
     }
 
     public static void main(String[] args) {

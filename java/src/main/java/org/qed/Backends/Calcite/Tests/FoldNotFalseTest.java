@@ -1,37 +1,36 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.Backends.Calcite.CalciteRuntime;
 import org.qed.RRuleInstances.FoldNotFalse;
 import org.qed.RuleBuilder;
 
-public class FoldNotFalseTest {
-
+public final class FoldNotFalseTest {
     public static void runTest() {
         var rule = new FoldNotFalse();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
-    }
 
-    private static void ordinaryTables(FoldNotFalse rule) {
         var builder = RuleBuilder.create();
+        var relBuilder = builder.transform(CalciteRuntime::configure);
         var table = RuleChecks.table(builder, 1, false);
-        var plain = RuleChecks.ruleBuilder(builder);
-        var rex = plain.getRexBuilder();
-        var scan = plain.scan(table).build();
-        var before = LogicalFilter.create(scan, rex.makeCall(SqlStdOperatorTable.NOT, rex.makeLiteral(false)));
-        var after = plain.scan(table)
-                .filter(plain.literal(true))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
+        var input = relBuilder.scan(table).build();
+        var predicate = relBuilder.call(SqlStdOperatorTable.NOT, relBuilder.literal(false));
+        RelNode before = LogicalFilter.create(input, predicate);
+        RelNode expected = input;
+        RuleChecks.rewrites(rule, before, expected);
 
-        var nearMiss = builder.scan(table)
-                .filter(builder.call(SqlStdOperatorTable.NOT,
-                        builder.call(SqlStdOperatorTable.GREATER_THAN, builder.field(0), builder.literal(5))))
-                .build();
-        RuleChecks.doesNotApply(rule, nearMiss);
+        var noMatchBuilder = RuleBuilder.create();
+        var noMatchRelBuilder = noMatchBuilder.transform(CalciteRuntime::configure);
+        var noMatchTable = RuleChecks.table(noMatchBuilder, 1, false);
+        var noMatchInput = noMatchRelBuilder.scan(noMatchTable).build();
+        var differentPredicate = noMatchRelBuilder.call(SqlStdOperatorTable.NOT,
+                noMatchRelBuilder.call(SqlStdOperatorTable.IS_NULL,
+                        noMatchRelBuilder.getRexBuilder().makeInputRef(noMatchInput, 0)));
+        RuleChecks.doesNotApply(rule, LogicalFilter.create(noMatchInput, differentPredicate));
     }
 
     public static void main(String[] args) {

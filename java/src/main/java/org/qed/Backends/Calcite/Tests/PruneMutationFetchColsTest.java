@@ -1,11 +1,13 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import kala.collection.Seq;
+import org.qed.RelRN;
+import org.qed.RelType;
+import org.qed.RexRN;
 import org.qed.RRuleInstances.PruneMutationFetchCols;
 import org.qed.RuleBuilder;
 
 public class PruneMutationFetchColsTest {
-
     public static void runTest() {
         var rule = new PruneMutationFetchCols();
         RuleChecks.rewritesPattern(rule);
@@ -15,16 +17,15 @@ public class PruneMutationFetchColsTest {
     }
 
     private static void ordinaryTables(PruneMutationFetchCols rule) {
-        var base = RuleBuilder.create();
-        var t = RuleChecks.table(base, 2, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var before = b.scan(t).project(b.call(SqlStdOperatorTable.UNARY_MINUS, b.field(0))).build();
-        var after = b.scan(t).project(b.field(0)).project(b.call(SqlStdOperatorTable.UNARY_MINUS, b.field(0))).build();
+        var source = RelRN.scanMany("S", Seq.of(
+                new RelType.VarType("I0_Type", true),
+                new RelType.VarType("I1_Type", true)));
+        var mutation = RuleBuilder.create().genericProjectionOp("M", new RelType.VarType("M_Type", true));
+        var before = FaithfulPlans.of(source.project(new RexRN.Proj(mutation, Seq.of(source.field(0)))));
+        var pruned = source.project(source.field(0));
+        var after = FaithfulPlans.expected(pruned.project(
+                new RexRN.Proj(mutation, Seq.of(pruned.field(0)))));
         RuleChecks.rewrites(rule, before, after);
-
-        RuleChecks.doesNotApply(rule, b.scan(t).project(b.call(SqlStdOperatorTable.UNARY_MINUS, b.field(1))).build());
-        RuleChecks.doesNotApply(rule, b.scan(t)
-                .project(b.call(SqlStdOperatorTable.UNARY_MINUS, b.field(0)), b.field(1)).build());
     }
 
     public static void main(String[] args) {

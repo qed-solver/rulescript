@@ -1,39 +1,36 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.Backends.Calcite.CalciteRuntime;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.SimplifyTrueOr;
 import org.qed.RuleBuilder;
 
 public class SimplifyTrueOrTest {
-
     public static void runTest() {
         var rule = new SimplifyTrueOr();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTable(rule);
-    }
 
-    private static void ordinaryTable(SimplifyTrueOr rule) {
         var builder = RuleBuilder.create();
-        var table = RuleChecks.table(builder, 1, false);
-        var scanned = builder.scan(table);
-        var predicate = RuleChecks.gt(builder, builder.field(0), 5);
-        var before = LogicalFilter.create(scanned.build(),
-                builder.call(SqlStdOperatorTable.OR, builder.literal(true), predicate));
-        var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(table)
-                .filter(plain.literal(true))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
+        var table = RuleChecks.table(builder, 1, false, false);
+        var rel = builder.transform(CalciteRuntime::configure);
+        rel.scan(table);
+        RelNode input = rel.build();
+        var rexBuilder = rel.getRexBuilder();
+        rel.push(input);
+        var predicate = RuleChecks.gt(rel, rel.field(0), 4);
+        var disjunction = rexBuilder.makeCall(SqlStdOperatorTable.OR, rexBuilder.makeLiteral(true), predicate);
+        RelNode actualInput = LogicalFilter.create(input, disjunction);
+        RelNode expected = input;
+        RuleChecks.rewrites(rule, actualInput, expected);
 
-        var rescanned = builder.scan(table);
-        var first = RuleChecks.gt(builder, builder.field(0), 5);
-        var second = RuleChecks.gt(builder, builder.field(0), 10);
-        var noTrue = LogicalFilter.create(rescanned.build(),
-                builder.call(SqlStdOperatorTable.OR, first, second));
-        RuleChecks.doesNotApply(rule, noTrue);
+        RelNode meaningfulNoMatch = LogicalFilter.create(input,
+                rexBuilder.makeCall(SqlStdOperatorTable.OR, rexBuilder.makeLiteral(false), predicate));
+        RuleChecks.doesNotApply(rule, meaningfulNoMatch);
     }
 
     public static void main(String[] args) {

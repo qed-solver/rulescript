@@ -1,27 +1,33 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.EliminateGroupByProject;
 import org.qed.RuleBuilder;
 
-public class EliminateGroupByProjectTest {
-
+public final class EliminateGroupByProjectTest {
     public static void runTest() {
         var rule = new EliminateGroupByProject();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        rewritesHandBuiltPlan();
+        rejectsHandBuiltNearMiss();
     }
 
-    private static void ordinaryTables(EliminateGroupByProject rule) {
-        var base = RuleBuilder.create();
-        var t = RuleChecks.table(base, 2, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var before = b.scan(t).project(b.field(0)).aggregate(b.groupKey(0)).build();
-        var after = b.scan(t).aggregate(b.groupKey(0)).build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void rewritesHandBuiltPlan() {
+        var builder = RuleBuilder.create();
+        var table = RuleChecks.table(builder, 2, false);
+        var before = builder.scan(table).project(builder.field(0)).aggregate(builder.groupKey(0)).build();
+        var expected = builder.scan(table).aggregate(builder.groupKey(0)).build();
+        RuleChecks.rewrites(new EliminateGroupByProject(), before, expected);
+    }
 
-        RuleChecks.doesNotApply(rule, b.scan(t).project(b.field(1)).aggregate(b.groupKey(0)).build());
+    private static void rejectsHandBuiltNearMiss() {
+        var builder = RuleBuilder.create();
+        var table = RuleChecks.table(builder, 2, false);
+        RelNode plan = builder.scan(table).project(builder.field(1)).aggregate(builder.groupKey(0)).build();
+        RuleChecks.doesNotApply(new EliminateGroupByProject(), plan);
     }
 
     public static void main(String[] args) {

@@ -1,12 +1,13 @@
 package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.logical.LogicalJoin;
+import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.PushFilterIntoJoinLeftAndRight;
 import org.qed.RuleBuilder;
 
 public class PushFilterIntoJoinLeftAndRightTest {
-
     public static void runTest() {
         var rule = new PushFilterIntoJoinLeftAndRight();
         RuleChecks.rewritesPattern(rule);
@@ -17,29 +18,43 @@ public class PushFilterIntoJoinLeftAndRightTest {
 
     private static void ordinaryTables(PushFilterIntoJoinLeftAndRight rule) {
         var builder = RuleBuilder.create();
-        var l = RuleChecks.table(builder, 2, false, false);
-        var r = RuleChecks.table(builder, 2, false, false);
-        var before = builder.scan(l).scan(r).join(JoinRelType.INNER, builder.and(
-                builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 0), builder.field(2, 1, 0)),
-                builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 1), builder.field(2, 1, 1)),
-                builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 0), builder.field(2, 1, 1))))
-                .build();
-        var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(l)
-                .filter(plain.call(SqlStdOperatorTable.EQUALS, plain.field(0), plain.field(1)))
-                .scan(r)
-                .filter(plain.call(SqlStdOperatorTable.EQUALS, plain.field(0), plain.field(1)))
-                .join(JoinRelType.INNER, plain.and(
-                        plain.call(SqlStdOperatorTable.EQUALS, plain.field(2, 0, 0), plain.field(2, 1, 0)),
-                        plain.call(SqlStdOperatorTable.EQUALS, plain.field(2, 0, 1), plain.field(2, 1, 1))))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
+        var leftName = RuleChecks.table(builder, 2, false, false);
+        var rightName = RuleChecks.table(builder, 2, false, false);
+        var left = builder.scan(leftName).build();
+        var right = builder.scan(rightName).build();
+        var rex = left.getCluster().getRexBuilder();
+        var leftType = left.getRowType();
+        var rightType = right.getRowType();
+        var l0 = rex.makeInputRef(leftType.getFieldList().get(0).getType(), 0);
+        var l1 = rex.makeInputRef(leftType.getFieldList().get(1).getType(), 1);
+        var r0 = rex.makeInputRef(rightType.getFieldList().get(0).getType(), 2);
+        var r1 = rex.makeInputRef(rightType.getFieldList().get(1).getType(), 3);
+        var condition = rex.makeCall(SqlStdOperatorTable.AND,
+                rex.makeCall(SqlStdOperatorTable.EQUALS, l0, r0),
+                rex.makeCall(SqlStdOperatorTable.EQUALS, l1, r1),
+                rex.makeCall(SqlStdOperatorTable.EQUALS, l0, r1));
+        var plan = LogicalJoin.create(left, right, java.util.List.of(), condition, java.util.Set.of(), JoinRelType.INNER);
 
-        var twoConditions = builder.scan(l).scan(r).join(JoinRelType.INNER, builder.and(
-                builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 0), builder.field(2, 1, 0)),
-                builder.call(SqlStdOperatorTable.EQUALS, builder.field(2, 0, 1), builder.field(2, 1, 1))))
-                .build();
-        RuleChecks.doesNotApply(rule, twoConditions);
+        var plain = RuleChecks.ruleBuilder(builder);
+        var expectedLeft = LogicalFilter.create(left, plain.call(SqlStdOperatorTable.EQUALS,
+                plain.getRexBuilder().makeInputRef(leftType.getFieldList().get(0).getType(), 0),
+                plain.getRexBuilder().makeInputRef(leftType.getFieldList().get(1).getType(), 1)));
+        var expectedRight = LogicalFilter.create(right, plain.call(SqlStdOperatorTable.EQUALS,
+                plain.getRexBuilder().makeInputRef(rightType.getFieldList().get(0).getType(), 0),
+                plain.getRexBuilder().makeInputRef(rightType.getFieldList().get(1).getType(), 1)));
+        var expectedCondition = plain.call(SqlStdOperatorTable.AND,
+                plain.call(SqlStdOperatorTable.EQUALS,
+                        plain.getRexBuilder().makeInputRef(leftType.getFieldList().get(0).getType(), 0),
+                        plain.getRexBuilder().makeInputRef(rightType.getFieldList().get(0).getType(), 2)),
+                plain.call(SqlStdOperatorTable.EQUALS,
+                        plain.getRexBuilder().makeInputRef(leftType.getFieldList().get(1).getType(), 1),
+                        plain.getRexBuilder().makeInputRef(rightType.getFieldList().get(1).getType(), 3)));
+        var expected = LogicalJoin.create(expectedLeft, expectedRight, java.util.List.of(), expectedCondition,
+                java.util.Set.of(), JoinRelType.INNER);
+        RuleChecks.rewrites(rule, plan, expected);
+
+        var leftJoin = LogicalJoin.create(left, right, java.util.List.of(), condition, java.util.Set.of(), JoinRelType.LEFT);
+        RuleChecks.doesNotApply(rule, leftJoin);
     }
 
     public static void main(String[] args) {

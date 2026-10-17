@@ -2,32 +2,26 @@ package org.qed.Backends.Calcite.Tests;
 
 import org.apache.calcite.rel.core.JoinRelType;
 import org.qed.RRuleInstances.FoldNotInEmpty;
-import org.qed.RuleBuilder;
+import org.qed.RelRN;
 
-public class FoldNotInEmptyTest {
-
+public final class FoldNotInEmptyTest {
     public static void runTest() {
         var rule = new FoldNotInEmpty();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
-    }
 
-    private static void ordinaryTables(FoldNotInEmpty rule) {
-        var builder = RuleBuilder.create();
-        var table = RuleChecks.table(builder, 1, false);
-        var before = builder.scan(table).scan(table).empty()
-                .join(JoinRelType.ANTI, RuleChecks.eq(builder, builder.field(2, 0, 0), builder.field(2, 1, 0)))
-                .build();
-        var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(table).build();
-        RuleChecks.rewrites(rule, before, after);
+        var left = RelRN.scan("HandLeft", "HandLeftType");
+        var emptyRight = RelRN.scan("HandRight", "HandRightType").empty();
+        var before = FaithfulPlans.of(left.join(JoinRelType.ANTI, "condition", emptyRight));
+        var expected = FaithfulPlans.expected(left);
+        RuleChecks.rewrites(rule, before, expected);
 
-        var nonEmpty = builder.scan(table).scan(table)
-                .join(JoinRelType.ANTI, RuleChecks.eq(builder, builder.field(2, 0, 0), builder.field(2, 1, 0)))
-                .build();
-        RuleChecks.doesNotApply(rule, nonEmpty);
+        var populatedRight = RelRN.scan("PopulatedRight", "PopulatedRightType");
+        RuleChecks.doesNotApply(rule,
+                FaithfulPlans.of(left.join(JoinRelType.ANTI, "condition", populatedRight)));
+        RuleChecks.doesNotApply(rule,
+                FaithfulPlans.of(left.join(JoinRelType.SEMI, "condition", emptyRight)));
     }
 
     public static void main(String[] args) {

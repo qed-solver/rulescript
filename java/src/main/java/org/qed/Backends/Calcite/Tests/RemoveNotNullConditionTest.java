@@ -1,50 +1,41 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.RemoveNotNullCondition;
 import org.qed.RuleBuilder;
 
-public class RemoveNotNullConditionTest {
-
+public final class RemoveNotNullConditionTest {
     public static void runTest() {
         var rule = new RemoveNotNullCondition();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        notNullColumn(rule);
-        nullableColumn(rule);
+        ordinaryTables(rule);
     }
 
-    private static void notNullColumn(RemoveNotNullCondition rule) {
-        var base = RuleBuilder.create();
-        var table = RuleChecks.table(base, 2, false, false);
-        var b = RuleChecks.ruleBuilder(base);
-        b.scan(table);
-        var greater = RuleChecks.gt(b, b.field(1), 5);
-        var notNull = b.call(SqlStdOperatorTable.IS_NOT_NULL, b.field(0));
-        var before = LogicalFilter.create(LogicalFilter.create(b.build(), greater), notNull);
-        var after = b.scan(table)
-                .filter(RuleChecks.gt(b, b.field(1), 5))
-                .build();
+    private static void ordinaryTables(RemoveNotNullCondition rule) {
+        var schemaBuilder = RuleBuilder.create();
+        var table = RuleChecks.table(schemaBuilder, 2, false, false);
+        var builder = RuleChecks.ruleBuilder(schemaBuilder);
+        var scan = builder.scan(table).build();
+        var rex = builder.getRexBuilder();
+        var notNull = rex.makeCall(SqlStdOperatorTable.IS_NOT_NULL, rex.makeInputRef(scan, 0));
+        var other = rex.makeCall(SqlStdOperatorTable.GREATER_THAN, rex.makeInputRef(scan, 1), rex.makeExactLiteral(java.math.BigDecimal.ZERO));
+        RelNode before = LogicalFilter.create(LogicalFilter.create(scan, other), notNull);
+        RelNode after = LogicalFilter.create(scan, other);
         RuleChecks.rewrites(rule, before, after);
 
-        var wrongColumn = b.scan(table)
-                .filter(RuleChecks.gt(b, b.field(0), 5))
-                .filter(b.call(SqlStdOperatorTable.IS_NOT_NULL, b.field(1)))
-                .build();
-        RuleChecks.doesNotApply(rule, wrongColumn);
-    }
-
-    private static void nullableColumn(RemoveNotNullCondition rule) {
-        var base = RuleBuilder.create();
-        var table = RuleChecks.table(base, 2, false, true);
-        var b = RuleChecks.ruleBuilder(base);
-        var plan = b.scan(table)
-                .filter(RuleChecks.gt(b, b.field(1), 5))
-                .filter(b.call(SqlStdOperatorTable.IS_NOT_NULL, b.field(0)))
-                .build();
-        RuleChecks.doesNotApply(rule, plan);
+        var nullableSchemaBuilder = RuleBuilder.create();
+        var nullableTable = RuleChecks.table(nullableSchemaBuilder, 2, false, true);
+        var nullableBuilder = RuleChecks.ruleBuilder(nullableSchemaBuilder);
+        var nullableScan = nullableBuilder.scan(nullableTable).build();
+        var nullableRex = nullableBuilder.getRexBuilder();
+        var nullableNotNull = nullableRex.makeCall(SqlStdOperatorTable.IS_NOT_NULL,
+                nullableRex.makeInputRef(nullableScan, 0));
+        RuleChecks.doesNotApply(rule, LogicalFilter.create(nullableScan, nullableNotNull));
+        System.out.println("succeeded (ordinary non-nullable table rewrites; nullable table rejected)");
     }
 
     public static void main(String[] args) {

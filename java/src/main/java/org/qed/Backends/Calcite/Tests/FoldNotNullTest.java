@@ -1,35 +1,51 @@
 package org.qed.Backends.Calcite.Tests;
 
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.qed.RRuleInstances.FoldNotNull;
 import org.qed.RuleBuilder;
 
 public class FoldNotNullTest {
-
     public static void runTest() {
         var rule = new FoldNotNull();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        rewritesHandBuiltPlan();
+        rejectsDifferentConstant();
     }
 
-    private static void ordinaryTables(FoldNotNull rule) {
-        var base = RuleBuilder.create();
-        var table = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var nullBool = b.getRexBuilder().makeNullLiteral(b.getTypeFactory().createSqlType(SqlTypeName.BOOLEAN));
-        var before = b.scan(table)
-                .filter(b.call(SqlStdOperatorTable.NOT, nullBool))
-                .build();
-        var after = b.scan(table).filter(nullBool).build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void rewritesHandBuiltPlan() {
+        var ruleBuilder = RuleBuilder.create();
+        var table = RuleChecks.table(ruleBuilder, 1, false);
+        var builder = RuleChecks.ruleBuilder(ruleBuilder);
+        var nullBoolean = builder.getRexBuilder().makeNullLiteral(
+                builder.getTypeFactory().createSqlType(SqlTypeName.BOOLEAN));
+        var before = builder.scan(table).filter(builder.not(nullBoolean)).build();
 
-        var nearMiss = b.scan(table)
-                .filter(b.call(SqlStdOperatorTable.NOT, RuleChecks.gt(b, b.field(0), 5)))
-                .build();
-        RuleChecks.doesNotApply(rule, nearMiss);
+        var expectedRuleBuilder = RuleBuilder.create();
+        var expectedTable = RuleChecks.table(expectedRuleBuilder, 1, false);
+        var expectedBuilder = RuleChecks.ruleBuilder(expectedRuleBuilder);
+        var expectedNullBoolean = expectedBuilder.getRexBuilder().makeNullLiteral(
+                expectedBuilder.getTypeFactory().createSqlType(SqlTypeName.BOOLEAN));
+        var expected = expectedBuilder.scan(expectedTable).filter(expectedNullBoolean).build();
+        RuleChecks.rewrites(new FoldNotNull(), before, expected);
+    }
+
+    private static void rejectsDifferentConstant() {
+        var ruleBuilder = RuleBuilder.create();
+        var table = RuleChecks.table(ruleBuilder, 1, false);
+        var builder = RuleChecks.ruleBuilder(ruleBuilder);
+        var before = builder.scan(table).filter(builder.not(builder.literal(true))).build();
+
+        var expectedRuleBuilder = RuleBuilder.create();
+        var expectedTable = RuleChecks.table(expectedRuleBuilder, 1, false);
+        var expectedBuilder = RuleChecks.ruleBuilder(expectedRuleBuilder);
+        var expected = expectedBuilder.scan(expectedTable)
+                .filter(expectedBuilder.not(expectedBuilder.literal(true))).build();
+        if (!before.explain().equals(expected.explain())) {
+            throw new AssertionError("the separately built no-match plan differs");
+        }
+        RuleChecks.doesNotApply(new FoldNotNull(), before);
     }
 
     public static void main(String[] args) {

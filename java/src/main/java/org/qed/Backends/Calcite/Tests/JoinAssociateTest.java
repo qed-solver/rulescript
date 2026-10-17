@@ -1,48 +1,61 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.tools.RelBuilder;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.JoinAssociate;
 import org.qed.RuleBuilder;
 
-import java.util.List;
-
 public class JoinAssociateTest {
-
     public static void runTest() {
         var rule = new JoinAssociate();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
+        RuleChecks.rewrites(rule, handBuiltInput(false), handBuiltExpected());
+        RuleChecks.doesNotApply(rule, handBuiltInput(true));
     }
 
-    private static void ordinaryTables(JoinAssociate rule) {
-        var base = RuleBuilder.create();
-        var ta = RuleChecks.table(base, 1, false);
-        var tb = RuleChecks.table(base, 1, false);
-        var tc = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var leftDeep = (java.util.function.Function<JoinRelType, RelBuilder>) top -> {
-            b.scan(ta).scan(tb).join(JoinRelType.INNER, b.and(RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)),
-                    RuleChecks.gt(b, b.field(2, 1, 0), 5)));
-            return b.scan(tc).join(top, b.and(
-                    b.call(SqlStdOperatorTable.LESS_THAN, b.field(2, 0, 0), b.field(2, 1, 0)),
-                    b.call(SqlStdOperatorTable.NOT_EQUALS, b.field(2, 0, 1), b.field(2, 1, 0)),
-                    RuleChecks.gt(b, b.field(2, 1, 0), 7)));
-        };
-        var before = leftDeep.apply(JoinRelType.INNER).build();
+    private static RelNode handBuiltInput(boolean wrongPc) {
+        var schema = RuleBuilder.create();
+        var a = RuleChecks.table(schema, 1, false);
+        var b = RuleChecks.table(schema, 1, false);
+        var c = RuleChecks.table(schema, 1, false);
+        var builder = RuleChecks.ruleBuilder(schema);
+        builder.scan(a).scan(b).join(JoinRelType.INNER,
+                builder.and(predicate(builder, "pab", 0, 1), predicate(builder, "pb", 1)));
+        builder.scan(c).join(JoinRelType.INNER,
+                builder.and(predicate(builder, "pabc", 0, 1, 2), predicate(builder, "pbc", 1, 2),
+                        predicate(builder, "pc", 2),
+                        wrongPc ? predicate(builder, "extra", 2) : predicate(builder, "pc", 2)));
+        return builder.build();
+    }
 
-        b.scan(ta).scan(tb).scan(tc).join(JoinRelType.INNER, b.and(RuleChecks.gt(b, b.field(2, 0, 0), 5),
-                b.call(SqlStdOperatorTable.NOT_EQUALS, b.field(2, 0, 0), b.field(2, 1, 0)),
-                RuleChecks.gt(b, b.field(2, 1, 0), 7)));
-        var after = b.join(JoinRelType.INNER, b.and(RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)),
-                b.call(SqlStdOperatorTable.LESS_THAN, b.field(2, 0, 0), b.field(2, 1, 1)))).build();
-        RuleChecks.rewrites(rule, before, after);
+    private static RelNode handBuiltExpected() {
+        var schema = RuleBuilder.create();
+        var a = RuleChecks.table(schema, 1, false);
+        var b = RuleChecks.table(schema, 1, false);
+        var c = RuleChecks.table(schema, 1, false);
+        var builder = RuleChecks.ruleBuilder(schema);
+        builder.scan(a).scan(b).scan(c).join(JoinRelType.INNER,
+                builder.and(predicate(builder, "pb", 0), predicate(builder, "pbc", 0, 1),
+                        predicate(builder, "pc", 1)));
+        builder.join(JoinRelType.INNER,
+                builder.and(predicate(builder, "pab", 0, 1), predicate(builder, "pabc", 0, 1, 2)));
+        return builder.build();
+    }
 
-        RuleChecks.doesNotApply(rule, leftDeep.apply(JoinRelType.LEFT).build());
+    private static RexNode predicate(RelBuilder builder, String name, int... indexes) {
+        SqlOperator operator = RuleBuilder.create().genericPredicateOp(name, true);
+        var type = builder.peek().getRowType().getFieldList().get(0).getType();
+        var args = new RexNode[indexes.length];
+        for (var i = 0; i < indexes.length; i++) {
+            args[i] = builder.getRexBuilder().makeInputRef(type, indexes[i]);
+        }
+        return builder.call(operator, args);
     }
 
     public static void main(String[] args) {

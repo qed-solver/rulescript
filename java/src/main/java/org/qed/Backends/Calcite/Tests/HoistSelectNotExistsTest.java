@@ -1,44 +1,42 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rex.RexSubQuery;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.qed.Backends.Calcite.CalciteRuntime;
 import org.qed.RRuleInstances.HoistSelectNotExists;
 import org.qed.RuleBuilder;
 
-public class HoistSelectNotExistsTest {
-
+public final class HoistSelectNotExistsTest {
     public static void runTest() {
         var rule = new HoistSelectNotExists();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
-    }
 
-    private static void ordinaryTables(HoistSelectNotExists rule) {
         var builder = RuleBuilder.create();
-        var outer = RuleChecks.table(builder, 1, false);
-        var inner = RuleChecks.table(builder, 1, false);
-        var five = builder.literal(5);
-        var ten = builder.literal(10);
-        var sub = builder.scan(inner).filter(RuleChecks.gt(builder, builder.field(0), 5)).build();
-        var plain = RuleChecks.ruleBuilder(builder);
-        var before = plain.scan(outer).filter(plain.and(
-                        plain.call(SqlStdOperatorTable.NOT, RexSubQuery.exists(sub)),
-                        RuleChecks.gt(plain, plain.field(0), 10)))
-                .build();
-        var after = plain.scan(outer)
-                .scan(inner).filter(plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(0), five))
-                .join(JoinRelType.ANTI, plain.literal(true))
-                .filter(plain.call(SqlStdOperatorTable.GREATER_THAN, plain.field(0), ten))
-                .build();
+        var left = RuleChecks.table(builder, 1, false);
+        var right = RuleChecks.table(builder, 1, false);
+        var b = builder.transform(CalciteRuntime::configure);
+        RelNode leftScan = b.scan(left).build();
+        RelNode rightScan = b.scan(right).build();
+        var rightRef = b.getRexBuilder().makeInputRef(rightScan, 0);
+        var rightPredicate = b.call(SqlStdOperatorTable.GREATER_THAN, rightRef, b.literal(7));
+        RelNode subqueryInput = LogicalFilter.create(rightScan, rightPredicate);
+        var notExists = b.not(RexSubQuery.exists(subqueryInput));
+        var leftRef = b.getRexBuilder().makeInputRef(leftScan, 0);
+        var rest = b.call(SqlStdOperatorTable.GREATER_THAN, leftRef, b.literal(3));
+        RelNode before = LogicalFilter.create(leftScan, b.and(notExists, rest));
+
+        RelNode after = b.push(leftScan).push(subqueryInput).join(JoinRelType.ANTI, b.literal(true))
+                .filter(rest).build();
         RuleChecks.rewrites(rule, before, after);
 
-        var bareNegation = builder.scan(outer)
-                .filter(builder.call(SqlStdOperatorTable.NOT, RexSubQuery.exists(sub)))
-                .build();
-        RuleChecks.doesNotApply(rule, bareNegation);
+        var unnegatedExists = RexSubQuery.exists(subqueryInput);
+        RelNode noMatch = LogicalFilter.create(leftScan, b.and(unnegatedExists, rest));
+        RuleChecks.doesNotApply(rule, noMatch);
     }
 
     public static void main(String[] args) {

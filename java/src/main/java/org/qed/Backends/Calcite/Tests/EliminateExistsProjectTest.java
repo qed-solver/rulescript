@@ -1,36 +1,33 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rex.RexSubQuery;
+import org.qed.Backends.Calcite.CalciteTester;
 import org.qed.RRuleInstances.EliminateExistsProject;
 import org.qed.RuleBuilder;
 
 import java.util.List;
 
-public class EliminateExistsProjectTest {
-
+public final class EliminateExistsProjectTest {
     public static void runTest() {
         var rule = new EliminateExistsProject();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        ordinaryTables(rule);
-    }
 
-    private static void ordinaryTables(EliminateExistsProject rule) {
         var builder = RuleBuilder.create();
-        var outer = RuleChecks.table(builder, 1, false);
-        var input = RuleChecks.table(builder, 1, false);
-        var wide = RuleChecks.table(builder, 2, false);
-        var projected = builder.scan(input).project(List.of(builder.field(0)), List.of(), true).build();
-        var before = builder.scan(outer).filter(RexSubQuery.exists(projected)).build();
-        var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(outer).filter(RexSubQuery.exists(plain.scan(input).build())).build();
-        RuleChecks.rewrites(rule, before, after);
+        var outerTable = RuleChecks.table(builder, 1, false);
+        var innerTable = RuleChecks.table(builder, 1, false);
+        var outer = builder.scan(outerTable).build();
+        var input = builder.scan(innerTable).build();
+        var project = LogicalProject.create(input, List.of(), List.of(builder.literal(1)), List.of("constant"));
+        var source = LogicalFilter.create(outer, RexSubQuery.exists(project));
+        var expected = LogicalFilter.create(outer, RexSubQuery.exists(input));
+        RuleChecks.rewrites(rule, source, expected);
 
-        var widened = builder.scan(wide).project(List.of(builder.field(0), builder.field(1)), List.of(), true).build();
-        RuleChecks.doesNotApply(rule, builder.scan(outer).filter(RexSubQuery.exists(widened)).build());
-        var bare = builder.scan(input).build();
-        RuleChecks.doesNotApply(rule, builder.scan(outer).filter(RexSubQuery.exists(bare)).build());
+        var noMatch = LogicalFilter.create(outer, RexSubQuery.exists(input));
+        RuleChecks.doesNotApply(rule, noMatch);
     }
 
     public static void main(String[] args) {

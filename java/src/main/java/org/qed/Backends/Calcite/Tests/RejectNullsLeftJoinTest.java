@@ -1,12 +1,15 @@
 package org.qed.Backends.Calcite.Tests;
 
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.qed.RRuleInstances.RejectNullsLeftJoin;
+import org.apache.calcite.tools.RelBuilder;
 import org.qed.RuleBuilder;
+import org.qed.RRuleInstances.RejectNullsLeftJoin;
 
 public class RejectNullsLeftJoinTest {
-
     public static void runTest() {
         var rule = new RejectNullsLeftJoin();
         RuleChecks.rewritesPattern(rule);
@@ -16,24 +19,29 @@ public class RejectNullsLeftJoinTest {
     }
 
     private static void ordinaryTables(RejectNullsLeftJoin rule) {
-        var base = RuleBuilder.create();
-        var l = RuleChecks.table(base, 1, false);
-        var r = RuleChecks.table(base, 1, false);
-        var b = RuleChecks.ruleBuilder(base);
-        var before = b.scan(l).scan(r)
-                .join(JoinRelType.LEFT, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
-                .filter(b.isNotNull(b.field(1))).build();
-        var plain = RuleChecks.ruleBuilder(base);
-        var after = plain.scan(l).scan(r)
-                .join(JoinRelType.INNER, RuleChecks.eq(plain, plain.field(2, 0, 0), plain.field(2, 1, 0)))
-                .filter(plain.isNotNull(plain.field(1))).build();
-        RuleChecks.rewrites(rule, before, after);
+        var builder = RuleBuilder.create();
+        var l = RuleChecks.table(builder, 1, false);
+        var r = RuleChecks.table(builder, 1, false);
+        builder.scan(l).scan(r);
+        var on = builder.call(SqlStdOperatorTable.LESS_THAN, builder.field(2, 0, 0), builder.field(2, 1, 0));
+        var leftJoin = builder.join(JoinRelType.LEFT, on).build();
+        var condition = builder.getRexBuilder().makeCall(SqlStdOperatorTable.IS_NOT_NULL,
+                builder.getRexBuilder().makeInputRef(leftJoin.getRowType().getFieldList().get(1).getType(), 1));
+        RelNode plan = LogicalFilter.create(leftJoin, condition);
 
-        var leftNotNull = RuleChecks.ruleBuilder(base);
-        var nearMiss = leftNotNull.scan(l).scan(r)
-                .join(JoinRelType.LEFT, RuleChecks.eq(leftNotNull, leftNotNull.field(2, 0, 0), leftNotNull.field(2, 1, 0)))
-                .filter(leftNotNull.isNotNull(leftNotNull.field(0))).build();
-        RuleChecks.doesNotApply(rule, nearMiss);
+        RelBuilder plain = RuleChecks.ruleBuilder(builder);
+        var innerJoin = plain.scan(l).scan(r).join(JoinRelType.INNER,
+                plain.call(SqlStdOperatorTable.LESS_THAN, plain.field(2, 0, 0), plain.field(2, 1, 0))).build();
+        RexNode expectedCondition = plain.getRexBuilder().makeCall(SqlStdOperatorTable.IS_NOT_NULL,
+                plain.getRexBuilder().makeInputRef(innerJoin.getRowType().getFieldList().get(1).getType(), 1));
+        RelNode expected = LogicalFilter.create(innerJoin, expectedCondition);
+        RuleChecks.rewrites(rule, plan, expected);
+
+        var fullJoin = builder.scan(l).scan(r).join(JoinRelType.FULL,
+                builder.call(SqlStdOperatorTable.LESS_THAN, builder.field(2, 0, 0), builder.field(2, 1, 0))).build();
+        var fullCondition = builder.getRexBuilder().makeCall(SqlStdOperatorTable.IS_NOT_NULL,
+                builder.getRexBuilder().makeInputRef(fullJoin.getRowType().getFieldList().get(1).getType(), 1));
+        RuleChecks.doesNotApply(rule, LogicalFilter.create(fullJoin, fullCondition));
     }
 
     public static void main(String[] args) {

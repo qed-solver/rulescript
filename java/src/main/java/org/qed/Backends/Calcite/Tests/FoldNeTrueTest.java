@@ -1,38 +1,51 @@
 package org.qed.Backends.Calcite.Tests;
 
+import kala.collection.Seq;
+import kala.tuple.Tuple;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.tools.RelBuilder;
+import org.qed.Backends.Calcite.CalciteRuntime;
 import org.qed.RRuleInstances.FoldNeTrue;
+import org.qed.RelType;
 import org.qed.RuleBuilder;
 
 public class FoldNeTrueTest {
-
     public static void runTest() {
         var rule = new FoldNeTrue();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        notEqualsTrue(rule);
+        rewritesHandBuiltPlan(rule);
+        rejectsDifferentLiteral();
     }
 
-    private static void notEqualsTrue(FoldNeTrue rule) {
-        var builder = RuleBuilder.create();
-        var table = RuleChecks.table(builder, 1, false);
-        var scanned = builder.scan(table);
-        var predicate = RuleChecks.gt(builder, builder.field(0), 5);
-        var before = LogicalFilter.create(scanned.build(),
-                builder.call(SqlStdOperatorTable.NOT_EQUALS, predicate, builder.literal(true)));
-        var plain = RuleChecks.ruleBuilder(builder);
-        var after = plain.scan(table)
-                .filter(plain.not(RuleChecks.gt(plain, plain.field(0), 5)))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
+    private static void rewritesHandBuiltPlan(FoldNeTrue rule) {
+        var builder = booleanTable();
+        var scan = builder.scan("Table_0").build();
+        var ref = builder.getRexBuilder().makeInputRef(scan, 0);
+        var condition = builder.getRexBuilder().makeCall(SqlStdOperatorTable.NOT_EQUALS,
+                ref, builder.getRexBuilder().makeLiteral(true));
+        var before = LogicalFilter.create(scan, condition);
+        var expected = LogicalFilter.create(scan,
+                builder.getRexBuilder().makeCall(SqlStdOperatorTable.NOT, ref));
+        RuleChecks.rewrites(rule, before, expected);
+    }
 
-        var rescanned = builder.scan(table);
-        var falsePredicate = RuleChecks.gt(builder, builder.field(0), 5);
-        var mismatched = LogicalFilter.create(rescanned.build(),
-                builder.call(SqlStdOperatorTable.NOT_EQUALS, falsePredicate, builder.literal(false)));
-        RuleChecks.doesNotApply(rule, mismatched);
+    private static void rejectsDifferentLiteral() {
+        var builder = booleanTable();
+        var scan = builder.scan("Table_0").build();
+        var ref = builder.getRexBuilder().makeInputRef(scan, 0);
+        var condition = builder.getRexBuilder().makeCall(SqlStdOperatorTable.NOT_EQUALS,
+                ref, builder.getRexBuilder().makeLiteral(false));
+        RuleChecks.doesNotApply(new FoldNeTrue(), LogicalFilter.create(scan, condition));
+    }
+
+    private static RelBuilder booleanTable() {
+        var builder = RuleBuilder.create();
+        var table = builder.createQedTable(Seq.of(Tuple.of(RelType.fromString("BOOLEAN", true), false)));
+        builder.addTable(table);
+        return builder.transform(CalciteRuntime::configure);
     }
 
     public static void main(String[] args) {

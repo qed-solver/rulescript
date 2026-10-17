@@ -4,34 +4,31 @@ import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.qed.RRuleInstances.SimplifyNotInSingleElement;
 import org.qed.RuleBuilder;
 
-public class SimplifyNotInSingleElementTest {
-
+public final class SimplifyNotInSingleElementTest {
     public static void runTest() {
         var rule = new SimplifyNotInSingleElement();
         RuleChecks.rewritesPattern(rule);
         RuleChecks.rewritesConcretePredicates(rule);
         RuleChecks.rejectsNearMisses(rule);
-        singleElementNotIn(rule);
-    }
 
-    private static void singleElementNotIn(SimplifyNotInSingleElement rule) {
         var builder = RuleBuilder.create();
-        var table = RuleChecks.table(builder, 2, false);
-        var plain = RuleChecks.ruleBuilder(builder);
-        var before = plain.scan(table)
-                .filter(plain.call(SqlStdOperatorTable.NOT,
-                        plain.call(SqlStdOperatorTable.EQUALS, plain.field(0), plain.field(1))))
-                .build();
-        var after = plain.scan(table)
-                .filter(plain.call(SqlStdOperatorTable.NOT_EQUALS, plain.field(0), plain.field(1)))
-                .build();
-        RuleChecks.rewrites(rule, before, after);
+        var tableName = RuleChecks.table(builder, 2, false);
+        var source = builder.scan(tableName).build();
+        var rb = source.getCluster().getRexBuilder();
+        var left = rb.makeInputRef(source.getRowType().getFieldList().get(0).getType(), 0);
+        var right = rb.makeInputRef(source.getRowType().getFieldList().get(1).getType(), 1);
+        var equals = rb.makeCall(SqlStdOperatorTable.EQUALS, left, right);
+        var disjunction = rb.makeCall(SqlStdOperatorTable.OR, java.util.List.of(equals));
+        var condition = rb.makeCall(SqlStdOperatorTable.NOT, disjunction);
+        var input = org.apache.calcite.rel.logical.LogicalFilter.create(source, condition);
 
-        var againstLiteral = builder.scan(table)
-                .filter(builder.call(SqlStdOperatorTable.NOT,
-                        builder.call(SqlStdOperatorTable.EQUALS, builder.field(0), builder.literal(5))))
-                .build();
-        RuleChecks.doesNotApply(rule, againstLiteral);
+        var expected = org.apache.calcite.rel.logical.LogicalFilter.create(source,
+                rb.makeCall(SqlStdOperatorTable.NOT_EQUALS, left, right));
+        RuleChecks.rewrites(rule, input, expected);
+
+        var nearCondition = rb.makeCall(SqlStdOperatorTable.NOT,
+                rb.makeCall(SqlStdOperatorTable.NOT_EQUALS, left, right));
+        RuleChecks.doesNotApply(rule, org.apache.calcite.rel.logical.LogicalFilter.create(source, nearCondition));
     }
 
     public static void main(String[] args) {
