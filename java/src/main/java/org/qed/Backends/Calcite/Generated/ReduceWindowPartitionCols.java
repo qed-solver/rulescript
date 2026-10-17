@@ -137,7 +137,7 @@ public class ReduceWindowPartitionCols extends RelRule<ReduceWindowPartitionCols
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.instantiate(sym_14, args_13, new RexNode[]{CalciteRuntime.field(b, 1, 0)}), CalciteRuntime.field(b, 1, 1)));
 		b.push(r_3);
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.instantiate(sym_14, args_13, new RexNode[]{CalciteRuntime.field(b, 1, 0)}), CalciteRuntime.field(b, 1, 1)));
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_19.getAggregation(), false, null, a_19.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 2))));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_19.getAggregation(), false, null, a_19.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 2))));
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.instantiate(sym_14, args_13, new RexNode[]{CalciteRuntime.field(b, 1, 0)}), CalciteRuntime.field(b, 1, 1)));
 		b.join(JoinRelType.INNER, b.and(b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 3)), b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 2, 1), CalciteRuntime.field(b, 2, 4))));
 		b.project(CalciteRuntime.instantiate(sym_2, args_1, new RexNode[]{CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1), CalciteRuntime.field(b, 1, 2), CalciteRuntime.field(b, 1, 5)}));

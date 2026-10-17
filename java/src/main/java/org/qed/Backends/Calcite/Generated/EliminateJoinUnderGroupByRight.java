@@ -67,7 +67,7 @@ public class EliminateJoinUnderGroupByRight extends RelRule<EliminateJoinUnderGr
 			return;
 		}
 		b.push(r_2);
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0)));
 		CalciteRuntime.transform(call, b);
 	}
 

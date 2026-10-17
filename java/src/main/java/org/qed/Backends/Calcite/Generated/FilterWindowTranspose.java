@@ -80,7 +80,7 @@ public class FilterWindowTranspose extends RelRule<FilterWindowTranspose.Config>
 		}
 		b.push(r_2);
 		b.filter(CalciteRuntime.instantiate(sym_4, args_3, new RexNode[]{CalciteRuntime.field(b, 1, 0)}));
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_10.getAggregation(), false, null, a_10.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 1))));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_10.getAggregation(), false, null, a_10.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 1))));
 		b.filter(CalciteRuntime.instantiate(sym_7, args_6, new RexNode[]{CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)}));
 		CalciteRuntime.transform(call, b);
 	}

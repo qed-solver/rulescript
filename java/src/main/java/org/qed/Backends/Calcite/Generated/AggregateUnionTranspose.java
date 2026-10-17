@@ -65,11 +65,11 @@ public class AggregateUnionTranspose extends RelRule<AggregateUnionTranspose.Con
 			return;
 		}
 		b.push(r_2);
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
 		b.push(r_3);
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
 		b.union(true, 2);
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
 		CalciteRuntime.transform(call, b);
 	}
 

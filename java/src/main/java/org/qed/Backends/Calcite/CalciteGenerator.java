@@ -783,7 +783,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             calls.add("b.aggregateCall(" + reference + ", " + call.distinct() + ", null, " + alias
                     + ", List.<RexNode>of(" + operands + "))");
         }
-        env.body.add("b.aggregate(b.groupKey(" + keys + ")" + (calls.isEmpty() ? "" : ", ")
+        env.body.add("b.aggregate(CalciteRuntime.groupKey(b" + (keys.isEmpty() ? "" : ", ") + keys + ")" + (calls.isEmpty() ? "" : ", ")
                 + String.join(", ", calls) + ");");
         return env;
     }

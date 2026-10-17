@@ -43,7 +43,7 @@ public class ReplaceDistinctWithAggregate extends RelRule<ReplaceDistinctWithAgg
 			return;
 		}
 		b.push(r_1);
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
 		CalciteRuntime.transform(call, b);
 	}
 

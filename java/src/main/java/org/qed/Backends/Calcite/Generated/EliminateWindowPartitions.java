@@ -74,7 +74,7 @@ public class EliminateWindowPartitions extends RelRule<EliminateWindowPartitions
 			return;
 		}
 		b.push(r_2);
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_3.getAggregation(), false, null, a_3.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 0))));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_3.getAggregation(), false, null, a_3.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 0))));
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), b.literal(0), CalciteRuntime.field(b, 1, 1)));
 		CalciteRuntime.transform(call, b);
 	}

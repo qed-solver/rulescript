@@ -65,7 +65,7 @@ public class FinishAnalysis extends RelRule<FinishAnalysis.Config> {
 		}
 		b.push(r_2);
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 1), CalciteRuntime.instantiate(sym_3, args_2, new RexNode[]{CalciteRuntime.field(b, 1, 0)})));
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 1)), b.aggregateCall((SqlAggFunction) a_4.getAggregation(), false, null, a_4.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 0))));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 1)), b.aggregateCall((SqlAggFunction) a_4.getAggregation(), false, null, a_4.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 0))));
 		CalciteRuntime.transform(call, b);
 	}
 

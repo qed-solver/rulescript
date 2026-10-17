@@ -94,7 +94,7 @@ public class FilterAggregateTranspose extends RelRule<FilterAggregateTranspose.C
 		b.push(r_4);
 		b.join(JoinRelType.INNER, b.literal(true));
 		b.filter(CalciteRuntime.instantiate(sym_4, args_3, new RexNode[]{CalciteRuntime.field(b, 1, 0)}));
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_13.getAggregation(), false, null, a_13.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 1))));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_13.getAggregation(), false, null, a_13.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 1))));
 		b.filter(b.and(CalciteRuntime.instantiate(sym_7, args_6, new RexNode[]{CalciteRuntime.field(b, 1, 0)}), CalciteRuntime.instantiate(sym_10, args_9, new RexNode[]{CalciteRuntime.field(b, 1, 1)})));
 		CalciteRuntime.transform(call, b);
 	}

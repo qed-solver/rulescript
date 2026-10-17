@@ -54,8 +54,8 @@ public class AggregateExpandWithinDistinct extends RelRule<AggregateExpandWithin
 			return;
 		}
 		b.push(r_1);
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)));
-		b.aggregate(b.groupKey(), b.aggregateCall((SqlAggFunction) a_1.getAggregation(), false, null, a_1.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 0))));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0)));
+		b.aggregate(CalciteRuntime.groupKey(b), b.aggregateCall((SqlAggFunction) a_1.getAggregation(), false, null, a_1.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 0))));
 		CalciteRuntime.transform(call, b);
 	}
 

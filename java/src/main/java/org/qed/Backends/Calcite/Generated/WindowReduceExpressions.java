@@ -100,7 +100,7 @@ public class WindowReduceExpressions extends RelRule<WindowReduceExpressions.Con
 		b.push(r_1);
 		b.push(r_1);
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), b.literal(false)));
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_5.getAggregation(), false, null, a_5.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 1))));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_5.getAggregation(), false, null, a_5.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 1))));
 		b.join(JoinRelType.INNER, b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 2)));
 		CalciteRuntime.transform(call, b);
 	}

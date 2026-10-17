@@ -49,7 +49,7 @@ public class SubQueryRemove extends RelRule<SubQueryRemove.Config> {
 		b.push(r_1);
 		b.push(r_1000);
 		b.project(b.literal(true));
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0)));
 		b.join(JoinRelType.INNER, b.literal(true));
 		b.project(CalciteRuntime.field(b, 1, 0));
 		CalciteRuntime.transform(call, b);

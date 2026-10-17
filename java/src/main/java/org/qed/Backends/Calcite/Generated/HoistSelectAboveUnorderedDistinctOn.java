@@ -64,7 +64,7 @@ public class HoistSelectAboveUnorderedDistinctOn extends RelRule<HoistSelectAbov
 			return;
 		}
 		b.push(r_2);
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
 		b.filter(CalciteRuntime.instantiate(sym_5, args_4, new RexNode[]{CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)}));
 		CalciteRuntime.transform(call, b);
 	}

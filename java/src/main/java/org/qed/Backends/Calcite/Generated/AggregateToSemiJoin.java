@@ -84,7 +84,7 @@ public class AggregateToSemiJoin extends RelRule<AggregateToSemiJoin.Config> {
 		b.push(r_2);
 		b.push(r_4);
 		b.join(JoinRelType.SEMI, b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)));
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0)));
 		CalciteRuntime.transform(call, b);
 	}
 

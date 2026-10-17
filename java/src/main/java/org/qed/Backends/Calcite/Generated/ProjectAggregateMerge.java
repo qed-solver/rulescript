@@ -90,7 +90,7 @@ public class ProjectAggregateMerge extends RelRule<ProjectAggregateMerge.Config>
 			return;
 		}
 		b.push(r_3);
-		b.aggregate(b.groupKey(CalciteRuntime.instantiate(sym_6, args_5, new RexNode[]{CalciteRuntime.field(b, 1, 0)})), b.aggregateCall((SqlAggFunction) a_7.getAggregation(), false, null, a_7.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 0))), b.aggregateCall((SqlAggFunction) a_11.getAggregation(), false, null, a_11.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 0))));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.instantiate(sym_6, args_5, new RexNode[]{CalciteRuntime.field(b, 1, 0)})), b.aggregateCall((SqlAggFunction) a_7.getAggregation(), false, null, a_7.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 0))), b.aggregateCall((SqlAggFunction) a_11.getAggregation(), false, null, a_11.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 0))));
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1), CalciteRuntime.field(b, 1, 2)));
 		CalciteRuntime.transform(call, b);
 	}

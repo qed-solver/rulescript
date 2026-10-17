@@ -48,7 +48,7 @@ public class ReplaceExceptWithAntiJoin extends RelRule<ReplaceExceptWithAntiJoin
 		b.push(r_1);
 		b.push(r_2);
 		b.join(JoinRelType.ANTI, b.and(b.call(SqlStdOperatorTable.IS_NOT_DISTINCT_FROM, CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 2)), b.call(SqlStdOperatorTable.IS_NOT_DISTINCT_FROM, CalciteRuntime.field(b, 2, 1), CalciteRuntime.field(b, 2, 3))));
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
 		CalciteRuntime.transform(call, b);
 	}
 

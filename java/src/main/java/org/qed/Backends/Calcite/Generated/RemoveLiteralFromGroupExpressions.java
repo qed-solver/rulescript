@@ -76,7 +76,7 @@ public class RemoveLiteralFromGroupExpressions extends RelRule<RemoveLiteralFrom
 			return;
 		}
 		b.push(r_2);
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_5.getAggregation(), false, null, a_5.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 1))), b.aggregateCall((SqlAggFunction) a_7.getAggregation(), false, null, a_7.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 1))));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_5.getAggregation(), false, null, a_5.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 1))), b.aggregateCall((SqlAggFunction) a_7.getAggregation(), false, null, a_7.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 1))));
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.instantiate(sym_4, args_3, new RexNode[]{}), CalciteRuntime.field(b, 1, 1), CalciteRuntime.field(b, 1, 2)));
 		CalciteRuntime.transform(call, b);
 	}

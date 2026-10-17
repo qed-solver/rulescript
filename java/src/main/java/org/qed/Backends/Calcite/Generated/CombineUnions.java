@@ -83,7 +83,7 @@ public class CombineUnions extends RelRule<CombineUnions.Config> {
 		b.push(r_6);
 		b.push(r_7);
 		b.union(true, 4);
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0)));
 		CalciteRuntime.transform(call, b);
 	}
 

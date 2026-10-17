@@ -70,7 +70,7 @@ public class RewriteCorrelatedScalarSubquery extends RelRule<RewriteCorrelatedSc
 		b.push(r_2);
 		b.push(r_4);
 		b.join(JoinRelType.LEFT, b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)));
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_2.getAggregation(), false, null, a_2.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 1))));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_2.getAggregation(), false, null, a_2.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 1))));
 		CalciteRuntime.transform(call, b);
 	}
 

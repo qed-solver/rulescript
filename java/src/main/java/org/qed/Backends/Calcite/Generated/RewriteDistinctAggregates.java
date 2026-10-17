@@ -56,8 +56,8 @@ public class RewriteDistinctAggregates extends RelRule<RewriteDistinctAggregates
 		}
 		b.push(r_2);
 		b.project(List.<RexNode>of(CalciteRuntime.bigint(b, 0L), b.literal(0)));
-		b.aggregate(b.groupKey(CalciteRuntime.bigint(b, 0L), b.literal(0)));
-		b.aggregate(b.groupKey(), b.aggregateCall((SqlAggFunction) a_1.getAggregation(), false, null, a_1.getName(), List.<RexNode>of(CalciteRuntime.bigint(b, 0L))));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.bigint(b, 0L), b.literal(0)));
+		b.aggregate(CalciteRuntime.groupKey(b), b.aggregateCall((SqlAggFunction) a_1.getAggregation(), false, null, a_1.getName(), List.<RexNode>of(CalciteRuntime.bigint(b, 0L))));
 		CalciteRuntime.transform(call, b);
 	}
 

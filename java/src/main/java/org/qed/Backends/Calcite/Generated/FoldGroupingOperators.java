@@ -76,7 +76,7 @@ public class FoldGroupingOperators extends RelRule<FoldGroupingOperators.Config>
 			return;
 		}
 		b.push(r_3);
-		b.aggregate(b.groupKey(CalciteRuntime.instantiate(sym_5, args_4, new RexNode[]{CalciteRuntime.field(b, 1, 0)})));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.instantiate(sym_5, args_4, new RexNode[]{CalciteRuntime.field(b, 1, 0)})));
 		CalciteRuntime.transform(call, b);
 	}
 

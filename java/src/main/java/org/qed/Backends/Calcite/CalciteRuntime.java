@@ -71,6 +71,39 @@ public final class CalciteRuntime {
         call.transformTo(result);
     }
 
+    public static RelBuilder.GroupKey groupKey(RelBuilder b, RexNode... keys) {
+        var width = b.peek().getRowType().getFieldCount();
+        var computed = new java.util.ArrayList<RexNode>();
+        var ascending = true;
+        var previous = -1;
+        for (var key : keys) {
+            int ordinal;
+            if (key instanceof RexInputRef ref) {
+                ordinal = ref.getIndex();
+            } else {
+                var position = computed.indexOf(key);
+                if (position < 0) {
+                    computed.add(key);
+                    position = computed.size() - 1;
+                }
+                ordinal = width + position;
+            }
+            ascending &= ordinal > previous;
+            previous = ordinal;
+        }
+        if (ascending) {
+            return b.groupKey(keys);
+        }
+        var projects = new java.util.ArrayList<RexNode>(b.fields());
+        projects.addAll(java.util.Arrays.asList(keys));
+        b.project(projects, java.util.List.of(), true);
+        var ordinals = new int[keys.length];
+        for (var i = 0; i < keys.length; i++) {
+            ordinals[i] = width + i;
+        }
+        return b.groupKey(ordinals);
+    }
+
     public static RelBuilder builder(RelOptRuleCall call) {
         return call.builder().transform(CalciteRuntime::configure);
     }
@@ -127,6 +160,15 @@ public final class CalciteRuntime {
             public RexNode visitFieldAccess(RexFieldAccess access) {
                 var replaced = replacement(access);
                 return replaced != null ? replaced : super.visitFieldAccess(access);
+            }
+
+            @Override
+            public RexNode visitCorrelVariable(org.apache.calcite.rex.RexCorrelVariable variable) {
+                if (arguments.length == 0) {
+                    return variable;
+                }
+                throw new IllegalStateException("Expression reads correlation variable " + variable
+                        + " which is not an argument");
             }
 
             @Override

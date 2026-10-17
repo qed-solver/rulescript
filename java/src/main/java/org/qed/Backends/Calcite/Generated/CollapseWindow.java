@@ -149,7 +149,7 @@ public class CollapseWindow extends RelRule<CollapseWindow.Config> {
 		}
 		b.push(r_4);
 		b.push(r_4);
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_15.getAggregation(), false, null, a_15.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 1))), b.aggregateCall((SqlAggFunction) a_19.getAggregation(), false, null, a_19.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 1))));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_15.getAggregation(), false, null, a_15.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 1))), b.aggregateCall((SqlAggFunction) a_19.getAggregation(), false, null, a_19.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 1))));
 		b.join(JoinRelType.INNER, b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 2)));
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1), CalciteRuntime.field(b, 1, 3), CalciteRuntime.field(b, 1, 4)));
 		CalciteRuntime.transform(call, b);

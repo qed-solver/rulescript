@@ -42,7 +42,7 @@ public class IntersectToExists extends RelRule<IntersectToExists.Config> {
 		b.push(r_1);
 		b.push(r_2);
 		CalciteRuntime.correlate(b, JoinRelType.SEMI, ca_0 -> b.call(SqlStdOperatorTable.IS_NOT_DISTINCT_FROM, ca_0));
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0)));
 		CalciteRuntime.transform(call, b);
 	}
 

@@ -82,7 +82,7 @@ public class TryDecorrelateGroupBy extends RelRule<TryDecorrelateGroupBy.Config>
 		b.push(r_2);
 		b.push(r_4);
 		b.join(JoinRelType.INNER, b.literal(true));
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)), b.aggregateCall((SqlAggFunction) a_6.getAggregation(), false, null, a_6.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 2))));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)), b.aggregateCall((SqlAggFunction) a_6.getAggregation(), false, null, a_6.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 2))));
 		b.filter(CalciteRuntime.instantiate(sym_2, args_1, new RexNode[]{CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1), CalciteRuntime.field(b, 1, 2)}));
 		CalciteRuntime.transform(call, b);
 	}

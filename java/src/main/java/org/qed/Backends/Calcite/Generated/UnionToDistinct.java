@@ -42,7 +42,7 @@ public class UnionToDistinct extends RelRule<UnionToDistinct.Config> {
 		b.push(r_1);
 		b.push(r_2);
 		b.union(true, 2);
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0)));
 		CalciteRuntime.transform(call, b);
 	}
 

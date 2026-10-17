@@ -57,7 +57,7 @@ public class EliminateDistinctSetLeft extends RelRule<EliminateDistinctSetLeft.C
 		final LogicalValues r_3 = call.rel(3);
 		b.push(r_2);
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 2), CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1), CalciteRuntime.field(b, 1, 2)));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1), CalciteRuntime.field(b, 1, 2)));
 		CalciteRuntime.transform(call, b);
 	}
 

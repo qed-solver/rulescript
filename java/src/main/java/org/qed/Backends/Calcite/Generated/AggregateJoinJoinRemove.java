@@ -78,7 +78,7 @@ public class AggregateJoinJoinRemove extends RelRule<AggregateJoinJoinRemove.Con
 		b.push(r_3);
 		b.push(r_5);
 		b.join(JoinRelType.LEFT, CalciteRuntime.instantiate(sym_5, args_4, new RexNode[]{CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 1)}));
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)));
 		CalciteRuntime.transform(call, b);
 	}
 

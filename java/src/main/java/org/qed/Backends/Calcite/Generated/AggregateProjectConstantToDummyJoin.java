@@ -82,7 +82,7 @@ public class AggregateProjectConstantToDummyJoin extends RelRule<AggregateProjec
 		b.values(new String[]{"x", "d"}, true, false);
 		b.join(JoinRelType.INNER, b.literal(true));
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 1), CalciteRuntime.field(b, 1, 2), CalciteRuntime.field(b, 1, 0)));
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1), CalciteRuntime.field(b, 1, 2)), b.aggregateCall((SqlAggFunction) a_4.getAggregation(), false, null, a_4.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 2))));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1), CalciteRuntime.field(b, 1, 2)), b.aggregateCall((SqlAggFunction) a_4.getAggregation(), false, null, a_4.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 2))));
 		CalciteRuntime.transform(call, b);
 	}
 

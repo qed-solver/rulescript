@@ -181,11 +181,11 @@ public class TransposeWindow extends RelRule<TransposeWindow.Config> {
 		}
 		b.push(r_4);
 		b.push(r_4);
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_27.getAggregation(), false, null, a_27.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 2))));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0)), b.aggregateCall((SqlAggFunction) a_27.getAggregation(), false, null, a_27.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 2))));
 		b.join(JoinRelType.INNER, b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 3)));
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1), CalciteRuntime.field(b, 1, 2), CalciteRuntime.field(b, 1, 4)));
 		b.push(r_4);
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)), b.aggregateCall((SqlAggFunction) a_23.getAggregation(), false, null, a_23.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 2))));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1)), b.aggregateCall((SqlAggFunction) a_23.getAggregation(), false, null, a_23.getName(), List.<RexNode>of(CalciteRuntime.field(b, 1, 2))));
 		b.join(JoinRelType.INNER, b.and(b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 2, 0), CalciteRuntime.field(b, 2, 4)), b.call(SqlStdOperatorTable.EQUALS, CalciteRuntime.field(b, 2, 1), CalciteRuntime.field(b, 2, 5))));
 		b.project(List.<RexNode>of(CalciteRuntime.field(b, 1, 0), CalciteRuntime.field(b, 1, 1), CalciteRuntime.field(b, 1, 2), CalciteRuntime.field(b, 1, 6), CalciteRuntime.field(b, 1, 3)));
 		CalciteRuntime.transform(call, b);

@@ -83,7 +83,7 @@ public class RemoveRedundantAggregates extends RelRule<RemoveRedundantAggregates
 		}
 		b.push(r_3);
 		b.project(List.<RexNode>of(CalciteRuntime.instantiate(sym_5, args_4, new RexNode[]{CalciteRuntime.field(b, 1, 0)})));
-		b.aggregate(b.groupKey(CalciteRuntime.field(b, 1, 0)));
+		b.aggregate(CalciteRuntime.groupKey(b, CalciteRuntime.field(b, 1, 0)));
 		CalciteRuntime.transform(call, b);
 	}
 
