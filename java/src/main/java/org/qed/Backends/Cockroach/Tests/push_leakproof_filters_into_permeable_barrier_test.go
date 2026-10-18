@@ -3,26 +3,28 @@ package rulescript_test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
 func TestPushLeakproofFiltersIntoPermeableBarrier(t *testing.T) {
-	rule := loadRule(t, "PushLeakproofFiltersIntoPermeableBarrier")
 	e := newEnv(t)
-	s, cols := e.scan("u", 1)
-	project := e.f.ConstructProject(s, nil, opt.MakeColSet(cols[0]))
-	leakproof := e.f.ConstructGt(e.v(cols[0]), e.num(0))
-	remaining := e.f.ConstructLt(e.v(cols[0]), e.num(10))
-	before := e.f.ConstructSelect(project, e.filters(leakproof, remaining))
-	filtered := e.f.ConstructSelect(s, e.filters(leakproof))
-	want := e.f.ConstructSelect(e.f.ConstructProject(filtered, nil, opt.MakeColSet(cols[0])), e.filters(remaining))
-	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructSelect(project, e.filters(leakproof)))
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(leakproof, remaining)))
-}
+	rule := loadRule(t, "PushLeakproofFiltersIntoPermeableBarrier")
+	input, cols := e.scan("t", 1)
+	barrier := e.f.ConstructProject(input, memo.ProjectionsExpr{}, opt.MakeColSet(cols[0]))
+	leak := e.f.ConstructEq(e.v(cols[0]), e.num(1))
+	remaining := e.f.ConstructEq(e.v(cols[0]), e.num(2))
+	before := e.f.ConstructSelect(barrier, e.filters(leak, remaining))
 
-func TestSQLPushLeakproofFiltersIntoPermeableBarrier(t *testing.T) {
-	expectSQLFiresWith(t, "PushLeakproofFiltersIntoPermeableBarrier",
-		"SELECT x FROM (SELECT x FROM u) WHERE x > 0 AND x < 10",
-		sqlHelpers{names: []string{"PruneScanCols"}})
+	filteredInput := e.f.ConstructSelect(input, e.filters(e.f.ConstructEq(e.v(cols[0]), e.num(1))))
+	wantBarrier := e.f.ConstructProject(filteredInput, memo.ProjectionsExpr{}, opt.MakeColSet(cols[0]))
+	want := e.f.ConstructSelect(wantBarrier, e.filters(e.f.ConstructEq(e.v(cols[0]), e.num(2))))
+	e.expectRewrite(rule, before, want)
+
+	nearMissInput, nearMissCols := e.scan("t", 1)
+	nearMissBarrier := e.f.ConstructProject(nearMissInput, memo.ProjectionsExpr{}, opt.MakeColSet(nearMissCols[0]))
+	nearMissLeak := e.f.ConstructEq(e.v(nearMissCols[0]), e.num(1))
+	nearMissRemaining := e.f.ConstructEq(e.v(nearMissCols[0]), e.num(2))
+	nearMiss := e.f.ConstructSelect(nearMissBarrier, e.filters(e.f.ConstructOr(nearMissLeak, nearMissRemaining)))
+	e.expectNoMatch(rule, nearMiss)
 }

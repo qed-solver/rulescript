@@ -10,26 +10,27 @@ import (
 func TestAggregateJoinRemove(t *testing.T) {
 	rule := loadRule(t, "AggregateJoinRemove")
 	e := newEnv(t)
-	left, lc := e.scan("u", 1)
-	right, rc := e.scan("t", 1)
+	l, lc := e.scan("u", 1)
+	r, rc := e.scan("t", 1)
 	on := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])))
-	joined := e.f.ConstructLeftJoin(left, right, on, &memo.JoinPrivate{})
-	before := e.f.ConstructGroupBy(joined, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(lc[0]),
-	})
-	want := e.f.ConstructGroupBy(left, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(lc[0]),
-	})
+	grouping := func(c opt.ColumnID) *memo.GroupingPrivate {
+		return &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(c)}
+	}
+	before := e.f.ConstructGroupBy(
+		e.f.ConstructLeftJoin(l, r, on, &memo.JoinPrivate{}),
+		memo.EmptyAggregationsExpr,
+		grouping(lc[0]),
+	)
+	want := e.f.ConstructGroupBy(l, memo.EmptyAggregationsExpr, grouping(lc[0]))
 	e.expectRewrite(rule, before, want)
-
-	inner := e.f.ConstructInnerJoin(left, right, on, &memo.JoinPrivate{})
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(inner, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(lc[0]),
-	}))
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(joined, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(rc[0]),
-	}))
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(left, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(lc[0]),
-	}))
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(
+		e.f.ConstructInnerJoin(l, r, on, &memo.JoinPrivate{}),
+		memo.EmptyAggregationsExpr,
+		grouping(lc[0]),
+	))
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(
+		e.f.ConstructLeftJoin(l, r, on, &memo.JoinPrivate{}),
+		memo.EmptyAggregationsExpr,
+		grouping(rc[0]),
+	))
 }

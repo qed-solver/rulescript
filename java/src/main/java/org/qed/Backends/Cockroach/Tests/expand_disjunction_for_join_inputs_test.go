@@ -9,13 +9,12 @@ import (
 func TestExpandDisjunctionForJoinInputs(t *testing.T) {
 	rule := loadRule(t, "ExpandDisjunctionForJoinInputs")
 	e := newEnv(t)
-	l, lc := e.scan("t", 2)
-	r, rc := e.scan("u", 2)
-
-	pl := e.f.ConstructEq(e.v(lc[0]), e.num(1))
-	rl := e.f.ConstructEq(e.v(lc[1]), e.num(2))
-	pr := e.f.ConstructEq(e.v(rc[0]), e.num(3))
-	sr := e.f.ConstructEq(e.v(rc[1]), e.num(4))
+	l, lc := e.scan("u", 2)
+	r, rc := e.scan("t", 2)
+	pl := e.f.ConstructGt(e.v(lc[0]), e.num(0))
+	rl := e.f.ConstructGt(e.v(lc[1]), e.num(1))
+	pr := e.f.ConstructLt(e.v(rc[0]), e.num(5))
+	sr := e.f.ConstructLt(e.v(rc[1]), e.num(7))
 	cond := e.f.ConstructOr(e.f.ConstructAnd(pl, pr), e.f.ConstructAnd(rl, sr))
 	before := e.f.ConstructInnerJoin(l, r, e.filters(cond), &memo.JoinPrivate{})
 	want := e.f.ConstructInnerJoin(l, r, e.filters(
@@ -26,11 +25,13 @@ func TestExpandDisjunctionForJoinInputs(t *testing.T) {
 	e.expectRewrite(rule, before, want)
 
 	e.expectNoMatch(rule, e.f.ConstructLeftJoin(l, r, e.filters(cond), &memo.JoinPrivate{}))
+	m := e.f.ConstructLt(e.v(lc[1]), e.num(9))
 	e.expectNoMatch(rule, e.f.ConstructInnerJoin(l, r, e.filters(
-		e.f.ConstructAnd(e.f.ConstructAnd(pl, pr), e.f.ConstructAnd(rl, sr)),
+		e.f.ConstructOr(e.f.ConstructAnd(pl, m), e.f.ConstructAnd(rl, sr)),
 	), &memo.JoinPrivate{}))
-	crossSide := e.f.ConstructEq(e.v(lc[0]), e.v(rc[0]))
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(l, r, e.filters(
-		e.f.ConstructOr(e.f.ConstructAnd(crossSide, pr), e.f.ConstructAnd(rl, sr)),
-	), &memo.JoinPrivate{}))
+}
+
+func TestSQLExpandDisjunctionForJoinInputs(t *testing.T) {
+	expectSQLFires(t, "ExpandDisjunctionForJoinInputs",
+		"SELECT * FROM u JOIN nn ON (u.x > 0 AND nn.a < 5) OR (u.y > 1 AND nn.b < 7)")
 }

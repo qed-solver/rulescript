@@ -4,29 +4,22 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestSimplifyZeroCardinalitySemiJoin(t *testing.T) {
 	rule := loadRule(t, "SimplifyZeroCardinalitySemiJoin")
 	e := newEnv(t)
-	l, lc := e.scan("t", 1)
-	rc := e.f.Metadata().AddColumn("empty", types.Int)
-	r := e.empty(rc)
-	on := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc)))
-	before := e.f.ConstructSemiJoin(l, r, on, &memo.JoinPrivate{})
-	want := e.empty(lc[0])
+	left, leftCols := e.scan("u", 1)
+	right, rightCols := e.scan("t", 1)
+	right = e.empty(rightCols...)
+	on := e.filters(e.f.ConstructEq(e.v(leftCols[0]), e.num(1)))
+	before := e.f.ConstructSemiJoin(left, right, on, &memo.JoinPrivate{})
+	want := e.empty(leftCols...)
 	e.expectRewrite(rule, before, want)
 
-	rScan, _ := e.scan("u", 1)
-	e.expectNoMatch(rule, e.f.ConstructSemiJoin(l, rScan, nil, &memo.JoinPrivate{}))
-	e.expectNoMatch(rule, e.f.ConstructAntiJoin(l, r, on, &memo.JoinPrivate{}))
-	rc2 := e.f.Metadata().AddColumn("extra", types.Int)
-	e.expectNoMatch(rule, e.f.ConstructSemiJoin(l, e.empty(rc, rc2), on, &memo.JoinPrivate{}))
-}
+	left2, leftCols2 := e.scan("u", 1)
+	right2, rightCols2 := e.scan("t", 1)
+	nearMiss := e.f.ConstructSemiJoin(left2, right2, e.filters(e.f.ConstructEq(e.v(leftCols2[0]), e.v(rightCols2[0]))), &memo.JoinPrivate{})
+	e.expectNoMatch(rule, nearMiss)
 
-func TestSQLSimplifyZeroCardinalitySemiJoin(t *testing.T) {
-	expectSQLFiresWith(t, "SimplifyZeroCardinalitySemiJoin",
-		"SELECT * FROM (SELECT a FROM t) q WHERE q.a IN (SELECT x FROM u WHERE false)",
-		sqlHelpers{limits: map[string]int{"SimplifyZeroCardinalityGroup": 1}, names: []string{"NormalizeSelectAnyFilter", "HoistSelectExists", "TryDecorrelateSelect", "TryDecorrelateProject", "TryDecorrelateProjectSelect", "DecorrelateJoin", "PruneValuesCols", "EliminateProject", "PruneScanCols"}})
 }

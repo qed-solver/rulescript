@@ -13,28 +13,22 @@ func TestAggregateJoinJoinRemove(t *testing.T) {
 	a, ac := e.scan("t", 1)
 	b, bc := e.scan("u", 1)
 	c, cc := e.scan("nn", 1)
-	bottomOn := e.filters(e.f.ConstructEq(e.v(ac[0]), e.v(bc[0])))
-	topOn := e.filters(e.f.ConstructEq(e.v(ac[0]), e.v(cc[0])))
-	groups := &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(ac[0], cc[0])}
+	onAB := func() memo.FiltersExpr { return e.filters(e.f.ConstructEq(e.v(ac[0]), e.v(bc[0]))) }
+	onAC := func() memo.FiltersExpr { return e.filters(e.f.ConstructEq(e.v(ac[0]), e.v(cc[0]))) }
+	group := func(input memo.RelExpr, cols ...opt.ColumnID) memo.RelExpr {
+		return e.f.ConstructGroupBy(input, memo.EmptyAggregationsExpr, &memo.GroupingPrivate{
+			GroupingCols: opt.MakeColSet(cols...),
+		})
+	}
 
-	bottom := e.f.ConstructLeftJoin(a, b, bottomOn, &memo.JoinPrivate{})
-	top := e.f.ConstructLeftJoin(bottom, c, topOn, &memo.JoinPrivate{})
-	before := e.f.ConstructGroupBy(top, nil, groups)
-	want := e.f.ConstructGroupBy(
-		e.f.ConstructLeftJoin(a, c, topOn, &memo.JoinPrivate{}),
-		nil,
-		groups,
-	)
-	e.expectRewrite(rule, before, want)
+	bottom := e.f.ConstructLeftJoin(a, b, onAB(), &memo.JoinPrivate{})
+	top := e.f.ConstructLeftJoin(bottom, c, onAC(), &memo.JoinPrivate{})
+	before := group(top, ac[0], cc[0])
+	after := group(e.f.ConstructLeftJoin(a, c, onAC(), &memo.JoinPrivate{}), ac[0], cc[0])
+	e.expectRewrite(rule, before, after)
 
-	innerTop := e.f.ConstructInnerJoin(bottom, c, topOn, &memo.JoinPrivate{})
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(innerTop, nil, groups))
+	innerBottom := e.f.ConstructInnerJoin(a, b, onAB(), &memo.JoinPrivate{})
+	e.expectNoMatch(rule, group(e.f.ConstructLeftJoin(innerBottom, c, onAC(), &memo.JoinPrivate{}), ac[0], cc[0]))
 
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(top, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(ac[0]),
-	}))
-
-	bTopOn := e.filters(e.f.ConstructEq(e.v(bc[0]), e.v(cc[0])))
-	bTop := e.f.ConstructLeftJoin(bottom, c, bTopOn, &memo.JoinPrivate{})
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(bTop, nil, groups))
+	e.expectNoMatch(rule, group(e.f.ConstructLeftJoin(bottom, c, onAC(), &memo.JoinPrivate{}), bc[0], cc[0]))
 }

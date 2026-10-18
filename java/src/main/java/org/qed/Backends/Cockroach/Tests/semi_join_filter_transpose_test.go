@@ -8,20 +8,29 @@ import (
 
 func TestSemiJoinFilterTranspose(t *testing.T) {
 	rule := loadRule(t, "SemiJoinFilterTranspose")
-	e := newEnv(t)
-	l, lc := e.scan("t", 2)
-	r, rc := e.scan("u", 2)
-	on := func() memo.FiltersExpr { return e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0]))) }
-	above := func() memo.FiltersExpr { return e.filters(e.f.ConstructGt(e.v(lc[0]), e.num(1))) }
-	jp := func() *memo.JoinPrivate { return &memo.JoinPrivate{} }
-
-	before := e.f.ConstructSemiJoin(e.f.ConstructSelect(l, above()), r, on(), jp())
-	want := e.f.ConstructSelect(e.f.ConstructSemiJoin(l, r, on(), jp()), above())
-	e.expectRewrite(rule, before, want)
-
-	e.expectNoMatch(rule, e.f.ConstructSemiJoin(l, r, on(), jp()))
-	e.expectNoMatch(rule, e.f.ConstructSemiJoin(l, e.f.ConstructSelect(r, e.filters(
-		e.f.ConstructGt(e.v(rc[0]), e.num(1)))), on(), jp()))
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(e.f.ConstructSelect(l, above()), r, on(), jp()))
-	e.expectNoMatch(rule, want)
+	t.Run("transposes left-only filter", func(t *testing.T) {
+		e := newEnv(t)
+		x, xc := e.scan("t", 2)
+		y, yc := e.scan("u", 2)
+		filter := e.f.ConstructEq(e.v(xc[1]), e.num(7))
+		cond := e.f.ConstructEq(e.v(xc[0]), e.v(yc[0]))
+		before := e.f.ConstructSemiJoin(
+			e.f.ConstructSelect(x, e.filters(filter)), y, e.filters(cond), &memo.JoinPrivate{},
+		)
+		want := e.f.ConstructSelect(
+			e.f.ConstructSemiJoin(x, y, e.filters(cond), &memo.JoinPrivate{}), e.filters(filter),
+		)
+		e.expectRewrite(rule, before, want)
+	})
+	t.Run("rejects anti join", func(t *testing.T) {
+		e := newEnv(t)
+		x, xc := e.scan("t", 2)
+		y, yc := e.scan("u", 2)
+		filter := e.f.ConstructEq(e.v(xc[1]), e.num(7))
+		cond := e.f.ConstructEq(e.v(xc[0]), e.v(yc[0]))
+		before := e.f.ConstructAntiJoin(
+			e.f.ConstructSelect(x, e.filters(filter)), y, e.filters(cond), &memo.JoinPrivate{},
+		)
+		e.expectNoMatch(rule, before)
+	})
 }

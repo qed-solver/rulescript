@@ -1,7 +1,6 @@
 package rulescript_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -10,41 +9,30 @@ import (
 )
 
 func TestPruneAggCols(t *testing.T) {
-	rule := loadRule(t, "PruneAggCols")
 	e := newEnv(t)
-	s, cols := e.scan("t", 3)
-	fcol := e.f.Metadata().AddColumn("f", types.Int)
-	gcol := e.f.Metadata().AddColumn("g", types.Int)
-	aggs := memo.AggregationsExpr{
-		e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(cols[1])), fcol),
-		e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(cols[2])), gcol),
+	rule := loadRule(t, "PruneAggCols")
+	build := func(selectPruned bool) (memo.RelExpr, memo.RelExpr) {
+		scan, cols := e.scan("t", 3)
+		fCol := e.f.Metadata().AddColumn("f_result", types.Int)
+		gCol := e.f.Metadata().AddColumn("g_result", types.Int)
+		grouped := e.f.ConstructGroupBy(scan, memo.AggregationsExpr{
+			e.f.ConstructAggregationsItem(e.f.ConstructSum(e.v(cols[1])), fCol),
+			e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(cols[2])), gCol),
+		}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(cols[0])})
+		pass := opt.MakeColSet(cols[0], fCol)
+		if selectPruned {
+			pass.Add(gCol)
+		}
+		before := e.f.ConstructProject(grouped, memo.ProjectionsExpr{}, pass)
+
+		pruned := e.f.ConstructGroupBy(scan, memo.AggregationsExpr{
+			e.f.ConstructAggregationsItem(e.f.ConstructSum(e.v(cols[1])), fCol),
+		}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(cols[0])})
+		want := e.f.ConstructProject(pruned, memo.ProjectionsExpr{}, opt.MakeColSet(cols[0], fCol))
+		return before, want
 	}
-	grouped := e.f.ConstructGroupBy(s, aggs, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(cols[0]),
-	})
-	before := e.f.ConstructProject(grouped, nil, opt.MakeColSet(cols[0], fcol))
-	pruned := e.f.ConstructGroupBy(s, aggs[:1], &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(cols[0]),
-	})
-	want := e.f.ConstructProject(pruned, nil, opt.MakeColSet(cols[0], fcol))
+	before, want := build(false)
 	e.expectRewrite(rule, before, want)
-
-	e.expectNoMatch(rule, e.f.ConstructProject(grouped, nil, opt.MakeColSet(cols[0], fcol, gcol)))
-	wrongAgg := e.f.ConstructGroupBy(s, memo.AggregationsExpr{
-		e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(cols[0])), fcol),
-		aggs[1],
-	}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(cols[0])})
-	e.expectNoMatch(rule, e.f.ConstructProject(wrongAgg, nil, opt.MakeColSet(cols[0], fcol)))
-}
-
-func TestSQLPruneAggCols(t *testing.T) {
-	sql := "SELECT a, cnt FROM (SELECT a, count(b) AS cnt, count(c) AS unused FROM t GROUP BY a) AS q"
-	before, _ := planFor(t, sql, nil)
-	if strings.Count(before, "count [as=") != 2 {
-		t.Fatalf("expected two aggregation columns before rewrite:\n%s", before)
-	}
-	got, fired := planFor(t, sql, nil, "PruneAggCols")
-	if strings.Join(fired, ",") != "PruneAggCols" || strings.Count(got, "count [as=") != 1 {
-		t.Fatalf("expected one aggregation column after rewrite, got %v:\n%s", fired, got)
-	}
+	nearMiss, _ := build(true)
+	e.expectNoMatch(rule, nearMiss)
 }

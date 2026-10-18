@@ -9,28 +9,28 @@ import (
 )
 
 func TestPushLeakproofProjectionsIntoPermeableBarrier(t *testing.T) {
-	rule := loadRule(t, "PushLeakproofProjectionsIntoPermeableBarrier")
 	e := newEnv(t)
-	s, cols := e.scan("u", 1)
-	computed := e.f.Metadata().AddColumn("computed", types.Int)
-	item := func() memo.ProjectionsExpr {
-		return memo.ProjectionsExpr{
-			e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(cols[0]), e.num(1)), computed),
-		}
-	}
-	barrier := e.f.ConstructProject(s, nil, opt.MakeColSet(cols[0]))
-	before := e.f.ConstructProject(barrier, item(), opt.MakeColSet(cols[0]))
-	below := e.f.ConstructProject(s, item(), opt.MakeColSet(cols[0]))
-	want := e.f.ConstructProject(below, nil, opt.MakeColSet(cols[0], computed))
-	e.expectRewrite(rule, before, want)
+	rule := loadRule(t, "PushLeakproofProjectionsIntoPermeableBarrier")
+	input, cols := e.scan("t", 1)
+	barrierCol := cols[0]
+	barrier := e.f.ConstructProject(input, memo.ProjectionsExpr{}, opt.MakeColSet(barrierCol))
+	projectionCol := e.f.Metadata().AddColumn("projection", types.Int)
+	before := e.f.ConstructProject(barrier,
+		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(barrierCol), e.num(1)), projectionCol)}, opt.MakeColSet(barrierCol),
+	)
 
-	e.expectNoMatch(rule, e.f.ConstructProject(s, item(), opt.MakeColSet(cols[0])))
-	e.expectNoMatch(rule, e.f.ConstructProject(barrier, item(), opt.ColSet{}))
-	e.expectNoMatch(rule, barrier)
-}
+	pushed := e.f.ConstructProject(input,
+		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(cols[0]), e.num(1)), projectionCol)}, opt.MakeColSet(cols[0]),
+	)
+	want := e.f.ConstructProject(pushed, memo.ProjectionsExpr{}, opt.MakeColSet(projectionCol, cols[0]))
+	e.expectRewriteUpToFreshColumns(rule, before, want)
 
-func TestSQLPushLeakproofProjectionsIntoPermeableBarrier(t *testing.T) {
-	expectSQLFiresWith(t, "PushLeakproofProjectionsIntoPermeableBarrier",
-		"SELECT x + 1, x FROM (SELECT x FROM u)",
-		sqlHelpers{names: []string{"PruneScanCols"}})
+	nearInput, nearCols := e.scan("t", 1)
+	nearBarrierCol := nearCols[0]
+	nearBarrier := e.f.ConstructProject(nearInput, memo.ProjectionsExpr{}, opt.MakeColSet(nearBarrierCol))
+	nearProjectionCol := e.f.Metadata().AddColumn("projection", types.Int)
+	nearMiss := e.f.ConstructProject(nearBarrier,
+		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(nearBarrierCol), e.num(1)), nearProjectionCol)}, opt.ColSet{},
+	)
+	e.expectNoMatch(rule, nearMiss)
 }

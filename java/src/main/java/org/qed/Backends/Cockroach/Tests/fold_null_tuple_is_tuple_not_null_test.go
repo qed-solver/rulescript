@@ -10,15 +10,15 @@ import (
 func TestFoldNullTupleIsTupleNotNull(t *testing.T) {
 	rule := loadRule(t, "FoldNullTupleIsTupleNotNull")
 	e := newEnv(t)
-	s, cols := e.scan("u", 1)
-	nullInt := e.f.ConstructNull(types.Int)
-	first := e.f.ConstructIsNot(nullInt, memo.NullSingleton)
-	second := e.f.ConstructIsNot(e.v(cols[0]), memo.NullSingleton)
-	e.expectRewrite(rule, e.f.ConstructSelect(s, e.filters(first, second)), e.f.ConstructSelect(s, e.filters(e.f.ConstructFalse())))
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(second, first)))
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(first, e.f.ConstructIs(e.v(cols[0]), memo.NullSingleton))))
-}
-
-func TestSQLFoldNullTupleIsTupleNotNull(t *testing.T) {
-	expectSQLFires(t, "FoldNullTupleIsTupleNotNull", "SELECT x FROM u WHERE NULL IS NOT NULL AND x IS NOT NULL")
+	in, cols := e.scan("t", 3)
+	nullCheck := e.f.ConstructIsNot(e.f.ConstructNull(types.Int), memo.NullSingleton)
+	colCheck := e.f.ConstructIsNot(e.v(cols[0]), memo.NullSingleton)
+	before := e.f.ConstructSelect(in, e.filters(e.f.ConstructAnd(nullCheck, colCheck)))
+	want := e.f.ConstructSelect(in, e.filters(e.f.ConstructFalse()))
+	e.expectRewrite(rule, before, want)
+	e.expectNoMatch(rule, e.f.ConstructSelect(in, e.filters(colCheck)))
+	e.expectNoMatch(rule, e.f.ConstructSelect(in, e.filters(e.f.ConstructAnd(
+		e.f.ConstructIsNot(e.num(1), memo.NullSingleton), colCheck))))
+	e.expectNoMatch(rule, e.f.ConstructSelect(in, e.filters(e.f.ConstructAnd(
+		e.f.ConstructIs(e.f.ConstructNull(types.Int), memo.NullSingleton), colCheck))))
 }

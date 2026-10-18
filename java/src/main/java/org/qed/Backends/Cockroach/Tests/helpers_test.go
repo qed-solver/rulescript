@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -140,6 +142,9 @@ func canon(sb *strings.Builder, x opt.Expr) {
 		return
 	}
 	sb.WriteString("(" + x.Op().String())
+	if grouping, ok := x.Private().(*memo.GroupingPrivate); ok {
+		fmt.Fprintf(sb, " group=%v", grouping.GroupingCols)
+	}
 	for i, n := 0, x.ChildCount(); i < n; i++ {
 		sb.WriteString(" ")
 		canon(sb, x.Child(i))
@@ -242,7 +247,105 @@ func alphaComputedColumns(plan string) (string, int) {
 		plan = strings.ReplaceAll(plan, "(item "+id+" ", "(item "+label+" ")
 		plan = strings.ReplaceAll(plan, "(var "+id+")", "(var "+label+")")
 	}
+	plan = groupList.ReplaceAllStringFunc(plan, func(match string) string {
+		sub := groupList.FindStringSubmatch(match)
+		var labels []string
+		for _, part := range strings.FieldsFunc(sub[1], func(r rune) bool { return r == ',' }) {
+			if lo, hi, ok := strings.Cut(part, "-"); ok {
+				from, _ := strconv.Atoi(lo)
+				to, _ := strconv.Atoi(hi)
+				for id := from; id <= to; id++ {
+					labels = append(labels, labelFor(seen, strconv.Itoa(id)))
+				}
+				continue
+			}
+			labels = append(labels, labelFor(seen, part))
+		}
+		sort.Strings(labels)
+		return "group=(" + strings.Join(labels, ",") + ")"
+	})
 	return plan, len(seen)
+}
+
+var groupList = regexp.MustCompile(`group=\(([0-9,\-]*)\)`)
+
+func labelFor(seen map[string]string, id string) string {
+	if label, ok := seen[id]; ok {
+		return label
+	}
+	return id
+}
+
+func (e *env) expectAbsorbed(rule *rulescript.Rule, plan memo.RelExpr) {
+	e.t.Helper()
+	got, ok := rule.Rewrite(&e.f, plan)
+	if !ok {
+		e.t.Fatalf("%s did not match:\n%s", rule.Name, e.format(plan))
+	}
+	if got != plan {
+		e.t.Fatalf("%s rewrote the plan instead of leaving it unchanged:\n%s\nproducing:\n%s",
+			rule.Name, e.format(plan), e.format(got))
+	}
+}
+
+var columnListToken = regexp.MustCompile(`\(var (\d+)\)|\(item (\d+) |pass=\(([0-9,\-]*)\)|\(scan \(([0-9,\-]*)\)\)|cols=\[([0-9 ]*)\]|group=\(([0-9,\-]*)\)`)
+
+func canonicalColumns(plan string) string {
+	seen := make(map[string]string)
+	name := func(id string) string {
+		if label, ok := seen[id]; ok {
+			return label
+		}
+		label := fmt.Sprintf("c%d", len(seen)+1)
+		seen[id] = label
+		return label
+	}
+	list := func(text, sep string) string {
+		var labels []string
+		for _, part := range strings.FieldsFunc(text, func(r rune) bool { return r == ',' || r == ' ' }) {
+			if lo, hi, ok := strings.Cut(part, "-"); ok {
+				from, _ := strconv.Atoi(lo)
+				to, _ := strconv.Atoi(hi)
+				for id := from; id <= to; id++ {
+					labels = append(labels, name(strconv.Itoa(id)))
+				}
+				continue
+			}
+			labels = append(labels, name(part))
+		}
+		return strings.Join(labels, sep)
+	}
+	return columnListToken.ReplaceAllStringFunc(plan, func(match string) string {
+		sub := columnListToken.FindStringSubmatch(match)
+		switch {
+		case sub[1] != "":
+			return "(var " + name(sub[1]) + ")"
+		case sub[2] != "":
+			return "(item " + name(sub[2]) + " "
+		case strings.HasPrefix(match, "pass="):
+			return "pass=(" + list(sub[3], ",") + ")"
+		case strings.HasPrefix(match, "(scan"):
+			return "(scan (" + list(sub[4], ",") + "))"
+		case strings.HasPrefix(match, "group="):
+			labels := strings.Split(list(sub[6], ","), ",")
+			sort.Strings(labels)
+			return "group=(" + strings.Join(labels, ",") + ")"
+		default:
+			return "cols=[" + list(sub[5], " ") + "]"
+		}
+	})
+}
+
+func (e *env) expectRewriteUpToColumnNames(rule *rulescript.Rule, before, want memo.RelExpr) {
+	e.t.Helper()
+	got, ok := rule.Apply(&e.f, before)
+	if !ok {
+		e.t.Fatalf("%s did not apply to:\n%s", rule.Name, e.format(before))
+	}
+	if g, w := canonicalColumns(e.format(got)), canonicalColumns(e.format(want)); g != w {
+		e.t.Fatalf("%s produced an unexpected plan\ninput:\n%s\ngot:\n%s\nwant:\n%s",
+			rule.Name, e.format(before), g, w)
+	}
 }
 
 func (e *env) expectNoMatch(rule *rulescript.Rule, plan memo.RelExpr) {
@@ -292,3 +395,7 @@ func TestInvariantChecksEnabled(t *testing.T) {
 		t.Skip("memo expression checks are only compiled into crdb_test builds")
 	}
 }
+
+var nativeRootDifferences = map[string]string{}
+
+var nativeAlphaColumns = map[string]int{}

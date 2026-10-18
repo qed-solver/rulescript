@@ -11,50 +11,63 @@ import (
 func TestCalcMerge(t *testing.T) {
 	rule := loadRule(t, "CalcMerge")
 	e := newEnv(t)
-	s, c := e.scan("u", 2)
+	s, sc := e.scan("u", 2)
+	x, y := e.v(sc[0]), e.v(sc[1])
 	b1 := e.f.Metadata().AddColumn("b1", types.Int)
 	b2 := e.f.Metadata().AddColumn("b2", types.Int)
 	t1 := e.f.Metadata().AddColumn("t1", types.Int)
 	t2 := e.f.Metadata().AddColumn("t2", types.Int)
+	t3 := e.f.Metadata().AddColumn("t3", types.Int)
 
-	b1Expr := func() opt.ScalarExpr { return e.f.ConstructPlus(e.v(c[0]), e.v(c[1])) }
-	b2Expr := func() opt.ScalarExpr { return e.f.ConstructMult(e.v(c[0]), e.v(c[1])) }
-	bCond := func() opt.ScalarExpr { return e.f.ConstructGt(e.v(c[0]), e.num(0)) }
-	topItems := func() memo.ProjectionsExpr {
-		return memo.ProjectionsExpr{
-			e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(b1), e.v(b2)), t1),
-			e.f.ConstructProjectionsItem(e.f.ConstructMult(e.v(b1), e.v(b2)), t2),
-		}
-	}
-
-	bottom := e.f.ConstructSelect(s, e.filters(bCond()))
-	mid := e.f.ConstructProject(bottom, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(b1Expr(), b1),
-		e.f.ConstructProjectionsItem(b2Expr(), b2),
-	}, opt.ColSet{})
+	bottom := e.f.ConstructProject(
+		e.f.ConstructSelect(s, e.filters(e.f.ConstructLt(x, y))),
+		memo.ProjectionsExpr{
+			e.f.ConstructProjectionsItem(e.f.ConstructPlus(x, y), b1),
+			e.f.ConstructProjectionsItem(e.f.ConstructMinus(x, y), b2),
+		},
+		opt.ColSet{},
+	)
 	before := e.f.ConstructProject(
-		e.f.ConstructSelect(mid, e.filters(e.f.ConstructLt(e.v(b1), e.v(b2)))),
-		topItems(), opt.ColSet{},
+		e.f.ConstructSelect(bottom, e.filters(e.f.ConstructGt(e.v(b1), e.v(b2)))),
+		memo.ProjectionsExpr{
+			e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(b1), e.v(b2)), t1),
+			e.f.ConstructProjectionsItem(e.f.ConstructMinus(e.v(b1), e.v(b2)), t2),
+		},
+		opt.ColSet{},
 	)
 	want := e.f.ConstructProject(
 		e.f.ConstructSelect(s, e.filters(
-			bCond(),
-			e.f.ConstructLt(b1Expr(), b2Expr()),
+			e.f.ConstructLt(x, y),
+			e.f.ConstructGt(e.f.ConstructPlus(x, y), e.f.ConstructMinus(x, y)),
 		)),
 		memo.ProjectionsExpr{
-			e.f.ConstructProjectionsItem(e.f.ConstructPlus(b1Expr(), b2Expr()), t1),
-			e.f.ConstructProjectionsItem(e.f.ConstructMult(b1Expr(), b2Expr()), t2),
-		}, opt.ColSet{},
+			e.f.ConstructProjectionsItem(
+				e.f.ConstructPlus(e.f.ConstructPlus(x, y), e.f.ConstructMinus(x, y)), t1),
+			e.f.ConstructProjectionsItem(
+				e.f.ConstructMinus(e.f.ConstructPlus(x, y), e.f.ConstructMinus(x, y)), t2),
+		},
+		opt.ColSet{},
 	)
 	e.expectRewrite(rule, before, want)
 
-	e.expectNoMatch(rule, e.f.ConstructProject(
-		e.f.ConstructSelect(mid, e.filters(e.f.ConstructLt(e.v(b1), e.v(b2)))),
-		topItems(), opt.MakeColSet(b1),
-	))
-	e.expectNoMatch(rule, e.f.ConstructProject(
-		e.f.ConstructSelect(bottom, e.filters(e.f.ConstructLt(e.v(b1), e.v(b2)))),
-		topItems(), opt.ColSet{},
-	))
-	e.expectNoMatch(rule, e.f.ConstructProject(mid, topItems(), opt.ColSet{}))
+	threeOutputs := e.f.ConstructProject(
+		e.f.ConstructSelect(bottom, e.filters(e.f.ConstructGt(e.v(b1), e.v(b2)))),
+		memo.ProjectionsExpr{
+			e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(b1), e.v(b2)), t1),
+			e.f.ConstructProjectionsItem(e.f.ConstructMinus(e.v(b1), e.v(b2)), t2),
+			e.f.ConstructProjectionsItem(e.v(b1), t3),
+		},
+		opt.ColSet{},
+	)
+	e.expectNoMatch(rule, threeOutputs)
+
+	noBottomProject := e.f.ConstructProject(
+		e.f.ConstructSelect(s, e.filters(e.f.ConstructGt(x, y))),
+		memo.ProjectionsExpr{
+			e.f.ConstructProjectionsItem(e.f.ConstructPlus(x, y), t1),
+			e.f.ConstructProjectionsItem(e.f.ConstructMinus(x, y), t2),
+		},
+		opt.ColSet{},
+	)
+	e.expectNoMatch(rule, noBottomProject)
 }

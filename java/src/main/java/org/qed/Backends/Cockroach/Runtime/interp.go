@@ -2,14 +2,24 @@ package rulescript
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"reflect"
+	"sort"
 )
 
 func (r *Rule) Apply(f *norm.Factory, e memo.RelExpr) (result memo.RelExpr, ok bool) {
+	result, ok = r.Rewrite(f, e)
+	if ok && result == e {
+		return nil, false
+	}
+	return result, ok
+}
+
+func (r *Rule) Rewrite(f *norm.Factory, e memo.RelExpr) (result memo.RelExpr, ok bool) {
 	if !r.From.mayMatch(e.Op()) {
 		return nil, false
 	}
@@ -53,7 +63,7 @@ func (r *Rule) Apply(f *norm.Factory, e memo.RelExpr) (result memo.RelExpr, ok b
 		(r.From.Op == "set" || r.To.Op == "set" || s.repeatedScans || len(s.cols[r.To.ID]) == len(s.cols[r.From.ID])) {
 		out = s.renameOutput(out, s.cols[r.To.ID], s.cols[r.From.ID])
 	}
-	if !out.Relational().OutputCols.Equals(e.Relational().OutputCols) || out == e {
+	if !out.Relational().OutputCols.Equals(e.Relational().OutputCols) {
 		return nil, false
 	}
 	return out, true
@@ -165,6 +175,7 @@ type state struct {
 	set             *memo.SetPrivate
 	exists          *memo.ExistsPrivate
 	any             *memo.SubqueryPrivate
+	visible         opt.ColSet
 }
 
 func (r *Rel) countScans(counts map[string]int) {
@@ -325,12 +336,27 @@ func sameColumns(a, b []opt.ColumnID) bool {
 	return true
 }
 
+func (s *state) withoutSystemColumns(cols []opt.ColumnID) []opt.ColumnID {
+	md := s.f.Metadata()
+	visible := make([]opt.ColumnID, 0, len(cols))
+	for _, col := range cols {
+		if tab := md.ColumnMeta(col).Table; tab != 0 && md.Table(tab).Column(tab.ColumnOrdinal(col)).Kind() == cat.System {
+			continue
+		}
+		visible = append(visible, col)
+	}
+	return visible
+}
+
 func (s *state) matchRel(p *Rel, e memo.RelExpr) bool {
 	switch p.Op {
 	case "scan":
 		cols := e.Relational().OutputCols.ToList()
 		if p.Arity > 0 && len(cols) != p.Arity {
-			return false
+			cols = s.withoutSystemColumns(cols)
+			if len(cols) != p.Arity {
+				return false
+			}
 		}
 		if p.Unique && !e.Relational().FuncDeps.ColsAreStrictKey(e.Relational().OutputCols) {
 			return false
@@ -396,6 +422,9 @@ func (s *state) matchRel(p *Rel, e memo.RelExpr) bool {
 			return false
 		}
 		s.cols[p.ID] = s.cols[p.Input.ID]
+		saved := s.visible
+		s.visible = sel.Input.Relational().OutputCols
+		defer func() { s.visible = saved }()
 		return s.matchCond(p.Cond, sel.Filters)
 
 	case "project":
@@ -413,11 +442,23 @@ func (s *state) matchRel(p *Rel, e memo.RelExpr) bool {
 			switch expr.Op {
 			case "field":
 				cols, matched := s.matchArgs([]*Rex{expr})
-				if !matched || len(cols) != 1 || !proj.Passthrough.Contains(cols[0]) || passthrough.Contains(cols[0]) {
+				if !matched || len(cols) != 1 {
 					return false
 				}
-				passthrough.Add(cols[0])
-				out[i] = cols[0]
+				if proj.Passthrough.Contains(cols[0]) && !passthrough.Contains(cols[0]) {
+					passthrough.Add(cols[0])
+					out[i] = cols[0]
+					break
+				}
+				if item >= len(proj.Projections) {
+					return false
+				}
+				v, ok := proj.Projections[item].Element.(*memo.VariableExpr)
+				if !ok || v.Col != cols[0] {
+					return false
+				}
+				out[i] = proj.Projections[item].Col
+				item++
 			case "field_alias":
 				cols, matched := s.matchArgs([]*Rex{expr})
 				if !matched || len(cols) != 1 || item >= len(proj.Projections) {
@@ -674,14 +715,25 @@ func (s *state) matchRel(p *Rel, e memo.RelExpr) bool {
 		}
 		left, lok := e.Child(0).(memo.RelExpr)
 		right, rok := e.Child(1).(memo.RelExpr)
-		if !lok || !rok || !s.matchRel(p.Left, left) || !s.matchRel(p.Right, right) {
+		if !lok || !rok || !s.matchRel(p.Left, left) {
 			return false
 		}
+		leftCols := append([]opt.ColumnID{}, s.cols[p.Left.ID]...)
+		if !s.matchRel(p.Right, right) {
+			return false
+		}
+		rightCols := append([]opt.ColumnID{}, s.cols[p.Right.ID]...)
 		private := e.Private().(*memo.SetPrivate)
 		s.reorderEmpty(p.Left, private.LeftCols)
 		s.reorderEmpty(p.Right, private.RightCols)
-		if !private.Ordering.Any() || !sameColumns(private.LeftCols, s.cols[p.Left.ID]) ||
-			!sameColumns(private.RightCols, s.cols[p.Right.ID]) {
+		if p.Left.Op == "empty" {
+			leftCols = append([]opt.ColumnID{}, s.cols[p.Left.ID]...)
+		}
+		if p.Right.Op == "empty" {
+			rightCols = append([]opt.ColumnID{}, s.cols[p.Right.ID]...)
+		}
+		if !private.Ordering.Any() || !sameColumns(private.LeftCols, leftCols) ||
+			!sameColumns(private.RightCols, rightCols) {
 			return false
 		}
 		s.set = private
@@ -694,7 +746,12 @@ func (s *state) matchRel(p *Rel, e memo.RelExpr) bool {
 func (s *state) matchCond(p *Rex, filters memo.FiltersExpr) bool {
 	switch p.Op {
 	case "true":
-		return len(filters) == 0
+		for _, item := range filters {
+			if item.Condition.Op() != opt.TrueOp {
+				return false
+			}
+		}
+		return true
 	case "false", "null", "scalar", "not", "or", "and_scalar", "in_single", "not_in_single", "exists", "any", "field":
 		return len(filters) == 1 && s.matchScalar(p, filters[0].Condition)
 	case "and":
@@ -703,29 +760,30 @@ func (s *state) matchCond(p *Rex, filters memo.FiltersExpr) bool {
 			if !flattenScalarAnd(filters[0].Condition, &leaves) || len(leaves) != len(p.Args) {
 				return false
 			}
-			for i, arg := range p.Args {
-				if !s.matchScalar(arg, leaves[i]) {
-					return false
-				}
-			}
-			return true
+			return s.matchPermutation(len(leaves), func(i, j int) bool {
+				return s.matchScalar(p.Args[i], leaves[j])
+			})
 		}
 		if len(p.Args) != len(filters) {
 			return false
 		}
-		for i, arg := range p.Args {
-			if arg.Op == "and" || arg.Op == "true" || !s.matchCond(arg, filters[i:i+1]) {
-				return false
-			}
-		}
-		return true
+		return s.matchPermutation(len(filters), func(i, j int) bool {
+			arg := p.Args[i]
+			return arg.Op != "and" && arg.Op != "true" && s.matchCond(arg, filters[j:j+1])
+		})
 	case "pred":
 		withProjection := false
 		for _, arg := range p.Args {
 			withProjection = withProjection || arg.Op == "proj"
 		}
 		if withProjection {
-			if len(filters) != 1 || filters[0].Condition.ChildCount() != len(p.Args) {
+			if len(filters) != 1 {
+				return false
+			}
+			if len(p.Args) == 1 && filters[0].Condition.ChildCount() != 1 {
+				return s.matchAppliedProjection(p, filters)
+			}
+			if filters[0].Condition.ChildCount() != len(p.Args) {
 				return false
 			}
 			root := filters[0].Condition
@@ -782,12 +840,166 @@ func (s *state) matchCond(p *Rex, filters memo.FiltersExpr) bool {
 		}
 		allowed := opt.MakeColSet(args...)
 		for i := range filters {
+			if len(args) == 0 && !s.visible.Empty() {
+				if filters[i].ScalarProps().OuterCols.Intersects(s.visible) {
+					return false
+				}
+				continue
+			}
 			if !filters[i].ScalarProps().OuterCols.SubsetOf(allowed) {
 				return false
 			}
 		}
 		s.preds[p.Name] = &predBinding{filters: filters, args: args}
 		return true
+	}
+	return false
+}
+
+type snapshot struct {
+	rels           map[string]memo.RelExpr
+	relOccurrences map[string][]memo.RelExpr
+	empties        map[string]memo.RelExpr
+	values         map[string]memo.RelExpr
+	cols           map[string][]opt.ColumnID
+	preds          map[string]*predBinding
+	scalarPreds    map[string]*projBinding
+	projs          map[string]*projBinding
+	groups         map[string]*projBinding
+	aggs           map[string]*projBinding
+	join           *memo.JoinPrivate
+	set            *memo.SetPrivate
+	exists         *memo.ExistsPrivate
+	any            *memo.SubqueryPrivate
+}
+
+func copyBindings(from map[string]*projBinding) map[string]*projBinding {
+	out := make(map[string]*projBinding, len(from))
+	for k, v := range from {
+		c := *v
+		c.others = append([]*projBinding(nil), v.others...)
+		for i, o := range c.others {
+			oc := *o
+			c.others[i] = &oc
+		}
+		out[k] = &c
+	}
+	return out
+}
+
+func (s *state) snapshot() *snapshot {
+	snap := &snapshot{
+		rels:           make(map[string]memo.RelExpr, len(s.rels)),
+		relOccurrences: make(map[string][]memo.RelExpr, len(s.relOccurrences)),
+		empties:        make(map[string]memo.RelExpr, len(s.empties)),
+		values:         make(map[string]memo.RelExpr, len(s.values)),
+		cols:           make(map[string][]opt.ColumnID, len(s.cols)),
+		preds:          make(map[string]*predBinding, len(s.preds)),
+		scalarPreds:    copyBindings(s.scalarPreds),
+		projs:          copyBindings(s.projs),
+		groups:         copyBindings(s.groups),
+		aggs:           copyBindings(s.aggs),
+		join:           s.join,
+		set:            s.set,
+		exists:         s.exists,
+		any:            s.any,
+	}
+	for k, v := range s.rels {
+		snap.rels[k] = v
+	}
+	for k, v := range s.relOccurrences {
+		snap.relOccurrences[k] = append([]memo.RelExpr(nil), v...)
+	}
+	for k, v := range s.empties {
+		snap.empties[k] = v
+	}
+	for k, v := range s.values {
+		snap.values[k] = v
+	}
+	for k, v := range s.cols {
+		snap.cols[k] = v
+	}
+	for k, v := range s.preds {
+		snap.preds[k] = v
+	}
+	return snap
+}
+
+func (s *state) restore(snap *snapshot) {
+	s.rels, s.relOccurrences, s.empties, s.values, s.cols = snap.rels, snap.relOccurrences, snap.empties, snap.values, snap.cols
+	s.preds, s.scalarPreds, s.projs, s.groups, s.aggs = snap.preds, snap.scalarPreds, snap.projs, snap.groups, snap.aggs
+	s.join, s.set, s.exists, s.any = snap.join, snap.set, snap.exists, snap.any
+}
+
+func (s *state) matchPermutation(n int, match func(i, j int) bool) bool {
+	identity := s.snapshot()
+	ok := true
+	for i := 0; i < n && ok; i++ {
+		ok = match(i, i)
+	}
+	if ok {
+		return true
+	}
+	s.restore(identity)
+	used := make([]bool, n)
+	var search func(i int) bool
+	search = func(i int) bool {
+		if i == n {
+			return true
+		}
+		for j := 0; j < n; j++ {
+			if used[j] {
+				continue
+			}
+			snap := s.snapshot()
+			used[j] = true
+			if match(i, j) && search(i+1) {
+				return true
+			}
+			used[j] = false
+			s.restore(snap)
+		}
+		return false
+	}
+	return search(0)
+}
+
+func scalarSize(e opt.Expr) int {
+	n := 1
+	for i := 0; i < e.ChildCount(); i++ {
+		n += scalarSize(e.Child(i))
+	}
+	return n
+}
+
+func collectSubexpressions(e opt.Expr, root opt.Expr, out *[]opt.ScalarExpr) {
+	if scalar, ok := e.(opt.ScalarExpr); ok && e != root {
+		*out = append(*out, scalar)
+	}
+	for i := 0; i < e.ChildCount(); i++ {
+		collectSubexpressions(e.Child(i), root, out)
+	}
+}
+
+func (s *state) matchAppliedProjection(p *Rex, filters memo.FiltersExpr) bool {
+	if p.Args[0].Op != "proj" {
+		return false
+	}
+	if _, dup := s.preds[p.Name]; dup {
+		return false
+	}
+	root := filters[0].Condition
+	var candidates []opt.ScalarExpr
+	collectSubexpressions(root, root, &candidates)
+	sort.SliceStable(candidates, func(i, j int) bool { return scalarSize(candidates[i]) > scalarSize(candidates[j]) })
+	for _, candidate := range candidates {
+		if usedColumns(candidate).Empty() || !usedColumnsExcept(root, []opt.ScalarExpr{candidate}).Empty() {
+			continue
+		}
+		if s.matchBoundScalar(p.Args[0], candidate, 0, s.projs) {
+			s.preds[p.Name] = &predBinding{filters: filters, operands: []opt.ScalarExpr{candidate}}
+			return true
+		}
 	}
 	return false
 }
@@ -865,7 +1077,14 @@ func (s *state) matchScalar(p *Rex, e opt.ScalarExpr) bool {
 	switch p.Op {
 	case "exists":
 		ex, ok := e.(*memo.ExistsExpr)
-		if !ok || !s.matchRel(p.Input, ex.Input) {
+		if !ok {
+			return false
+		}
+		input := ex.Input
+		if p.Input.Op != "project" {
+			input = existsBody(input)
+		}
+		if !s.matchRel(p.Input, input) {
 			return false
 		}
 		if s.exists != nil && !reflect.DeepEqual(*s.exists, ex.ExistsPrivate) {
@@ -999,6 +1218,21 @@ func (s *state) matchScalar(p *Rex, e opt.ScalarExpr) bool {
 	return false
 }
 
+func existsBody(input memo.RelExpr) memo.RelExpr {
+	for {
+		proj, ok := input.(*memo.ProjectExpr)
+		if !ok {
+			return input
+		}
+		for i := range proj.Projections {
+			if proj.Projections[i].ScalarProps().VolatilitySet.HasVolatile() {
+				return input
+			}
+		}
+		input = proj.Input
+	}
+}
+
 func (s *state) boundProjArgs(args []*Rex) ([]opt.ScalarExpr, bool) {
 	if len(args) == 0 {
 		return nil, false
@@ -1115,7 +1349,14 @@ func (s *state) matchBoundScalar(
 	p *Rex, elem opt.ScalarExpr, col opt.ColumnID, bindings map[string]*projBinding,
 ) bool {
 	args, ok := s.matchArgs(p.Args)
-	if !ok || !usedColumns(elem).SubsetOf(opt.MakeColSet(args...)) {
+	if !ok {
+		return false
+	}
+	if len(args) == 0 && !s.visible.Empty() {
+		if usedColumns(elem).Intersects(s.visible) {
+			return false
+		}
+	} else if !usedColumns(elem).SubsetOf(opt.MakeColSet(args...)) {
 		return false
 	}
 	if p.Scalar != nil && !s.matchScalar(p.Scalar, elem) {
@@ -1356,10 +1597,16 @@ func (s *state) buildRel(p *Rel) memo.RelExpr {
 				if !ok && p.ID == s.outputProjectID {
 					cols = s.rootCols
 				}
-				if i >= len(cols) {
+				var col opt.ColumnID
+				switch {
+				case i < len(cols):
+					col = cols[i]
+				case p.ID != s.outputProjectID:
+					col = s.f.Metadata().AddColumn("alias", args[0].DataType())
+				default:
 					panic(abort{})
 				}
-				item := s.f.ConstructProjectionsItem(args[0], cols[i])
+				item := s.f.ConstructProjectionsItem(args[0], col)
 				items = append(items, item)
 				out[i] = item.Col
 			case "proj":
@@ -1461,7 +1708,18 @@ func (s *state) buildRel(p *Rel) memo.RelExpr {
 		right := s.buildRel(p.Right)
 		rightCols := append([]opt.ColumnID{}, s.cols[p.Right.ID]...)
 		if left.Relational().OutputCols.Intersects(right.Relational().OutputCols) {
-			panic(abort{})
+			fresh := append([]opt.ColumnID{}, rightCols...)
+			for i, col := range rightCols {
+				if left.Relational().OutputCols.Contains(col) {
+					fresh[i] = s.f.Metadata().AddColumn("duplicate", s.f.Metadata().ColumnMeta(col).Type)
+				}
+			}
+			right = s.renameOutput(right, rightCols, fresh)
+			rightCols = fresh
+			s.cols[p.Right.ID] = fresh
+			if left.Relational().OutputCols.Intersects(right.Relational().OutputCols) {
+				panic(abort{})
+			}
 		}
 		s.cols[p.ID] = append(leftCols, rightCols...)
 		on := s.buildCond(p.Cond)

@@ -2,21 +2,24 @@ package rulescript_test
 
 import (
 	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 )
 
 func TestTryRemapSelectOuterCols(t *testing.T) {
 	rule := loadRule(t, "TryRemapSelectOuterCols")
 	e := newEnv(t)
-	s, cols := e.scan("t", 3)
-	positive := func(c opt.ColumnID) memo.RelExpr {
-		return e.f.ConstructSelect(s, e.filters(e.f.ConstructGt(e.v(c), e.num(0))))
-	}
-	equal := e.filters(e.f.ConstructEq(e.v(cols[0]), e.v(cols[1])))
-	e.expectRewrite(rule, e.f.ConstructSelect(positive(cols[0]), equal), e.f.ConstructSelect(positive(cols[1]), equal))
-	e.expectNoMatch(rule, e.f.ConstructSelect(positive(cols[0]),
-		e.filters(e.f.ConstructEq(e.v(cols[0]), e.v(cols[2])))))
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, equal))
+	scan, cols := e.scan("nn3", 3)
+	h := e.f.ConstructEq(e.v(cols[0]), e.num(7))
+	inner := e.f.ConstructSelect(scan, e.filters(h))
+	on := e.f.ConstructEq(e.v(cols[0]), e.v(cols[1]))
+	before := e.f.ConstructSelect(inner, e.filters(on))
+	innerWant := e.f.ConstructSelect(scan, e.filters(e.f.ConstructEq(e.v(cols[1]), e.num(7))))
+	want := e.f.ConstructSelect(innerWant, e.filters(e.f.ConstructEq(e.v(cols[0]), e.v(cols[1]))))
+	e.t.Logf("constructed input: %s", e.format(before))
+	e.expectRewrite(rule, before, want)
+
+	scan2, cols2 := e.scan("nn3", 3)
+	inner2 := e.f.ConstructSelect(scan2, e.filters(e.f.ConstructEq(e.v(cols2[0]), e.num(7))))
+	near := e.f.ConstructSelect(inner2, e.filters(e.f.ConstructEq(e.v(cols2[0]), e.num(0))))
+	e.t.Logf("constructed near miss: %s", e.format(near))
+	e.expectNoMatch(rule, near)
 }

@@ -8,12 +8,23 @@ import (
 
 func TestRewriteLateralSubquery(t *testing.T) {
 	rule := loadRule(t, "RewriteLateralSubquery")
-	e := newEnv(t)
-	l, lc := e.scan("t", 2)
-	r, rc := e.scan("u", 2)
-	on := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[1])))
-	before := e.f.ConstructLeftJoinApply(l, r, on, &memo.JoinPrivate{})
-	e.expectRewrite(rule, before, e.f.ConstructLeftJoin(l, r, on, &memo.JoinPrivate{}))
-	e.expectNoMatch(rule, e.f.ConstructLeftJoin(l, r, on, &memo.JoinPrivate{}))
-	e.expectNoMatch(rule, e.f.ConstructInnerJoinApply(l, r, on, &memo.JoinPrivate{}))
+
+	t.Run("rewrite left apply", func(t *testing.T) {
+		e := newEnv(t)
+		left, lc := e.scan("u", 2)
+		right, rc := e.scan("t", 2)
+		cond := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])))
+		before := e.f.ConstructLeftJoinApply(left, right, cond, &memo.JoinPrivate{})
+		want := e.f.ConstructLeftJoin(left, right, cond, &memo.JoinPrivate{})
+		e.expectRewrite(rule, before, want)
+	})
+
+	t.Run("ordinary left join is unchanged", func(t *testing.T) {
+		e := newEnv(t)
+		left, lc := e.scan("u", 2)
+		right, rc := e.scan("t", 2)
+		cond := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])))
+		plan := e.f.ConstructLeftJoin(left, right, cond, &memo.JoinPrivate{})
+		e.expectNoMatch(rule, plan)
+	})
 }

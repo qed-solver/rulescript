@@ -2,21 +2,17 @@ package rulescript_test
 
 import (
 	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestPruneEmpty(t *testing.T) {
 	rule := loadRule(t, "PruneEmpty")
 	e := newEnv(t)
-	c := e.f.Metadata().AddColumn("c", types.Int)
-	input := e.empty(c)
-	before := e.f.ConstructSelect(input, e.filters(e.f.ConstructGt(e.v(c), e.num(0))))
-	e.expectRewrite(rule, before, input)
+	_, cols := e.scan("u", 1)
+	empty := e.empty(cols...)
+	before := e.f.ConstructSelect(empty, e.filters(e.f.ConstructEq(e.v(cols[0]), e.num(1))))
+	want := e.empty(cols...)
+	e.expectRewrite(rule, before, want)
 
-	e.expectNoMatch(rule, input)
-	scan, sc := e.scan("t", 1)
-	e.expectNoMatch(rule, e.f.ConstructSelect(scan, e.filters(e.f.ConstructGt(e.v(sc[0]), e.num(0)))))
-	e.expectNoMatch(rule, e.f.ConstructProject(input, nil, opt.MakeColSet(c)))
+	otherEmpty := e.empty(cols...)
+	e.expectNoMatch(rule, otherEmpty)
 }

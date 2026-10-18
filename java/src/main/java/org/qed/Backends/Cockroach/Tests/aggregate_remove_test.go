@@ -11,20 +11,25 @@ import (
 func TestAggregateRemove(t *testing.T) {
 	rule := loadRule(t, "AggregateRemove")
 	e := newEnv(t)
-	s, cols := e.scan("u", 1)
-	private := &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(cols[0])}
-	before := e.f.ConstructGroupBy(s, nil, private)
+	if _, err := e.cat.ExecuteDDL("CREATE TABLE nk (a INT, b INT)"); err != nil {
+		t.Fatal(err)
+	}
+	s, sc := e.scan("u", 1)
+	before := e.f.ConstructGroupBy(s, memo.EmptyAggregationsExpr, &memo.GroupingPrivate{
+		GroupingCols: opt.MakeColSet(sc[0]),
+	})
 	e.expectRewrite(rule, before, s)
 
-	ts, tc := e.scan("t", 3)
-	nonKey := e.f.ConstructProject(ts, nil, opt.MakeColSet(tc[1]))
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(nonKey, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(tc[1]),
+	nk, nc := e.scan("nk", 1)
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(nk, memo.EmptyAggregationsExpr, &memo.GroupingPrivate{
+		GroupingCols: opt.MakeColSet(nc[0]),
 	}))
 
-	aggCol := e.f.Metadata().AddColumn("count", types.Int)
-	aggs := memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(cols[0])), aggCol)}
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(s, aggs, private))
+	vc := e.f.Metadata().AddColumn("v", types.Int)
+	vals := e.intValues([]opt.ColumnID{vc}, []int{1}, []int{2})
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(vals, memo.EmptyAggregationsExpr, &memo.GroupingPrivate{
+		GroupingCols: opt.MakeColSet(vc),
+	}))
 
-	e.expectNoMatch(rule, e.f.ConstructDistinctOn(s, nil, private))
+	e.expectNoMatch(rule, e.f.ConstructScalarGroupBy(s, memo.EmptyAggregationsExpr, &memo.GroupingPrivate{}))
 }

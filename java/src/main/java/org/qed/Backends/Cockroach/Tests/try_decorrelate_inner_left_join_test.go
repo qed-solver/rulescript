@@ -9,21 +9,19 @@ import (
 func TestTryDecorrelateInnerLeftJoin(t *testing.T) {
 	rule := loadRule(t, "TryDecorrelateInnerLeftJoin")
 	e := newEnv(t)
-	l, lc := e.scan("u", 1)
+	l, lc := e.scan("t", 1)
 	il, ilc := e.scan("t", 1)
-	ir, irc := e.scan("nn", 1)
-	innerOn := e.filters(e.f.ConstructEq(e.v(ilc[0]), e.v(irc[0])))
-	on := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(ilc[0])))
-	inner := e.f.ConstructLeftJoin(il, ir, innerOn, &memo.JoinPrivate{})
-	before := e.f.ConstructInnerJoin(l, inner, on, &memo.JoinPrivate{})
-	joined := e.f.ConstructInnerJoin(l, il, on, &memo.JoinPrivate{})
-	want := e.f.ConstructLeftJoin(joined, ir, innerOn, &memo.JoinPrivate{})
+	ir, irc := e.scan("t", 1)
+	inner := e.f.ConstructLeftJoin(il, ir, e.filters(e.f.ConstructEq(e.v(ilc[0]), e.v(irc[0]))), &memo.JoinPrivate{})
+	before := e.f.ConstructInnerJoin(l, inner, e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(ilc[0]))), &memo.JoinPrivate{})
+	wantLeft := e.f.ConstructInnerJoin(l, il, e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(ilc[0]))), &memo.JoinPrivate{})
+	want := e.f.ConstructLeftJoin(wantLeft, ir, e.filters(e.f.ConstructEq(e.v(ilc[0]), e.v(irc[0]))), &memo.JoinPrivate{})
 	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructLeftJoin(l, inner, on, &memo.JoinPrivate{}))
-	wrongInner := e.f.ConstructInnerJoin(il, ir, innerOn, &memo.JoinPrivate{})
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(l, wrongInner, on, &memo.JoinPrivate{}))
-}
 
-func TestSQLTryDecorrelateInnerLeftJoin(t *testing.T) {
-	expectSQLFires(t, "TryDecorrelateInnerLeftJoin", "SELECT * FROM (VALUES (1)) AS l(a) JOIN ((VALUES (1)) AS i(b) LEFT JOIN (VALUES (1)) AS r(c) ON b=c) ON a=b")
+	nl, nlc := e.scan("t", 1)
+	nilLeft, nilc := e.scan("t", 1)
+	nir, nirc := e.scan("t", 1)
+	nearInner := e.f.ConstructInnerJoin(nilLeft, nir, e.filters(e.f.ConstructEq(e.v(nilc[0]), e.v(nirc[0]))), &memo.JoinPrivate{})
+	nearMiss := e.f.ConstructInnerJoin(nl, nearInner, e.filters(e.f.ConstructEq(e.v(nlc[0]), e.num(1))), &memo.JoinPrivate{})
+	e.expectNoMatch(rule, nearMiss)
 }

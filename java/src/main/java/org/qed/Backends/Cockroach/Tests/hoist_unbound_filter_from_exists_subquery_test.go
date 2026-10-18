@@ -1,26 +1,26 @@
 package rulescript_test
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestHoistUnboundFilterFromExistsSubquery(t *testing.T) {
-	e := newEnv(t)
 	rule := loadRule(t, "HoistUnboundFilterFromExistsSubquery")
-	outer, _ := e.scan("u", 1)
-	inner, ic := e.scan("t", 1)
-	global := e.f.ConstructEq(e.num(1), e.num(1))
-	other := e.f.ConstructGt(e.v(ic[0]), e.num(0))
-	beforeBody := e.f.ConstructSelect(inner, e.filters(global, other))
-	afterBody := e.f.ConstructSelect(inner, e.filters(other))
-	before := e.f.ConstructSelect(outer, e.filters(e.exists(beforeBody)))
-	want := e.f.ConstructSelect(outer, e.filters(e.exists(afterBody), global))
+	e := newEnv(t)
+	outer, _ := e.scan("u", 2)
+	inner, ic := e.scan("t", 3)
+	unboundRel, _ := e.scan("nn", 2)
+	unbound := e.exists(unboundRel)
+	other := e.f.ConstructEq(e.v(ic[1]), e.num(1))
+	innerBefore := e.f.ConstructSelect(inner, e.filters(unbound, other))
+	innerAfter := e.f.ConstructSelect(inner, e.filters(other))
+	before := e.f.ConstructSelect(outer, e.filters(e.exists(innerBefore)))
+	want := e.f.ConstructSelect(outer, e.filters(e.exists(innerAfter), unbound))
 	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructSelect(outer, e.filters(e.exists(afterBody))))
-	e.expectNoMatch(rule, e.f.ConstructSelect(outer, e.filters(e.exists(
-		e.f.ConstructSelect(inner, e.filters(other, global))))))
-}
-
-func TestSQLHoistUnboundFilterFromExistsSubquery(t *testing.T) {
-	expectSQLFires(t, "HoistUnboundFilterFromExistsSubquery", "SELECT x FROM u WHERE EXISTS (SELECT * FROM (VALUES (1),(2)) AS s(a) WHERE random()>0 AND a>0)")
+	outerCols := outer.Relational().OutputCols.ToList()
+	correlated := e.f.ConstructGt(e.v(outerCols[0]), e.num(3))
+	corrBefore := e.f.ConstructSelect(outer, e.filters(e.exists(e.f.ConstructSelect(inner, e.filters(correlated, other)))))
+	corrWant := e.f.ConstructSelect(outer, e.filters(e.exists(innerAfter), correlated))
+	e.expectRewrite(rule, corrBefore, corrWant)
+	e.expectNoMatch(rule, e.f.ConstructSelect(outer, e.filters(e.exists(inner))))
+	e.expectNoMatch(rule, e.f.ConstructSelect(outer, e.filters(e.exists(innerAfter))))
+	e.expectNoMatch(rule, e.f.ConstructSelect(outer, e.filters(e.f.ConstructNot(e.exists(innerBefore)))))
 }

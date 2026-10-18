@@ -12,27 +12,33 @@ func TestAggregateToSemiJoin(t *testing.T) {
 	e := newEnv(t)
 	l, lc := e.scan("t", 1)
 	r, rc := e.scan("u", 1)
-	rAgg := e.f.ConstructGroupBy(r, nil, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(rc[0])})
-	inner := e.f.ConstructInnerJoin(l, rAgg,
-		e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0]))), &memo.JoinPrivate{})
-	before := e.f.ConstructGroupBy(inner, nil, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(lc[0])})
-	semi := e.f.ConstructSemiJoin(l, r,
-		e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0]))), &memo.JoinPrivate{})
-	want := e.f.ConstructGroupBy(semi, nil, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(lc[0])})
+	rAgg := e.f.ConstructGroupBy(r, memo.EmptyAggregationsExpr, &memo.GroupingPrivate{
+		GroupingCols: opt.MakeColSet(rc[0]),
+	})
+	on := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])))
+	join := e.f.ConstructInnerJoin(l, rAgg, on, &memo.JoinPrivate{})
+	before := e.f.ConstructGroupBy(join, memo.EmptyAggregationsExpr, &memo.GroupingPrivate{
+		GroupingCols: opt.MakeColSet(lc[0]),
+	})
+	semi := e.f.ConstructSemiJoin(l, r, on, &memo.JoinPrivate{})
+	want := e.f.ConstructGroupBy(semi, memo.EmptyAggregationsExpr, &memo.GroupingPrivate{
+		GroupingCols: opt.MakeColSet(lc[0]),
+	})
 	e.expectRewrite(rule, before, want)
 
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(
-		e.f.ConstructInnerJoin(l, rAgg,
-			e.filters(e.f.ConstructLt(e.v(lc[0]), e.v(rc[0]))), &memo.JoinPrivate{}),
-		nil, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(lc[0])}))
+	leftJoin := e.f.ConstructLeftJoin(l, rAgg, on, &memo.JoinPrivate{})
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(leftJoin, memo.EmptyAggregationsExpr, &memo.GroupingPrivate{
+		GroupingCols: opt.MakeColSet(lc[0]),
+	}))
 
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(
-		e.f.ConstructLeftJoin(l, rAgg,
-			e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0]))), &memo.JoinPrivate{}),
-		nil, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(lc[0])}))
+	lt := e.filters(e.f.ConstructLt(e.v(lc[0]), e.v(rc[0])))
+	ltJoin := e.f.ConstructInnerJoin(l, rAgg, lt, &memo.JoinPrivate{})
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(ltJoin, memo.EmptyAggregationsExpr, &memo.GroupingPrivate{
+		GroupingCols: opt.MakeColSet(lc[0]),
+	}))
 
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(
-		e.f.ConstructInnerJoin(l, r,
-			e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0]))), &memo.JoinPrivate{}),
-		nil, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(lc[0])}))
+	rawJoin := e.f.ConstructInnerJoin(l, r, on, &memo.JoinPrivate{})
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(rawJoin, memo.EmptyAggregationsExpr, &memo.GroupingPrivate{
+		GroupingCols: opt.MakeColSet(lc[0]),
+	}))
 }

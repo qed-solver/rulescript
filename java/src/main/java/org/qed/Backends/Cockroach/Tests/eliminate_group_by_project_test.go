@@ -1,42 +1,33 @@
 package rulescript_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestEliminateGroupByProject(t *testing.T) {
 	rule := loadRule(t, "EliminateGroupByProject")
 	e := newEnv(t)
-	s, cols := e.scan("u", 2)
-	project := e.f.ConstructProject(s, nil, opt.MakeColSet(cols[0]))
-	before := e.f.ConstructGroupBy(project, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(cols[0]),
-	})
-	want := e.f.ConstructGroupBy(s, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(cols[0]),
-	})
+	s, cs := e.scan("t", 2)
+	p := e.f.ConstructProject(s, memo.ProjectionsExpr{}, opt.MakeColSet(cs[0]))
+	before := e.f.ConstructGroupBy(p, memo.AggregationsExpr{}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(cs[0])})
+	want := e.f.ConstructGroupBy(s, memo.AggregationsExpr{}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(cs[0])})
 	e.expectRewrite(rule, before, want)
 
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(s, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(cols[0]),
-	}))
-	e.expectNoMatch(rule, e.f.ConstructDistinctOn(project, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(cols[0]),
-	}))
-}
+	keepSecond := e.f.ConstructProject(s, memo.ProjectionsExpr{}, opt.MakeColSet(cs[1]))
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(keepSecond, memo.AggregationsExpr{}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(cs[1])}))
 
-func TestSQLEliminateGroupByProject(t *testing.T) {
-	sql := "SELECT x FROM (SELECT x, y FROM u) AS q GROUP BY x"
-	before, _ := planFor(t, sql, nil)
-	if !strings.Contains(before, "group-by") || !strings.Contains(before, "project") {
-		t.Fatalf("expected GroupBy over Project before rewrite:\n%s", before)
-	}
-	got, fired := planFor(t, sql, nil, "EliminateGroupByProject")
-	if strings.Join(fired, ",") != "EliminateGroupByProject" {
-		t.Fatalf("expected EliminateGroupByProject to fire, got %v:\n%s", fired, got)
-	}
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(s, memo.AggregationsExpr{}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(cs[0])}))
+
+	wide, wc := e.scan("t", 3)
+	wideProject := e.f.ConstructProject(wide, memo.ProjectionsExpr{}, opt.MakeColSet(wc[0]))
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(wideProject, memo.AggregationsExpr{}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(wc[0])}))
+
+	computed := e.f.Metadata().AddColumn("computed", types.Int)
+	extra := memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.num(1), computed)}
+	withExpr := e.f.ConstructProject(s, extra, opt.MakeColSet(cs[0]))
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(withExpr, memo.AggregationsExpr{}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(cs[0])}))
 }

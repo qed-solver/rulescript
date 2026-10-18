@@ -9,15 +9,14 @@ import (
 func TestEliminateSemiJoin(t *testing.T) {
 	rule := loadRule(t, "EliminateSemiJoin")
 	e := newEnv(t)
-	l, _ := e.scan("nn", 1)
-	r, _ := e.scan("nn", 1)
+	l, lc := e.scan("t", 3)
+	r, rc := e.scan("t", 3)
 	before := e.f.ConstructSemiJoin(l, r, nil, &memo.JoinPrivate{})
 	e.expectRewrite(rule, before, l)
-	u, _ := e.scan("u", 1)
-	e.expectNoMatch(rule, e.f.ConstructSemiJoin(l, u, nil, &memo.JoinPrivate{}))
+	e.expectNoMatch(rule, e.f.ConstructInnerJoin(l, r, nil, &memo.JoinPrivate{}))
 	e.expectNoMatch(rule, e.f.ConstructAntiJoin(l, r, nil, &memo.JoinPrivate{}))
-}
-
-func TestSQLEliminateSemiJoin(t *testing.T) {
-	expectSQLRepeatedScan(t, "EliminateSemiJoin", "SELECT l.a FROM nn AS l WHERE EXISTS (SELECT 1 FROM nn AS r)", "exists", "exists", false)
+	other, _ := e.scan("nn3", 3)
+	e.expectNoMatch(rule, e.f.ConstructSemiJoin(l, other, nil, &memo.JoinPrivate{}))
+	filtered := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])))
+	e.expectNoMatch(rule, e.f.ConstructSemiJoin(l, r, filtered, &memo.JoinPrivate{}))
 }

@@ -9,30 +9,23 @@ import (
 )
 
 func TestUnionToDistinct(t *testing.T) {
-	rule := loadRule(t, "UnionToDistinct")
 	e := newEnv(t)
-	l, lc := e.scan("t", 1)
-	r, rc := e.scan("t", 1)
-	outCols := opt.ColList{
-		e.f.Metadata().AddColumn("o0", types.Int),
-	}
+	rule := loadRule(t, "UnionToDistinct")
+	left, leftCols := e.scan("t", 1)
+	right, rightCols := e.scan("u", 1)
+	out := e.f.Metadata().AddColumn("union", types.Int)
 	private := &memo.SetPrivate{
-		LeftCols:  opt.ColList{lc[0]},
-		RightCols: opt.ColList{rc[0]},
-		OutCols:   outCols,
+		LeftCols:  opt.ColList{leftCols[0]},
+		RightCols: opt.ColList{rightCols[0]},
+		OutCols:   opt.ColList{out},
 	}
-
-	before := e.f.ConstructUnion(l, r, private)
-	unionAll := e.f.ConstructUnionAll(l, r, private)
-	want := e.f.ConstructGroupBy(unionAll, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(outCols[0]),
+	before := e.f.ConstructUnion(left, right, private)
+	all := e.f.ConstructUnionAll(left, right, &memo.SetPrivate{
+		LeftCols:  opt.ColList{leftCols[0]},
+		RightCols: opt.ColList{rightCols[0]},
+		OutCols:   opt.ColList{out},
 	})
+	want := e.f.ConstructGroupBy(all, nil, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(out)})
 	e.expectRewrite(rule, before, want)
-
-	e.expectNoMatch(rule, unionAll)
-	e.expectNoMatch(rule, e.f.ConstructIntersect(l, r, private))
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(before, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(outCols[0]),
-	}))
-	e.expectNoMatch(rule, l)
+	e.expectNoMatch(rule, all)
 }

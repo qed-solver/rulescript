@@ -11,20 +11,44 @@ import (
 func TestRemoveLiteralFromGroupExpressions(t *testing.T) {
 	rule := loadRule(t, "RemoveLiteralFromGroupExpressions")
 	e := newEnv(t)
-	s, sc := e.scan("t", 2)
-	c := e.f.Metadata().AddColumn("c", types.Int)
-	mx := e.f.Metadata().AddColumn("mx", types.Int)
-	mn := e.f.Metadata().AddColumn("mn", types.Int)
-	item := e.f.ConstructProjectionsItem(e.num(3), c)
-	aggs := memo.AggregationsExpr{
-		e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(sc[1])), mx),
-		e.f.ConstructAggregationsItem(e.f.ConstructMin(e.v(sc[1])), mn),
-	}
-	keyed := e.f.ConstructProject(s, memo.ProjectionsExpr{item}, opt.MakeColSet(sc[0], sc[1]))
-	before := e.f.ConstructGroupBy(keyed, aggs, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(sc[0], c)})
-	grouped := e.f.ConstructGroupBy(s, aggs, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(sc[0])})
-	want := e.f.ConstructProject(grouped, memo.ProjectionsExpr{item}, opt.MakeColSet(sc[0], mx, mn))
+	scan, cols := e.scan("t", 2)
+	constantCol := e.f.Metadata().AddColumn("constant", types.Int)
+	agg1 := e.f.Metadata().AddColumn("sum", types.Int)
+	agg2 := e.f.Metadata().AddColumn("max", types.Int)
+	keyInput := e.f.ConstructProject(scan,
+		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.num(7), constantCol)},
+		opt.MakeColSet(cols...),
+	)
+	before := e.f.ConstructGroupBy(keyInput,
+		memo.AggregationsExpr{
+			e.f.ConstructAggregationsItem(e.f.ConstructSumInt(e.v(cols[1])), agg1),
+			e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(cols[1])), agg2),
+		},
+		&memo.GroupingPrivate{GroupingCols: opt.MakeColSet(cols[0], constantCol)},
+	)
+	reduced := e.f.ConstructGroupBy(scan,
+		memo.AggregationsExpr{
+			e.f.ConstructAggregationsItem(e.f.ConstructSumInt(e.v(cols[1])), agg1),
+			e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(cols[1])), agg2),
+		},
+		&memo.GroupingPrivate{GroupingCols: opt.MakeColSet(cols[0])},
+	)
+	want := e.f.ConstructProject(reduced,
+		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.num(7), constantCol)},
+		opt.MakeColSet(cols[0], agg1, agg2),
+	)
 	e.expectRewrite(rule, before, want)
 
-	e.expectNoMatch(rule, grouped)
+	nearInput := e.f.ConstructProject(scan,
+		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.num(7), constantCol)},
+		opt.MakeColSet(cols...),
+	)
+	near := e.f.ConstructGroupBy(nearInput,
+		memo.AggregationsExpr{
+			e.f.ConstructAggregationsItem(e.f.ConstructSumInt(e.v(cols[1])), agg1),
+			e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(cols[1])), agg2),
+		},
+		&memo.GroupingPrivate{GroupingCols: opt.MakeColSet(cols[0], constantCol, cols[1])},
+	)
+	e.expectNoMatch(rule, near)
 }

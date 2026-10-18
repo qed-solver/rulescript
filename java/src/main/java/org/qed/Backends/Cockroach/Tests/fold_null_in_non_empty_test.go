@@ -9,23 +9,22 @@ import (
 func TestFoldNullInNonEmpty(t *testing.T) {
 	rule := loadRule(t, "FoldNullInNonEmpty")
 	e := newEnv(t)
-	s, cols := e.scan("u", 2)
-	nullInt := e.f.ConstructNull(types.Int)
+	src, cols := e.scan("t", 2)
+	a, b := e.v(cols[0]), e.v(cols[1])
+	null := e.f.ConstructNull(types.Int)
 	nullBool := e.f.ConstructNull(types.Bool)
-	first := e.f.ConstructEq(nullInt, e.v(cols[0]))
-	second := e.f.ConstructEq(nullInt, e.v(cols[1]))
-	e.expectRewrite(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructOr(first, second))),
-		e.f.ConstructSelect(s, e.filters(nullBool)))
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructAnd(first, second))))
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructOr(first, e.f.ConstructEq(e.v(cols[1]), nullInt)))))
-	mixedInt := e.f.Metadata().AddColumn("mixed_int", types.Int)
-	mixedBool := e.f.Metadata().AddColumn("mixed_bool", types.Bool)
-	mixed := e.empty(mixedInt, mixedBool)
-	e.expectNoMatch(rule, e.f.ConstructSelect(mixed, e.filters(e.f.ConstructOr(
-		e.f.ConstructEq(nullInt, e.v(mixedInt)),
-		e.f.ConstructEq(nullBool, e.v(mixedBool))))))
-}
+	inTuple := e.f.ConstructOr(
+		e.f.ConstructEq(null, a),
+		e.f.ConstructEq(null, b),
+	)
+	before := e.f.ConstructSelect(src, e.filters(inTuple))
+	want := e.f.ConstructSelect(src, e.filters(nullBool))
+	e.expectRewrite(rule, before, want)
 
-func TestSQLFoldNullInNonEmpty(t *testing.T) {
-	expectSQLFires(t, "FoldNullInNonEmpty", "SELECT * FROM (SELECT x, y FROM u) q WHERE NULL::INT = q.x OR NULL::INT = q.y")
+	wrongOp := e.f.ConstructOr(
+		e.f.ConstructEq(null, a),
+		e.f.ConstructLt(null, b),
+	)
+	e.expectNoMatch(rule, e.f.ConstructSelect(src, e.filters(wrongOp)))
+	e.expectNoMatch(rule, e.f.ConstructSelect(src, e.filters(e.f.ConstructEq(null, a))))
 }

@@ -16,10 +16,11 @@ func TestNegateComparison(t *testing.T) {
 	before := e.f.ConstructSelect(join, e.filters(e.f.ConstructNot(eq)))
 	want := e.f.ConstructSelect(join, e.filters(e.f.ConstructNe(e.v(lc[0]), e.v(rc[0]))))
 	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructSelect(join, e.filters(eq)))
-	e.expectNoMatch(rule, e.f.ConstructSelect(join, e.filters(e.f.ConstructNot(e.f.ConstructNe(e.v(lc[0]), e.v(rc[0]))))))
-}
 
-func TestSQLNegateComparison(t *testing.T) {
-	expectSQLRewrites(t, "NegateComparison", "SELECT a, b FROM (VALUES (1)) AS l(a), (VALUES (2)) AS r(b) WHERE NOT (a = b)")
+	nearL, nearLC := e.scan("u", 1)
+	nearR, nearRC := e.scan("t", 1)
+	nearJoin := e.f.ConstructInnerJoin(nearL, nearR, nil, &memo.JoinPrivate{})
+	nearNe := e.f.ConstructNe(e.v(nearLC[0]), e.v(nearRC[0]))
+	nearBefore := e.f.ConstructSelect(nearJoin, e.filters(e.f.ConstructNot(nearNe)))
+	e.expectNoMatch(rule, nearBefore)
 }

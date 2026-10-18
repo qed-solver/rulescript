@@ -3,7 +3,9 @@ package rulescript_test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestFilterRemoveIsNotDistinctFrom(t *testing.T) {
@@ -11,21 +13,26 @@ func TestFilterRemoveIsNotDistinctFrom(t *testing.T) {
 	e := newEnv(t)
 	l, lc := e.scan("u", 1)
 	r, rc := e.scan("t", 1)
-	join := e.f.ConstructInnerJoin(l, r, e.filters(), &memo.JoinPrivate{})
-	before := e.f.ConstructSelect(join, e.filters(e.f.ConstructIs(e.v(lc[0]), e.v(rc[0]))))
-	want := e.f.ConstructSelect(join, e.filters(e.f.ConstructOr(
+	join := e.f.ConstructInnerJoin(l, r, nil, &memo.JoinPrivate{})
+	x := e.v(lc[0])
+	y := e.v(rc[0])
+	nullInt := func() opt.ScalarExpr { return e.f.ConstructNull(types.Int) }
+	before := e.f.ConstructSelect(join, e.filters(e.f.ConstructIs(x, y)))
+	after := e.f.ConstructSelect(join, e.filters(e.f.ConstructOr(
 		e.f.ConstructAnd(
-			e.f.ConstructIs(e.v(lc[0]), memo.NullSingleton),
-			e.f.ConstructIs(e.v(rc[0]), memo.NullSingleton),
+			e.f.ConstructIs(x, nullInt()),
+			e.f.ConstructIs(y, nullInt()),
 		),
-		e.f.ConstructIs(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])), memo.TrueSingleton),
+		e.f.ConstructIs(e.f.ConstructEq(x, y), e.f.ConstructTrue()),
 	)))
-	e.expectRewrite(rule, before, want)
+	e.expectRewrite(rule, before, after)
 
-	e.expectNoMatch(rule, e.f.ConstructSelect(join, e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])))))
+	e.expectNoMatch(rule, e.f.ConstructSelect(join, e.filters(e.f.ConstructEq(x, y))))
 
-	left := e.f.ConstructLeftJoin(l, r, e.filters(e.f.ConstructTrue()), &memo.JoinPrivate{})
-	e.expectNoMatch(rule, e.f.ConstructSelect(left, e.filters(e.f.ConstructIs(e.v(lc[0]), e.v(rc[0])))))
+	leftJoin := e.f.ConstructLeftJoin(l, r, nil, &memo.JoinPrivate{})
+	e.expectNoMatch(rule, e.f.ConstructSelect(leftJoin, e.filters(e.f.ConstructIs(x, y))))
 
-	e.expectNoMatch(rule, e.f.ConstructSelect(l, e.filters(e.f.ConstructIs(e.v(lc[0]), e.v(lc[0])))))
+	wide, wc := e.scan("t", 2)
+	wideJoin := e.f.ConstructInnerJoin(wide, r, nil, &memo.JoinPrivate{})
+	e.expectNoMatch(rule, e.f.ConstructSelect(wideJoin, e.filters(e.f.ConstructIs(e.v(wc[0]), e.v(rc[0])))))
 }

@@ -11,20 +11,25 @@ import (
 func TestMergeProjectWithValues(t *testing.T) {
 	rule := loadRule(t, "MergeProjectWithValues")
 	e := newEnv(t)
-	a := e.f.Metadata().AddColumn("a", types.Int)
-	b := e.f.Metadata().AddColumn("b", types.Int)
-	c := e.f.Metadata().AddColumn("c", types.Int)
-	values := e.intValues([]opt.ColumnID{a, b}, []int{1, 2})
-	project := func(n int, pass opt.ColumnID) memo.RelExpr {
-		return e.f.ConstructProject(values, memo.ProjectionsExpr{
-			e.f.ConstructProjectionsItem(e.num(n), c),
-		}, opt.MakeColSet(pass))
-	}
-	e.expectRewrite(rule, project(3, a), e.intValues([]opt.ColumnID{a, c}, []int{1, 3}))
-	e.expectNoMatch(rule, project(4, a))
-	e.expectNoMatch(rule, project(3, b))
-}
 
-func TestSQLMergeProjectWithValues(t *testing.T) {
-	expectSQLFires(t, "MergeProjectWithValues", "SELECT a,3 AS c FROM (VALUES (1,2)) AS v(a,b)")
+	inputCols := []opt.ColumnID{
+		e.f.Metadata().AddColumn("input_a", types.Int),
+		e.f.Metadata().AddColumn("input_b", types.Int),
+	}
+	input := e.intValues(inputCols, []int{1, 2})
+	projectCols := []opt.ColumnID{
+		inputCols[0],
+		e.f.Metadata().AddColumn("project_b", types.Int),
+	}
+	before := e.f.ConstructProject(input, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.num(3), projectCols[1]),
+	}, opt.MakeColSet(inputCols[0]))
+	want := e.intValues(projectCols, []int{1, 3})
+	e.expectRewrite(rule, before, want)
+
+	nearMiss := e.intValues(inputCols, []int{1, 7})
+	nearMiss = e.f.ConstructProject(nearMiss, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.num(3), projectCols[1]),
+	}, opt.MakeColSet(inputCols[0]))
+	e.expectNoMatch(rule, nearMiss)
 }

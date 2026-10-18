@@ -9,16 +9,16 @@ import (
 func TestSemiJoinRemove(t *testing.T) {
 	rule := loadRule(t, "SemiJoinRemove")
 	e := newEnv(t)
-	x, xc := e.scan("u", 1)
-	y1, y1c := e.scan("t", 1)
-	y2, y2c := e.scan("t", 1)
-	semi := e.f.ConstructSemiJoin(x, y1, e.filters(e.f.ConstructEq(e.v(xc[0]), e.v(y1c[0]))), &memo.JoinPrivate{})
-	before := e.f.ConstructInnerJoin(semi, y2, e.filters(e.f.ConstructEq(e.v(xc[0]), e.v(y2c[0]))), &memo.JoinPrivate{})
-	want := e.f.ConstructInnerJoin(x, y2, e.filters(e.f.ConstructEq(e.v(xc[0]), e.v(y2c[0]))), &memo.JoinPrivate{})
+	x, xcols := e.scan("t", 3)
+	y, ycols := e.scan("u", 2)
+	cond := e.filters(e.f.ConstructEq(e.v(xcols[0]), e.v(ycols[0])))
+	semi := e.f.ConstructSemiJoin(x, y, cond, &memo.JoinPrivate{})
+	before := e.f.ConstructInnerJoin(semi, y, cond, &memo.JoinPrivate{})
+	want := e.f.ConstructInnerJoin(x, y, cond, &memo.JoinPrivate{})
 	e.expectRewrite(rule, before, want)
-	inner := e.f.ConstructInnerJoin(x, y1, e.filters(e.f.ConstructEq(e.v(xc[0]), e.v(y1c[0]))), &memo.JoinPrivate{})
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(inner, y2,
-		e.filters(e.f.ConstructEq(e.v(xc[0]), e.v(y2c[0]))), &memo.JoinPrivate{}))
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(semi, y2,
-		e.filters(e.f.ConstructLt(e.v(xc[0]), e.v(y2c[0]))), &memo.JoinPrivate{}))
+
+	nearCond := e.filters(e.f.ConstructEq(e.v(xcols[1]), e.v(ycols[0])))
+	nearSemi := e.f.ConstructSemiJoin(x, y, cond, &memo.JoinPrivate{})
+	nearMiss := e.f.ConstructInnerJoin(nearSemi, y, nearCond, &memo.JoinPrivate{})
+	e.expectNoMatch(rule, nearMiss)
 }

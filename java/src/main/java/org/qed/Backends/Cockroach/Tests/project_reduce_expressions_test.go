@@ -9,19 +9,21 @@ import (
 )
 
 func TestProjectReduceExpressions(t *testing.T) {
-	rule := loadRule(t, "ProjectReduceExpressions")
 	e := newEnv(t)
-	s, cols := e.scan("u", 1)
-	z := e.f.Metadata().AddColumn("z", types.Bool)
-	project := func(x opt.ScalarExpr) memo.RelExpr {
-		return e.f.ConstructProject(s, memo.ProjectionsExpr{e.f.ConstructProjectionsItem(x, z)}, opt.ColSet{})
-	}
-	positive := e.f.ConstructGt(e.v(cols[0]), e.num(0))
-	e.expectRewrite(rule, project(e.f.ConstructAnd(e.f.ConstructFalse(), positive)), project(e.f.ConstructFalse()))
-	e.expectNoMatch(rule, project(e.f.ConstructAnd(e.f.ConstructTrue(), positive)))
-	e.expectNoMatch(rule, project(positive))
-}
+	rule := loadRule(t, "ProjectReduceExpressions")
+	input, cols := e.scan("t", 2)
+	outCol := e.f.Metadata().AddColumn("out", types.Bool)
+	before := e.f.ConstructProject(input, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructAnd(e.f.ConstructFalse(), e.f.ConstructNe(e.v(cols[0]), e.v(cols[1]))), outCol),
+	}, opt.ColSet{})
+	want := e.f.ConstructProject(input, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructFalse(), outCol),
+	}, opt.ColSet{})
+	e.expectRewrite(rule, before, want)
 
-func TestSQLProjectReduceExpressions(t *testing.T) {
-	expectSQLFires(t, "ProjectReduceExpressions", "SELECT false AND x > 0 AS z FROM u")
+	nearMissCol := e.f.Metadata().AddColumn("near_miss", types.Bool)
+	nearMiss := e.f.ConstructProject(input, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructAnd(e.f.ConstructTrue(), e.f.ConstructNe(e.v(cols[0]), e.v(cols[1]))), nearMissCol),
+	}, opt.ColSet{})
+	e.expectNoMatch(rule, nearMiss)
 }

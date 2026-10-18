@@ -11,33 +11,59 @@ import (
 func TestMarkToSemiOrAntiJoin(t *testing.T) {
 	rule := loadRule(t, "MarkToSemiOrAntiJoin")
 	e := newEnv(t)
-	md := e.f.Metadata()
-	l1, l1c := e.scan("u", 1)
-	r1, r1c := e.scan("t", 1)
-	l2, l2c := e.scan("u", 1)
-	r2, r2c := e.scan("t", 1)
-	semi := e.f.ConstructSemiJoin(l1, r1, e.filters(e.f.ConstructEq(e.v(l1c[0]), e.v(r1c[0]))), &memo.JoinPrivate{})
-	anti := e.f.ConstructAntiJoin(l2, r2, e.filters(e.f.ConstructEq(e.v(l2c[0]), e.v(r2c[0]))), &memo.JoinPrivate{})
-	yes, no := md.AddColumn("yes", types.Bool), md.AddColumn("no", types.Bool)
-	semiMarked := e.f.ConstructProject(semi, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructTrue(), yes),
-	}, opt.MakeColSet(l1c[0]))
-	antiMarked := e.f.ConstructProject(anti, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructFalse(), no),
-	}, opt.MakeColSet(l2c[0]))
-	out, marker := md.AddColumn("out", types.Int), md.AddColumn("marker", types.Bool)
-	marked := e.f.ConstructUnionAll(semiMarked, antiMarked, &memo.SetPrivate{
-		LeftCols: opt.ColList{l1c[0], yes}, RightCols: opt.ColList{l2c[0], no}, OutCols: opt.ColList{out, marker},
+	l, lc := e.scan("u", 1)
+	r, rc := e.scan("t", 1)
+	cond := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])))
+	semi := e.f.ConstructSemiJoin(l, r, cond, &memo.JoinPrivate{})
+	anti := e.f.ConstructAntiJoin(l, r, cond, &memo.JoinPrivate{})
+	semiLeftCol := e.f.Metadata().AddColumn("semi-left", e.f.Metadata().ColumnMeta(lc[0]).Type)
+	antiLeftCol := e.f.Metadata().AddColumn("anti-left", e.f.Metadata().ColumnMeta(lc[0]).Type)
+	semiMarker := e.f.Metadata().AddColumn("marker", types.Bool)
+	antiMarker := e.f.Metadata().AddColumn("marker", types.Bool)
+	left := e.f.ConstructProject(semi, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.v(lc[0]), semiLeftCol), e.f.ConstructProjectionsItem(memo.TrueSingleton, semiMarker),
+	}, opt.ColSet{})
+	right := e.f.ConstructProject(anti, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.v(lc[0]), antiLeftCol), e.f.ConstructProjectionsItem(memo.FalseSingleton, antiMarker),
+	}, opt.ColSet{})
+	marker := e.f.Metadata().AddColumn("union-marker", types.Bool)
+	unionCol := e.f.Metadata().AddColumn("union-left", e.f.Metadata().ColumnMeta(lc[0]).Type)
+	union := e.f.ConstructUnionAll(left, right, &memo.SetPrivate{
+		LeftCols: opt.ColList{semiLeftCol, semiMarker}, RightCols: opt.ColList{antiLeftCol, antiMarker}, OutCols: opt.ColList{unionCol, marker},
 	})
-	z := md.AddColumn("z", types.Int)
-	before := e.f.ConstructProject(
-		e.f.ConstructSelect(marked, e.filters(e.v(marker), e.f.ConstructGt(e.v(out), e.num(0)))),
-		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.f.ConstructUnaryMinus(e.v(out)), z)}, opt.ColSet{})
-	want := e.f.ConstructProject(
-		e.f.ConstructSelect(semi, e.filters(e.f.ConstructGt(e.v(l1c[0]), e.num(0)))),
-		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.f.ConstructUnaryMinus(e.v(l1c[0])), z)}, opt.ColSet{})
-	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructProject(
-		e.f.ConstructSelect(marked, e.filters(e.f.ConstructGt(e.v(out), e.num(0)))),
-		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.f.ConstructUnaryMinus(e.v(out)), z)}, opt.ColSet{}))
+	residual := e.f.ConstructNot(e.v(unionCol))
+	input := e.f.ConstructSelect(union, e.filters(e.v(marker), residual))
+	projectCol := e.f.Metadata().AddColumn("projected", e.f.Metadata().ColumnMeta(lc[0]).Type)
+	before := e.f.ConstructProject(input, memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.v(unionCol), projectCol)}, opt.ColSet{})
+
+	wantSemi := e.f.ConstructSemiJoin(l, r, cond, &memo.JoinPrivate{})
+	wantFilter := e.f.ConstructSelect(wantSemi, e.filters(e.f.ConstructNot(e.v(lc[0]))))
+	wantCol := e.f.Metadata().AddColumn("projected", e.f.Metadata().ColumnMeta(lc[0]).Type)
+	want := e.f.ConstructProject(wantFilter, memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.v(lc[0]), wantCol)}, opt.ColSet{})
+	e.expectRewriteUpToFreshColumns(rule, before, want)
+
+	nearL, nearLC := e.scan("u", 1)
+	nearR, nearRC := e.scan("t", 1)
+	nearCond := e.filters(e.f.ConstructEq(e.v(nearLC[0]), e.v(nearRC[0])))
+	nearSemi := e.f.ConstructSemiJoin(nearL, nearR, nearCond, &memo.JoinPrivate{})
+	nearAnti := e.f.ConstructAntiJoin(nearL, nearR, nearCond, &memo.JoinPrivate{})
+	nearSemiLeftCol := e.f.Metadata().AddColumn("semi-left", e.f.Metadata().ColumnMeta(nearLC[0]).Type)
+	nearAntiLeftCol := e.f.Metadata().AddColumn("anti-left", e.f.Metadata().ColumnMeta(nearLC[0]).Type)
+	nearSemiMarker := e.f.Metadata().AddColumn("marker", types.Bool)
+	nearAntiMarker := e.f.Metadata().AddColumn("marker", types.Bool)
+	nearLeft := e.f.ConstructProject(nearSemi, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.v(nearLC[0]), nearSemiLeftCol), e.f.ConstructProjectionsItem(memo.TrueSingleton, nearSemiMarker),
+	}, opt.ColSet{})
+	nearRight := e.f.ConstructProject(nearAnti, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.v(nearLC[0]), nearAntiLeftCol), e.f.ConstructProjectionsItem(memo.FalseSingleton, nearAntiMarker),
+	}, opt.ColSet{})
+	nearMarker := e.f.Metadata().AddColumn("union-marker", types.Bool)
+	nearUnionCol := e.f.Metadata().AddColumn("union-left", e.f.Metadata().ColumnMeta(nearLC[0]).Type)
+	nearUnion := e.f.ConstructUnionAll(nearLeft, nearRight, &memo.SetPrivate{
+		LeftCols: opt.ColList{nearSemiLeftCol, nearSemiMarker}, RightCols: opt.ColList{nearAntiLeftCol, nearAntiMarker}, OutCols: opt.ColList{nearUnionCol, nearMarker},
+	})
+	nearInput := e.f.ConstructSelect(nearUnion, e.filters(e.v(nearMarker)))
+	nearProjectCol := e.f.Metadata().AddColumn("projected", e.f.Metadata().ColumnMeta(nearLC[0]).Type)
+	nearBefore := e.f.ConstructProject(nearInput, memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.v(nearUnionCol), nearProjectCol)}, opt.ColSet{})
+	e.expectNoMatch(rule, nearBefore)
 }

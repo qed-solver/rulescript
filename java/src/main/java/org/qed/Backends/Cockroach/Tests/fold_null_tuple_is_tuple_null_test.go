@@ -3,22 +3,23 @@ package rulescript_test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
+func nullIsNull(e *env) opt.ScalarExpr {
+	return e.f.ConstructIs(e.f.ConstructNull(types.Int), memo.NullSingleton)
+}
+
 func TestFoldNullTupleIsTupleNull(t *testing.T) {
 	rule := loadRule(t, "FoldNullTupleIsTupleNull")
 	e := newEnv(t)
-	s, _ := e.scan("u", 1)
-	nullInt := e.f.ConstructNull(types.Int)
-	isNull := e.f.ConstructIs(nullInt, memo.NullSingleton)
-	isNotNull := e.f.ConstructIsNot(nullInt, memo.NullSingleton)
-	e.expectRewrite(rule, e.f.ConstructSelect(s, e.filters(isNull, isNull)), s)
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(isNull)))
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(isNull, isNotNull)))
-}
-
-func TestSQLFoldNullTupleIsTupleNull(t *testing.T) {
-	expectSQLFires(t, "FoldNullTupleIsTupleNull", "SELECT x FROM u WHERE NULL IS NULL AND NULL IS NULL")
+	src, _ := e.scan("t", 1)
+	before := e.f.ConstructSelect(src, e.filters(e.f.ConstructAnd(nullIsNull(e), nullIsNull(e))))
+	want := src
+	e.expectRewrite(rule, before, want)
+	e.expectNoMatch(rule, e.f.ConstructSelect(src, e.filters(e.f.ConstructOr(nullIsNull(e), nullIsNull(e)))))
+	e.expectNoMatch(rule, e.f.ConstructSelect(src, e.filters(e.f.ConstructAnd(nullIsNull(e), e.f.ConstructIs(e.num(1), memo.NullSingleton)))))
+	e.expectNoMatch(rule, e.f.ConstructSelect(src, e.filters(nullIsNull(e))))
 }

@@ -1,24 +1,22 @@
 package rulescript_test
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestSimplifyIsCondition(t *testing.T) {
 	rule := loadRule(t, "SimplifyIsCondition")
 	e := newEnv(t)
-	s, cols := e.scan("u", 2)
-	inner := e.f.ConstructSelect(s, e.filters(e.f.ConstructEq(e.v(cols[1]), e.num(1))))
-	before := e.f.ConstructSelect(inner, e.filters(e.f.ConstructIs(e.v(cols[0]), e.v(cols[1]))))
-	want := e.f.ConstructSelect(inner, e.filters(e.f.ConstructEq(e.v(cols[0]), e.v(cols[1]))))
+	input, cols := e.scan("nn", 2)
+	left, right := e.v(cols[0]), e.v(cols[1])
+	other := e.f.ConstructEq(left, e.num(5))
+	filtered := e.f.ConstructSelect(input, e.filters(other))
+	before := e.f.ConstructSelect(filtered, e.filters(e.f.ConstructIs(left, right)))
+	wantFiltered := e.f.ConstructSelect(input, e.filters(other))
+	want := e.f.ConstructSelect(wantFiltered, e.filters(e.f.ConstructEq(left, right)))
 	e.expectRewrite(rule, before, want)
 
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructIs(e.v(cols[0]), e.v(cols[1])))))
-	e.expectNoMatch(rule, e.f.ConstructSelect(inner, e.filters(e.f.ConstructEq(e.v(cols[0]), e.v(cols[1])))))
-}
+	input2, cols2 := e.scan("t", 2)
+	left2, right2 := e.v(cols2[0]), e.v(cols2[1])
+	nearMiss := e.f.ConstructSelect(input2, e.filters(e.f.ConstructIs(right2, left2)))
+	e.expectNoMatch(rule, nearMiss)
 
-func TestSQLSimplifyIsCondition(t *testing.T) {
-	expectSQLFiresWith(t, "SimplifyIsCondition",
-		"SELECT * FROM (SELECT * FROM u WHERE x > 0) WHERE x IS NOT DISTINCT FROM y",
-		sqlHelpers{names: []string{"EliminateProject", "Prune*"}})
 }

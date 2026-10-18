@@ -11,33 +11,35 @@ import (
 func TestFilterAggregateTranspose(t *testing.T) {
 	rule := loadRule(t, "FilterAggregateTranspose")
 	e := newEnv(t)
-	a, ac := e.scan("t", 1)
-	b, bc := e.scan("u", 1)
-	base := e.f.ConstructInnerJoin(a, b, nil, &memo.JoinPrivate{})
-	fcol := e.f.Metadata().AddColumn("f", types.Int)
-	aggs := memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(bc[0])), fcol)}
-	aggsA := memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(ac[0])), fcol)}
-	private := &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(ac[0])}
-	p := e.f.ConstructGt(e.v(ac[0]), e.num(1))
-	qa := e.f.ConstructLt(e.v(ac[0]), e.num(5))
-	qb := e.f.ConstructGt(e.v(fcol), e.num(2))
-	before := e.f.ConstructSelect(
-		e.f.ConstructGroupBy(base, aggs, private),
-		e.filters(e.f.ConstructAnd(p, e.f.ConstructAnd(qa, qb))),
-	)
+	l, lc := e.scan("u", 1)
+	r, rc := e.scan("t", 1)
+	join := e.f.ConstructInnerJoin(l, r, nil, &memo.JoinPrivate{})
+	sCol := e.f.Metadata().AddColumn("s", types.Int)
+	agg := func(input memo.RelExpr) memo.RelExpr {
+		return e.f.ConstructGroupBy(input, memo.AggregationsExpr{
+			e.f.ConstructAggregationsItem(e.f.ConstructSum(e.v(rc[0])), sCol),
+		}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(lc[0])})
+	}
+	keyPred := e.f.ConstructGt(e.v(lc[0]), e.num(1))
+	keyLess := e.f.ConstructLt(e.v(lc[0]), e.num(10))
+	sumPred := e.f.ConstructGt(e.v(sCol), e.num(5))
+	before := e.f.ConstructSelect(agg(join), e.filters(
+		e.f.ConstructAnd(keyPred, e.f.ConstructAnd(keyLess, sumPred)),
+	))
 	want := e.f.ConstructSelect(
-		e.f.ConstructGroupBy(e.f.ConstructSelect(base, e.filters(p)), aggs, private),
-		e.filters(qa, qb),
+		agg(e.f.ConstructSelect(join, e.filters(keyPred))),
+		e.filters(keyLess, sumPred),
 	)
 	e.expectRewrite(rule, before, want)
 
-	e.expectNoMatch(rule, e.f.ConstructSelect(e.f.ConstructGroupBy(base, aggs, private), e.filters(p)))
+	sumFirst := e.f.ConstructGt(e.v(sCol), e.num(1))
+	e.expectNoMatch(rule, e.f.ConstructSelect(agg(join), e.filters(
+		e.f.ConstructAnd(sumFirst, e.f.ConstructAnd(keyLess, sumPred)),
+	)))
 	e.expectNoMatch(rule, e.f.ConstructSelect(
-		e.f.ConstructGroupBy(base, aggs, private),
-		e.filters(e.f.ConstructOr(p, e.f.ConstructAnd(qa, qb))),
-	))
-	e.expectNoMatch(rule, e.f.ConstructSelect(
-		e.f.ConstructGroupBy(a, aggsA, private),
-		e.filters(e.f.ConstructAnd(p, e.f.ConstructAnd(qa, qb))),
+		e.f.ConstructGroupBy(e.f.ConstructLeftJoin(l, r, nil, &memo.JoinPrivate{}), memo.AggregationsExpr{
+			e.f.ConstructAggregationsItem(e.f.ConstructSum(e.v(rc[0])), sCol),
+		}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(lc[0])}),
+		e.filters(e.f.ConstructAnd(keyPred, e.f.ConstructAnd(keyLess, sumPred))),
 	))
 }

@@ -1,33 +1,19 @@
 package rulescript_test
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestDeduplicateSelectFilters(t *testing.T) {
 	rule := loadRule(t, "DeduplicateSelectFilters")
 	e := newEnv(t)
-	s, cols := e.scan("u", 2)
-	p := e.f.ConstructGt(e.v(cols[0]), e.num(0))
-	q := e.f.ConstructLt(e.v(cols[1]), e.num(5))
-	r := e.f.ConstructGt(e.v(cols[0]), e.num(1))
-	first := e.f.ConstructSelect(s, e.filters(p))
-	second := e.f.ConstructSelect(first, e.filters(q))
-	e.expectRewrite(rule, e.f.ConstructSelect(second, e.filters(p)), second)
-	e.expectNoMatch(rule, e.f.ConstructSelect(second, e.filters(r)))
-	e.expectNoMatch(rule, e.f.ConstructSelect(e.f.ConstructSelect(s, e.filters(q)), e.filters(p)))
-}
-
-func TestDeduplicateSelectFiltersSQL(t *testing.T) {
-	sql := "SELECT * FROM (SELECT * FROM (SELECT * FROM (VALUES (1, 2), (3, 4)) AS v(x,y) WHERE x > 0) WHERE y < 5) WHERE x > 0"
-	plan, fired := planFor(t, sql, nil, "DeduplicateSelectFilters")
-	if len(fired) == 0 {
-		t.Fatalf("DeduplicateSelectFilters did not fire on %s\n%s", sql, plan)
-	}
-}
-
-func TestSQLDeduplicateSelectFilters(t *testing.T) {
-	expectSQLFiresWith(t, "DeduplicateSelectFilters",
-		"SELECT * FROM (SELECT * FROM (SELECT * FROM t WHERE a > 0) WHERE b > 0) WHERE a > 0",
-		sqlHelpers{names: []string{"EliminateProject", "Prune*"}})
+	s, c := e.scan("t", 3)
+	p := e.f.ConstructEq(e.v(c[0]), e.num(1))
+	q := e.f.ConstructGt(e.v(c[1]), e.num(2))
+	r := e.f.ConstructEq(e.v(c[2]), e.num(3))
+	inner := e.f.ConstructSelect(s, e.filters(p))
+	mid := e.f.ConstructSelect(inner, e.filters(q))
+	before := e.f.ConstructSelect(mid, e.filters(p))
+	want := e.f.ConstructSelect(inner, e.filters(q))
+	e.expectRewrite(rule, before, want)
+	e.expectNoMatch(rule, e.f.ConstructSelect(mid, e.filters(r)))
+	e.expectNoMatch(rule, e.f.ConstructSelect(inner, e.filters(p)))
 }

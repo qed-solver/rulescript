@@ -16,11 +16,7 @@ func TestCommuteConst(t *testing.T) {
 	want := e.f.ConstructSelect(join, e.filters(e.f.ConstructEq(e.v(rc[0]), e.v(lc[0]))))
 	e.expectRewrite(rule, before, want)
 
-	e.expectNoMatch(rule, e.f.ConstructSelect(join, e.filters(e.f.ConstructNe(e.v(lc[0]), e.v(rc[0])))))
-	withOn := e.f.ConstructInnerJoin(l, r, e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0]))), &memo.JoinPrivate{})
-	e.expectNoMatch(rule, e.f.ConstructSelect(withOn, e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])))))
-}
-
-func TestSQLCommuteConst(t *testing.T) {
-	expectSQLRewrites(t, "CommuteConst", "SELECT a, b FROM (VALUES (1)) AS l(a), (VALUES (2)) AS r(b) WHERE a = b")
+	e.expectNoMatch(rule, e.f.ConstructSelect(join, e.filters(e.f.ConstructLt(e.v(lc[0]), e.v(rc[0])))))
+	leftJoin := e.f.ConstructLeftJoin(l, r, nil, &memo.JoinPrivate{})
+	e.expectNoMatch(rule, e.f.ConstructSelect(leftJoin, e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])))))
 }

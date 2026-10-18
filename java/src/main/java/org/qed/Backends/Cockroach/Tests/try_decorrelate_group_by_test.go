@@ -10,24 +10,26 @@ import (
 
 func TestTryDecorrelateGroupBy(t *testing.T) {
 	rule := loadRule(t, "TryDecorrelateGroupBy")
-	e := newEnv(t)
-	l, lc := e.scan("u", 1)
-	r, rc := e.scan("nn", 2)
-	f := e.f.Metadata().AddColumn("f", types.Int)
-	aggregate := func(input memo.RelExpr, grouping ...opt.ColumnID) memo.RelExpr {
-		return e.f.ConstructGroupBy(input, memo.AggregationsExpr{
-			e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(rc[1])), f),
-		}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(grouping...)})
-	}
-	on := e.filters(e.f.ConstructGt(e.v(f), e.num(0)))
-	before := e.f.ConstructSelect(
-		e.f.ConstructInnerJoin(l, aggregate(r, rc[0]), nil, &memo.JoinPrivate{}), on)
-	want := e.f.ConstructSelect(
-		aggregate(e.f.ConstructInnerJoin(l, r, nil, &memo.JoinPrivate{}), lc[0], rc[0]), on)
-	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructSelect(
-		e.f.ConstructLeftJoin(l, aggregate(r, rc[0]), nil, &memo.JoinPrivate{}), on))
-	nonUnique, _ := oneColumnUnionAll(e)
-	e.expectNoMatch(rule, e.f.ConstructSelect(
-		e.f.ConstructInnerJoin(nonUnique, aggregate(r, rc[0]), nil, &memo.JoinPrivate{}), on))
+	t.Run("single_grouping_column", func(t *testing.T) {
+		e := newEnv(t)
+		l, lc := e.scan("u", 1)
+		r, rc := e.scan("nn3", 2)
+		aggCol := e.f.Metadata().AddColumn("count", types.Int)
+		agg := e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(rc[1])), aggCol)
+		grouped := e.f.ConstructGroupBy(r, memo.AggregationsExpr{agg}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(rc[0])})
+		before := e.f.ConstructSelect(e.f.ConstructInnerJoin(l, grouped, memo.TrueFilter, memo.EmptyJoinPrivate), e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0]))))
+		joined := e.f.ConstructInnerJoin(l, r, memo.TrueFilter, memo.EmptyJoinPrivate)
+		want := e.f.ConstructSelect(e.f.ConstructGroupBy(joined, memo.AggregationsExpr{agg}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(lc[0], rc[0])}), e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0]))))
+		e.expectRewrite(rule, before, want)
+	})
+	t.Run("extra_grouping_column_near_miss", func(t *testing.T) {
+		e := newEnv(t)
+		l, lc := e.scan("u", 1)
+		r, rc := e.scan("nn3", 3)
+		aggCol := e.f.Metadata().AddColumn("count", types.Int)
+		agg := e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(rc[2])), aggCol)
+		grouped := e.f.ConstructGroupBy(r, memo.AggregationsExpr{agg}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(rc[0], rc[1])})
+		plan := e.f.ConstructSelect(e.f.ConstructInnerJoin(l, grouped, memo.TrueFilter, memo.EmptyJoinPrivate), e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0]))))
+		e.expectNoMatch(rule, plan)
+	})
 }

@@ -11,47 +11,57 @@ import (
 func TestAggregateProjectConstantToDummyJoin(t *testing.T) {
 	rule := loadRule(t, "AggregateProjectConstantToDummyJoin")
 	e := newEnv(t)
-	s, c := e.scan("t", 1)
-	trueCol := e.f.Metadata().AddColumn("t", types.Bool)
-	falseCol := e.f.Metadata().AddColumn("f", types.Bool)
+	s, sc := e.scan("t", 1)
+	k0 := e.f.Metadata().AddColumn("k0", types.Bool)
+	k1 := e.f.Metadata().AddColumn("k1", types.Bool)
 	fcol := e.f.Metadata().AddColumn("f", types.Int)
-
-	items := memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructTrue(), trueCol),
-		e.f.ConstructProjectionsItem(e.f.ConstructFalse(), falseCol),
+	aggs := func() memo.AggregationsExpr {
+		return memo.AggregationsExpr{
+			e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(sc[0])), fcol),
+		}
 	}
-	project := e.f.ConstructProject(s, items, opt.MakeColSet(c[0]))
-	aggs := memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(c[0])), fcol)}
-	private := &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(trueCol, falseCol, c[0])}
-	before := e.f.ConstructGroupBy(project, aggs, private)
-
-	values := e.f.ConstructValues(memo.ScalarListExpr{
+	project := e.f.ConstructProject(s, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructTrue(), k0),
+		e.f.ConstructProjectionsItem(e.f.ConstructFalse(), k1),
+	}, opt.MakeColSet(sc[0]))
+	before := e.f.ConstructGroupBy(project, aggs(), &memo.GroupingPrivate{
+		GroupingCols: opt.MakeColSet(k0, k1, sc[0]),
+	})
+	dummy := e.f.ConstructValues(memo.ScalarListExpr{
 		e.f.ConstructTuple(
 			memo.ScalarListExpr{e.f.ConstructTrue(), e.f.ConstructFalse()},
 			types.MakeTuple([]*types.T{types.Bool, types.Bool}),
 		),
-	}, &memo.ValuesPrivate{
-		Cols: opt.ColList{trueCol, falseCol},
-		ID:   e.f.Metadata().NextUniqueID(),
+	}, &memo.ValuesPrivate{Cols: opt.ColList{k0, k1}, ID: e.f.Metadata().NextUniqueID()})
+	joined := e.f.ConstructInnerJoin(s, dummy, nil, &memo.JoinPrivate{})
+	newProject := e.f.ConstructProject(joined, nil, opt.MakeColSet(k0, k1, sc[0]))
+	want := e.f.ConstructGroupBy(newProject, aggs(), &memo.GroupingPrivate{
+		GroupingCols: opt.MakeColSet(k0, k1, sc[0]),
 	})
-	joined := e.f.ConstructInnerJoin(s, values, nil, &memo.JoinPrivate{})
-	newProject := e.f.ConstructProject(joined, nil, opt.MakeColSet(trueCol, falseCol, c[0]))
-	want := e.f.ConstructGroupBy(newProject, aggs, private)
 	e.expectRewrite(rule, before, want)
 
-	swapped := memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructTrue(), trueCol),
-		e.f.ConstructProjectionsItem(e.f.ConstructTrue(), falseCol),
-	}
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(
-		e.f.ConstructProject(s, swapped, opt.MakeColSet(c[0])), aggs, private))
+	twoKeys := e.f.ConstructGroupBy(project, aggs(), &memo.GroupingPrivate{
+		GroupingCols: opt.MakeColSet(k0, sc[0]),
+	})
+	e.expectNoMatch(rule, twoKeys)
 
-	distinctAggs := memo.AggregationsExpr{
-		e.f.ConstructAggregationsItem(e.f.ConstructAggDistinct(e.f.ConstructCount(e.v(c[0]))), fcol),
-	}
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(project, distinctAggs, private))
+	trueSecond := e.f.ConstructProject(s, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructTrue(), k0),
+		e.f.ConstructProjectionsItem(e.f.ConstructTrue(), k1),
+	}, opt.MakeColSet(sc[0]))
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(trueSecond, aggs(), &memo.GroupingPrivate{
+		GroupingCols: opt.MakeColSet(k0, k1, sc[0]),
+	}))
 
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(project, aggs, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(trueCol, c[0]),
+	wide, wc := e.scan("t", 2)
+	wideProject := e.f.ConstructProject(wide, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructTrue(), k0),
+		e.f.ConstructProjectionsItem(e.f.ConstructFalse(), k1),
+	}, opt.MakeColSet(wc[0]))
+	wideAggs := memo.AggregationsExpr{
+		e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(wc[0])), fcol),
+	}
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(wideProject, wideAggs, &memo.GroupingPrivate{
+		GroupingCols: opt.MakeColSet(k0, k1, wc[0]),
 	}))
 }

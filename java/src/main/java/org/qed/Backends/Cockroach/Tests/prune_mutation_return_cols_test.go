@@ -5,32 +5,60 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestPruneMutationReturnCols(t *testing.T) {
 	rule := loadRule(t, "PruneMutationReturnCols")
 	e := newEnv(t)
-	if _, err := e.cat.ExecuteDDL("CREATE TABLE quad (a INT PRIMARY KEY, b INT, c INT, d INT)"); err != nil {
+	if _, err := e.cat.ExecuteDDL("CREATE TABLE wide (a INT PRIMARY KEY, b INT, c INT, d INT)"); err != nil {
 		t.Fatal(err)
 	}
-	s, cols := e.scan("quad", 4)
-	md := e.f.Metadata()
-	returned := make([]opt.ColumnID, 4)
-	items := make([]memo.ProjectionsItem, 4)
-	for i := range items {
-		returned[i] = md.AddColumn("returned", types.Int)
-		sum := e.f.ConstructPlus(e.v(cols[i]), e.v(cols[(i+1)%4]))
-		items[i] = e.f.ConstructProjectionsItem(sum, returned[i])
+	input, cols := e.scan("wide", 4)
+	sum := func() opt.ScalarExpr {
+		return e.f.ConstructPlus(e.f.ConstructPlus(e.f.ConstructPlus(e.v(cols[0]), e.v(cols[1])), e.v(cols[2])), e.v(cols[3]))
 	}
-	z := md.AddColumn("z", types.Int)
-	top := func(input memo.RelExpr, first, second opt.ColumnID) memo.RelExpr {
-		return e.f.ConstructProject(input, memo.ProjectionsExpr{
-			e.f.ConstructProjectionsItem(e.f.ConstructUnaryMinus(e.v(first)), z),
-		}, opt.MakeColSet(second))
+	ret := []opt.ColumnID{
+		e.f.Metadata().AddColumn("r0", e.v(cols[0]).DataType()),
+		e.f.Metadata().AddColumn("r1", e.v(cols[0]).DataType()),
+		e.f.Metadata().AddColumn("r2", e.v(cols[0]).DataType()),
+		e.f.Metadata().AddColumn("r3", e.v(cols[0]).DataType()),
 	}
-	full := e.f.ConstructProject(s, memo.ProjectionsExpr{items[0], items[1], items[2], items[3]}, opt.ColSet{})
-	pruned := e.f.ConstructProject(s, memo.ProjectionsExpr{items[0], items[2], items[3]}, opt.ColSet{})
-	e.expectRewrite(rule, top(full, returned[0], returned[3]), top(pruned, returned[0], returned[3]))
-	e.expectNoMatch(rule, top(full, returned[0], returned[1]))
+	returned := e.f.ConstructProject(input, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(sum(), ret[0]),
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(sum(), e.num(1)), ret[1]),
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(sum(), e.num(2)), ret[2]),
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(sum(), e.num(3)), ret[3]),
+	}, opt.ColSet{})
+	out := e.f.Metadata().AddColumn("out", e.v(ret[0]).DataType())
+	before := e.f.ConstructProject(returned, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructUnaryMinus(e.v(ret[0])), out),
+	}, opt.MakeColSet(ret[3]))
+
+	pruned := e.f.ConstructProject(input, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(sum(), ret[0]),
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(sum(), e.num(2)), ret[2]),
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(sum(), e.num(3)), ret[3]),
+	}, opt.ColSet{})
+	want := e.f.ConstructProject(pruned, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructUnaryMinus(e.v(ret[0])), out),
+	}, opt.MakeColSet(ret[3]))
+	e.expectRewriteUpToFreshColumns(rule, before, want)
+
+	shortInput, shortCols := e.scan("t", 3)
+	nearSum := e.f.ConstructPlus(e.f.ConstructPlus(e.v(shortCols[0]), e.v(shortCols[1])), e.v(shortCols[2]))
+	nearRet := []opt.ColumnID{
+		e.f.Metadata().AddColumn("r0", e.v(shortCols[0]).DataType()),
+		e.f.Metadata().AddColumn("r1", e.v(shortCols[0]).DataType()),
+		e.f.Metadata().AddColumn("r2", e.v(shortCols[0]).DataType()),
+	}
+	nearReturned := e.f.ConstructProject(shortInput, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(nearSum, nearRet[0]),
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(nearSum, e.num(1)), nearRet[1]),
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(nearSum, e.num(2)), nearRet[2]),
+	}, opt.ColSet{})
+	nearOut := e.f.Metadata().AddColumn("out", e.v(nearRet[0]).DataType())
+	nearMiss := e.f.ConstructProject(nearReturned, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructUnaryMinus(e.v(nearRet[0])), nearOut),
+	}, opt.MakeColSet(nearRet[2]))
+	e.expectNoMatch(rule, nearMiss)
 }

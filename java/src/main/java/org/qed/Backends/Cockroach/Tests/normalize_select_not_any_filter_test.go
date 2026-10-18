@@ -5,23 +5,30 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestNormalizeSelectNotAnyFilter(t *testing.T) {
 	rule := loadRule(t, "NormalizeSelectNotAnyFilter")
 	e := newEnv(t)
-	input, ic := e.scan("u", 1)
-	sub, sc := e.scan("t", 1)
-	membership := e.f.ConstructAny(sub, e.v(ic[0]), &memo.SubqueryPrivate{Cmp: opt.EqOp})
-	before := e.f.ConstructSelect(input, e.filters(e.f.ConstructNot(membership)))
-	matched := e.f.ConstructEq(e.v(ic[0]), e.v(sc[0]))
-	correlated := e.f.ConstructSelect(sub, e.filters(e.f.ConstructOr(matched, e.f.ConstructIs(matched, memo.NullSingleton))))
-	want := e.f.ConstructSelect(input, e.filters(e.f.ConstructNot(e.exists(correlated))))
-	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructSelect(input, e.filters(membership)))
-	e.expectNoMatch(rule, e.f.ConstructSelect(input, e.filters(e.f.ConstructGt(e.v(ic[0]), e.num(0)))))
-}
+	outer, outerCols := e.scan("t", 1)
+	sub, _ := e.scan("u", 1)
+	any := e.f.ConstructAny(sub, e.v(outerCols[0]), &memo.SubqueryPrivate{Cmp: opt.EqOp})
+	before := e.f.ConstructSelect(outer, e.filters(e.f.ConstructNot(any)))
 
-func TestSQLNormalizeSelectNotAnyFilter(t *testing.T) {
-	expectSQLFires(t, "NormalizeSelectNotAnyFilter", "SELECT x FROM u WHERE x NOT IN (SELECT a FROM t)")
+	correlatedEq := e.f.ConstructEq(e.v(outerCols[0]), e.v(6))
+	correlatedNull := e.f.ConstructIs(correlatedEq, memo.NullSingleton)
+	inside := e.f.ConstructSelect(sub, e.filters(e.f.ConstructOr(correlatedEq, correlatedNull)))
+	exists := e.f.ConstructExists(inside, &memo.ExistsPrivate{LazyEvalProjectionCol: e.f.Metadata().AddColumn("exists", types.Bool)})
+	want := e.f.ConstructSelect(outer, e.filters(e.f.ConstructNot(exists)))
+	e.expectRewriteUpToFreshColumns(rule, before, want)
+
+	other, otherCols := e.scan("t", 1)
+	otherSub, _ := e.scan("u", 1)
+	otherAny := e.f.ConstructAny(otherSub, e.v(otherCols[0]), &memo.SubqueryPrivate{Cmp: opt.EqOp})
+	nearMiss := e.f.ConstructSelect(other, e.filters(
+		e.f.ConstructNot(otherAny),
+		e.f.ConstructEq(e.v(otherCols[0]), e.num(1)),
+	))
+	e.expectNoMatch(rule, nearMiss)
 }

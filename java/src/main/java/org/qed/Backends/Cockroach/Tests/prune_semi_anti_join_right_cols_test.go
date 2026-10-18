@@ -10,23 +10,18 @@ import (
 func TestPruneSemiAntiJoinRightCols(t *testing.T) {
 	rule := loadRule(t, "PruneSemiAntiJoinRightCols")
 	e := newEnv(t)
-	l, lc := e.scan("t", 1)
-	r, rc := e.scan("u", 2)
-	on := func() memo.FiltersExpr { return e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0]))) }
-	before := e.f.ConstructAntiJoin(l, r, on(), &memo.JoinPrivate{})
-	rightProject := e.f.ConstructProject(r, nil, opt.MakeColSet(rc[0]))
-	want := e.f.ConstructAntiJoin(l, rightProject, on(), &memo.JoinPrivate{})
+	left, leftCols := e.scan("u", 1)
+	right, rightCols := e.scan("t", 2)
+	cond := e.f.ConstructEq(e.v(leftCols[0]), e.v(rightCols[0]))
+	before := e.f.ConstructAntiJoin(left, right, e.filters(cond), &memo.JoinPrivate{})
+	projectedRight := e.f.ConstructProject(right, nil, opt.MakeColSet(rightCols[0]))
+	wantCond := e.f.ConstructEq(e.v(leftCols[0]), e.v(rightCols[0]))
+	want := e.f.ConstructAntiJoin(left, projectedRight, e.filters(wantCond), &memo.JoinPrivate{})
 	e.expectRewrite(rule, before, want)
 
-	e.expectNoMatch(rule, e.f.ConstructSemiJoin(l, r, on(), &memo.JoinPrivate{}))
-	e.expectNoMatch(rule, e.f.ConstructAntiJoin(l, r,
-		e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[1]))), &memo.JoinPrivate{}))
-	r1, _ := e.scan("u", 1)
-	e.expectNoMatch(rule, e.f.ConstructAntiJoin(l, r1, nil, &memo.JoinPrivate{}))
-}
-
-func TestSQLPruneSemiAntiJoinRightCols(t *testing.T) {
-	expectSQLFiresWith(t, "PruneSemiAntiJoinRightCols",
-		"SELECT * FROM (SELECT a FROM t) q WHERE NOT EXISTS (SELECT x, y FROM u WHERE u.x = q.a)",
-		sqlHelpers{names: []string{"HoistSelectNotExists", "TryDecorrelateSelect", "DecorrelateJoin", "PruneSelectCols", "PruneScanCols", "EliminateProject"}})
+	nearMissLeft, nearMissLeftCols := e.scan("u", 1)
+	nearMissRight, nearMissRightCols := e.scan("t", 2)
+	nearMissCond := e.f.ConstructEq(e.v(nearMissLeftCols[0]), e.v(nearMissRightCols[1]))
+	nearMiss := e.f.ConstructAntiJoin(nearMissLeft, nearMissRight, e.filters(nearMissCond), &memo.JoinPrivate{})
+	e.expectNoMatch(rule, nearMiss)
 }

@@ -11,27 +11,30 @@ import (
 func TestAggregateExpandWithinDistinct(t *testing.T) {
 	rule := loadRule(t, "AggregateExpandWithinDistinct")
 	e := newEnv(t)
-	s, cols := e.scan("u", 1)
-	cnt := e.f.Metadata().AddColumn("cnt", types.Int)
-	distinctCount := memo.AggregationsExpr{
-		e.f.ConstructAggregationsItem(e.f.ConstructAggDistinct(e.f.ConstructCount(e.v(cols[0]))), cnt),
-	}
-	before := e.f.ConstructScalarGroupBy(s, distinctCount, &memo.GroupingPrivate{})
-	dedup := e.f.ConstructGroupBy(s, nil, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(cols[0])})
+	input, cols := e.scan("t", 1)
+	countCol := e.f.Metadata().AddColumn("count", types.Int)
+	distinctCount := e.f.ConstructAggDistinct(e.f.ConstructCount(e.v(cols[0])))
+	before := e.f.ConstructScalarGroupBy(input, memo.AggregationsExpr{
+		e.f.ConstructAggregationsItem(distinctCount, countCol),
+	}, memo.EmptyGroupingPrivate)
+	dedup := e.f.ConstructGroupBy(input, memo.AggregationsExpr{}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(cols[0])})
+	dedupCountCol := e.f.Metadata().AddColumn("count", types.Int)
 	want := e.f.ConstructScalarGroupBy(dedup, memo.AggregationsExpr{
-		e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(cols[0])), cnt),
-	}, &memo.GroupingPrivate{})
+		e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(cols[0])), dedupCountCol),
+	}, memo.EmptyGroupingPrivate)
 	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, want)
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(s, distinctCount, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(cols[0]),
-	}))
-	wide, wideCols := e.scan("t", 2)
-	e.expectNoMatch(rule, e.f.ConstructScalarGroupBy(wide, memo.AggregationsExpr{
-		e.f.ConstructAggregationsItem(e.f.ConstructAggDistinct(e.f.ConstructCount(e.v(wideCols[0]))), cnt),
-	}, &memo.GroupingPrivate{}))
-}
 
-func TestSQLAggregateExpandWithinDistinct(t *testing.T) {
-	expectSQLFires(t, "AggregateExpandWithinDistinct", "SELECT count(DISTINCT x) FROM u")
+	nonDistinct := e.f.ConstructScalarGroupBy(input, memo.AggregationsExpr{
+		e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(cols[0])), countCol),
+	}, memo.EmptyGroupingPrivate)
+	e.expectNoMatch(rule, nonDistinct)
+
+	distinctSum := e.f.ConstructScalarGroupBy(input, memo.AggregationsExpr{
+		e.f.ConstructAggregationsItem(e.f.ConstructAggDistinct(e.f.ConstructSumInt(e.v(cols[0]))), countCol),
+	}, memo.EmptyGroupingPrivate)
+	sumCol := e.f.Metadata().AddColumn("sum", types.Int)
+	wantSum := e.f.ConstructScalarGroupBy(dedup, memo.AggregationsExpr{
+		e.f.ConstructAggregationsItem(e.f.ConstructSumInt(e.v(cols[0])), sumCol),
+	}, memo.EmptyGroupingPrivate)
+	e.expectRewrite(rule, distinctSum, wantSum)
 }

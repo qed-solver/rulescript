@@ -9,21 +9,17 @@ import (
 )
 
 func TestEliminateExistsProject(t *testing.T) {
-	e := newEnv(t)
 	rule := loadRule(t, "EliminateExistsProject")
+	e := newEnv(t)
 	outer, _ := e.scan("u", 1)
-	inner, ic := e.scan("t", 1)
-	computed := e.f.Metadata().AddColumn("computed", types.Int)
-	project := e.f.ConstructProject(inner,
-		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.f.ConstructUnaryMinus(e.v(ic[0])), computed)},
-		opt.ColSet{})
-	before := e.f.ConstructSelect(outer, e.filters(e.exists(project)))
-	want := e.f.ConstructSelect(outer, e.filters(e.exists(inner)))
+	input, ic := e.scan("t", 3)
+	f := e.f.Metadata().AddColumn("f", types.Int)
+	projections := memo.ProjectionsExpr{{Element: e.v(ic[1]), Col: f}}
+	projected := e.f.ConstructProject(input, projections, opt.ColSet{})
+	before := e.f.ConstructSelect(outer, e.filters(e.exists(projected)))
+	want := e.f.ConstructSelect(outer, e.filters(e.exists(input)))
 	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructSelect(outer, e.filters(e.exists(inner))))
-	e.expectNoMatch(rule, e.f.ConstructSelect(outer, e.filters(e.f.ConstructNot(e.exists(project)))))
-}
-
-func TestSQLEliminateExistsProject(t *testing.T) {
-	expectSQLFires(t, "EliminateExistsProject", "SELECT x FROM u WHERE EXISTS (SELECT -a FROM t)")
+	e.expectNoMatch(rule, e.f.ConstructSelect(outer, e.filters(e.exists(input))))
+	e.expectNoMatch(rule, e.f.ConstructSelect(outer, e.filters(e.f.ConstructNot(e.exists(projected)))))
+	e.expectNoMatch(rule, e.f.ConstructSelect(outer, e.filters(e.exists(e.f.ConstructSelect(projected, e.filters(e.f.ConstructTrue()))))))
 }

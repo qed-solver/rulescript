@@ -11,23 +11,27 @@ import (
 func TestFilterWindowTranspose(t *testing.T) {
 	rule := loadRule(t, "FilterWindowTranspose")
 	e := newEnv(t)
-	s, ac := e.scan("t", 2)
-	fcol := e.f.Metadata().AddColumn("f", types.Int)
-	aggs := memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(ac[1])), fcol)}
-	private := &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(ac[0])}
-	agg := e.f.ConstructGroupBy(s, aggs, private)
-	p := e.f.ConstructGt(e.v(ac[0]), e.num(1))
-	q := e.f.ConstructLt(e.v(ac[0]), e.v(fcol))
-	before := e.f.ConstructSelect(agg, e.filters(e.f.ConstructAnd(p, q)))
-	want := e.f.ConstructSelect(
-		e.f.ConstructGroupBy(e.f.ConstructSelect(s, e.filters(p)), aggs, private),
-		e.filters(q),
-	)
+	base, bc := e.scan("t", 2)
+	k, v := bc[0], bc[1]
+	maxCol := e.f.Metadata().AddColumn("max", types.Int)
+	minCol := e.f.Metadata().AddColumn("min", types.Int)
+	groupKeys := opt.MakeColSet(k)
+	maxAgg := memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(v)), maxCol)}
+	group := func(input memo.RelExpr) memo.RelExpr {
+		return e.f.ConstructGroupBy(input, maxAgg, &memo.GroupingPrivate{GroupingCols: groupKeys})
+	}
+	predP := e.f.ConstructGt(e.v(k), e.num(1))
+	predQ := e.f.ConstructLt(e.v(k), e.v(maxCol))
+
+	before := e.f.ConstructSelect(group(base), e.filters(predP, predQ))
+	want := e.f.ConstructSelect(group(e.f.ConstructSelect(base, e.filters(predP))), e.filters(predQ))
 	e.expectRewrite(rule, before, want)
 
-	e.expectNoMatch(rule, e.f.ConstructSelect(agg, e.filters(e.f.ConstructOr(p, q))))
-	e.expectNoMatch(rule, e.f.ConstructSelect(agg, e.filters(
-		e.f.ConstructAnd(e.f.ConstructGt(e.v(fcol), e.num(1)), q),
-	)))
-	e.expectNoMatch(rule, e.f.ConstructSelect(agg, e.filters(p)))
+	twoAggs := memo.AggregationsExpr{
+		e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(v)), maxCol),
+		e.f.ConstructAggregationsItem(e.f.ConstructMin(e.v(v)), minCol),
+	}
+	twoAggGroup := e.f.ConstructGroupBy(base, twoAggs, &memo.GroupingPrivate{GroupingCols: groupKeys})
+	e.expectNoMatch(rule, e.f.ConstructSelect(twoAggGroup, e.filters(predP, predQ)))
+	e.expectNoMatch(rule, e.f.ConstructSelect(group(base), e.filters(predQ)))
 }

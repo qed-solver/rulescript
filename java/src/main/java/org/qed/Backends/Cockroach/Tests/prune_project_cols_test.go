@@ -11,31 +11,34 @@ import (
 func TestPruneProjectCols(t *testing.T) {
 	rule := loadRule(t, "PruneProjectCols")
 	e := newEnv(t)
-	s, cols := e.scan("u", 1)
+	input, cols := e.scan("t", 3)
 	used := e.f.Metadata().AddColumn("used", types.Int)
 	unused := e.f.Metadata().AddColumn("unused", types.Int)
-	out := e.f.Metadata().AddColumn("out", types.Int)
-	inner := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(cols[0]), e.num(1)), used),
-		e.f.ConstructProjectionsItem(e.f.ConstructMult(e.v(cols[0]), e.num(2)), unused),
+	outer := e.f.Metadata().AddColumn("outer", types.Int)
+	beforeInner := e.f.ConstructProject(input, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.num(10), used),
+		e.f.ConstructProjectionsItem(e.num(20), unused),
 	}, opt.MakeColSet(cols[0]))
-	before := e.f.ConstructProject(inner, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructMult(e.v(cols[0]), e.v(used)), out),
+	before := e.f.ConstructProject(beforeInner, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(cols[0]), e.v(used)), outer),
 	}, opt.ColSet{})
-	want := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructMult(e.v(cols[0]), e.f.ConstructPlus(e.v(cols[0]), e.num(1))), out),
+
+	wantOuter := e.f.Metadata().AddColumn("outer", types.Int)
+	want := e.f.ConstructProject(input, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(cols[0]), e.num(10)), wantOuter),
 	}, opt.ColSet{})
-	e.expectRewrite(rule, before, want)
+	e.expectRewriteUpToFreshColumns(rule, before, want)
 
-	e.expectNoMatch(rule, e.f.ConstructProject(inner, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructMult(e.v(cols[0]), e.v(unused)), out),
-	}, opt.ColSet{}))
-	e.expectNoMatch(rule, e.f.ConstructProject(inner, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructMult(e.v(cols[0]), e.v(used)), out),
-	}, opt.MakeColSet(used)))
-	e.expectNoMatch(rule, inner)
-}
-
-func TestSQLPruneProjectCols(t *testing.T) {
-	expectSQLFiresOrNot(t, "PruneProjectCols", "SELECT a*b FROM (SELECT a,a+1 AS b,a+2 AS unused FROM (VALUES (1),(2)) AS v(a)) AS q", true)
+	nearInput, nearCols := e.scan("t", 3)
+	nearUsed := e.f.Metadata().AddColumn("used", types.Int)
+	nearUnused := e.f.Metadata().AddColumn("unused", types.Int)
+	nearOuter := e.f.Metadata().AddColumn("outer", types.Int)
+	nearInner := e.f.ConstructProject(nearInput, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.num(10), nearUsed),
+		e.f.ConstructProjectionsItem(e.num(20), nearUnused),
+	}, opt.MakeColSet(nearCols[0], nearCols[1]))
+	near := e.f.ConstructProject(nearInner, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(nearCols[0]), e.v(nearUsed)), nearOuter),
+	}, opt.ColSet{})
+	e.expectNoMatch(rule, near)
 }

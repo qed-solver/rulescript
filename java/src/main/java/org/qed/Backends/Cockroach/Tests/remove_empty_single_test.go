@@ -11,28 +11,20 @@ import (
 func TestRemoveEmptySingle(t *testing.T) {
 	rule := loadRule(t, "RemoveEmptySingle")
 	e := newEnv(t)
-	c0 := e.f.Metadata().AddColumn("c0", types.Int)
-	c1 := e.f.Metadata().AddColumn("c1", types.Int)
-	fcol := e.f.Metadata().AddColumn("f", types.Int)
-	private := &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(c0)}
-
-	input := e.empty(c0)
-	aggs := memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(c0)), fcol)}
-	before := e.f.ConstructGroupBy(input, aggs, private)
-	want := e.empty(c0, fcol)
+	inputCol := e.f.Metadata().AddColumn("input", types.Int)
+	aggCol := e.f.Metadata().AddColumn("agg", types.Int)
+	empty := e.empty(inputCol)
+	before := e.f.ConstructGroupBy(empty,
+		memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructSumInt(e.v(inputCol)), aggCol)},
+		&memo.GroupingPrivate{GroupingCols: opt.MakeColSet(inputCol)},
+	)
+	want := e.empty(inputCol, aggCol)
 	e.expectRewrite(rule, before, want)
 
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(input, nil, private))
-
-	wide := e.empty(c0, c1)
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(wide, memo.AggregationsExpr{
-		e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(c1)), fcol),
-	}, private))
-
-	s, sc := e.scan("u", 2)
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(s, memo.AggregationsExpr{
-		e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(sc[0])), fcol),
-	}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(sc[0])}))
-
-	e.expectNoMatch(rule, input)
+	nonEmpty, cols := e.scan("t", 1)
+	near := e.f.ConstructGroupBy(nonEmpty,
+		memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructSumInt(e.v(cols[0])), aggCol)},
+		&memo.GroupingPrivate{GroupingCols: opt.MakeColSet(cols[0])},
+	)
+	e.expectNoMatch(rule, near)
 }

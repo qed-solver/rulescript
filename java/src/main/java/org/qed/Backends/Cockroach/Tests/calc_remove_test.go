@@ -4,16 +4,23 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestCalcRemove(t *testing.T) {
 	rule := loadRule(t, "CalcRemove")
 	e := newEnv(t)
-	s, cols := e.scan("u", 2)
-	identity := e.f.ConstructProject(s, nil, opt.MakeColSet(cols...))
-	e.expectRewrite(rule, identity, s)
 
-	e.expectNoMatch(rule, e.f.ConstructProject(s, nil, opt.MakeColSet(cols[0])))
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructGt(e.v(cols[0]), e.num(0)))))
-	e.expectNoMatch(rule, s)
+	scan, sc := e.scan("t", 2)
+	identity := e.f.ConstructProject(scan, nil, opt.MakeColSet(sc...))
+	e.expectRewrite(rule, identity, scan)
+
+	constant := e.f.Metadata().AddColumn("k", types.Int)
+	e.expectNoMatch(rule, e.f.ConstructProject(scan, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.num(1), constant),
+	}, opt.MakeColSet(sc[0])))
+
+	wide, wc := e.scan("t", 3)
+	e.expectNoMatch(rule, e.f.ConstructProject(wide, nil, opt.MakeColSet(wc...)))
 }

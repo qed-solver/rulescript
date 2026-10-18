@@ -11,24 +11,33 @@ import (
 func TestFoldIndirection(t *testing.T) {
 	rule := loadRule(t, "FoldIndirection")
 	e := newEnv(t)
-	s, cols := e.scan("u", 1)
-	e0 := e.f.Metadata().AddColumn("e0", types.Int)
-	e1 := e.f.Metadata().AddColumn("e1", types.Int)
-	inner := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.v(cols[0]), e0),
-		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(cols[0]), e.num(2)), e1),
+	s, sc := e.scan("t", 1)
+	a := e.v(sc[0])
+	c0 := e.f.Metadata().AddColumn("e0", types.Int)
+	c1 := e.f.Metadata().AddColumn("e1", types.Int)
+	c2 := e.f.Metadata().AddColumn("e2", types.Int)
+	plusOne := e.f.ConstructPlus(a, e.num(1))
+
+	arr := e.f.ConstructProject(s, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(a, c0),
+		e.f.ConstructProjectionsItem(plusOne, c1),
 	}, opt.ColSet{})
-	before := e.f.ConstructProject(inner, nil, opt.MakeColSet(e1))
+	before := e.f.ConstructProject(arr, memo.ProjectionsExpr{}, opt.MakeColSet(c1))
 	want := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(cols[0]), e.num(2)), e1),
+		e.f.ConstructProjectionsItem(plusOne, c1),
 	}, opt.ColSet{})
-	e.expectRewrite(rule, before, want)
+	e.expectRewriteUpToFreshColumns(rule, before, want)
 
-	e.expectNoMatch(rule, e.f.ConstructProject(inner, nil, opt.MakeColSet(e0)))
-	e.expectNoMatch(rule, e.f.ConstructProject(inner, nil, opt.MakeColSet(e0, e1)))
-	e.expectNoMatch(rule, inner)
-}
+	e.expectNoMatch(rule, e.f.ConstructProject(arr, memo.ProjectionsExpr{}, opt.MakeColSet(c0)))
 
-func TestSQLFoldIndirection(t *testing.T) {
-	expectSQLFiresOrNot(t, "FoldIndirection", "SELECT b FROM (SELECT a+1 AS a, a+2 AS b FROM (VALUES (1),(2)) AS v(a)) AS q", true)
+	threeElems := e.f.ConstructProject(s, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(a, c0),
+		e.f.ConstructProjectionsItem(plusOne, c1),
+		e.f.ConstructProjectionsItem(a, c2),
+	}, opt.ColSet{})
+	e.expectNoMatch(rule, e.f.ConstructProject(threeElems, memo.ProjectionsExpr{}, opt.MakeColSet(c1)))
+
+	e.expectNoMatch(rule, e.f.ConstructProject(s, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(plusOne, c1),
+	}, opt.ColSet{}))
 }

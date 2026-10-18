@@ -4,21 +4,30 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestEliminateRedundantBarrier(t *testing.T) {
 	rule := loadRule(t, "EliminateRedundantBarrier")
+
 	e := newEnv(t)
-	s, cols := e.scan("u", 1)
-	inner := e.f.ConstructProject(s, nil, opt.MakeColSet(cols[0]))
-	before := e.f.ConstructProject(inner, nil, opt.MakeColSet(cols[0]))
-	e.expectRewrite(rule, before, inner)
+	s, cols := e.scan("t", 3)
+	inner := e.f.ConstructProject(s, memo.ProjectionsExpr{}, opt.MakeColSet(cols[0]))
+	before := e.f.ConstructProject(inner, memo.ProjectionsExpr{}, opt.MakeColSet(cols[0]))
+	want := e.f.ConstructProject(s, memo.ProjectionsExpr{}, opt.MakeColSet(cols[0]))
+	e.expectRewrite(rule, before, want)
 
-	e.expectNoMatch(rule, inner)
-	e.expectNoMatch(rule, e.f.ConstructProject(inner, nil, opt.ColSet{}))
-	e.expectNoMatch(rule, e.f.ConstructSelect(inner, e.filters(e.f.ConstructGt(e.v(cols[0]), e.num(0)))))
-}
+	e = newEnv(t)
+	s, cols = e.scan("t", 3)
+	wide := e.f.ConstructProject(s, memo.ProjectionsExpr{}, opt.MakeColSet(cols[0], cols[1]))
+	e.expectNoMatch(rule, e.f.ConstructProject(wide, memo.ProjectionsExpr{}, opt.MakeColSet(cols[0], cols[1])))
 
-func TestSQLEliminateRedundantBarrier(t *testing.T) {
-	expectSQLFiresOrNot(t, "EliminateRedundantBarrier", "SELECT a FROM (SELECT a FROM (VALUES (1),(2)) AS v(a)) AS q", false)
+	e = newEnv(t)
+	s, cols = e.scan("t", 3)
+	x := e.f.Metadata().AddColumn("x", types.Int)
+	computed := e.f.ConstructProject(s, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(cols[1]), e.num(1)), x),
+	}, opt.MakeColSet(cols[0]))
+	e.expectNoMatch(rule, e.f.ConstructProject(computed, memo.ProjectionsExpr{}, opt.MakeColSet(x)))
 }

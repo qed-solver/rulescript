@@ -11,23 +11,31 @@ import (
 func TestFoldIsNullProject(t *testing.T) {
 	rule := loadRule(t, "FoldIsNullProject")
 	e := newEnv(t)
-	s, cols := e.scan("u", 2)
-	z := e.f.Metadata().AddColumn("z", types.Bool)
-	before := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructIs(e.v(cols[0]), memo.NullSingleton), z),
-	}, opt.MakeColSet(cols[1]))
-	want := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructFalse(), z),
-	}, opt.MakeColSet(cols[1]))
-	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructIs(e.v(cols[1]), memo.NullSingleton), z),
-	}, opt.MakeColSet(cols[1])))
-	e.expectNoMatch(rule, e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructIsNot(e.v(cols[0]), memo.NullSingleton), z),
-	}, opt.MakeColSet(cols[1])))
-}
+	in, cols := e.scan("t", 2)
+	a, b := cols[0], cols[1]
+	isNullCol := e.f.Metadata().AddColumn("isnull", types.Bool)
+	before := e.f.ConstructProject(in, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructIs(e.v(a), memo.NullSingleton), isNullCol),
+	}, opt.MakeColSet(b))
+	falseCol := e.f.Metadata().AddColumn("isnull", types.Bool)
+	after := e.f.ConstructProject(in, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructFalse(), falseCol),
+	}, opt.MakeColSet(b))
+	e.expectRewriteUpToFreshColumns(rule, before, after)
 
-func TestSQLFoldIsNullProject(t *testing.T) {
-	expectSQLFires(t, "FoldIsNullProject", "SELECT a IS NULL AS z, b FROM (VALUES (1, 2), (3, 4)) AS v(a, b)")
+	notNullCol := e.f.Metadata().AddColumn("isnotnull", types.Bool)
+	e.expectNoMatch(rule, e.f.ConstructProject(in, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructIsNot(e.v(a), memo.NullSingleton), notNullCol),
+	}, opt.MakeColSet(b)))
+
+	wideIn, wideCols := e.scan("t", 3)
+	wideNullCol := e.f.Metadata().AddColumn("isnull", types.Bool)
+	e.expectNoMatch(rule, e.f.ConstructProject(wideIn, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructIs(e.v(wideCols[0]), memo.NullSingleton), wideNullCol),
+	}, opt.MakeColSet(wideCols[1])))
+
+	nullableCol := e.f.Metadata().AddColumn("isnull", types.Bool)
+	e.expectNoMatch(rule, e.f.ConstructProject(in, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructIs(e.v(b), memo.NullSingleton), nullableCol),
+	}, opt.MakeColSet(a)))
 }

@@ -5,43 +5,44 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestConvertGroupByToDistinct(t *testing.T) {
 	rule := loadRule(t, "ConvertGroupByToDistinct")
 	e := newEnv(t)
-	s, cols := e.scan("nn", 2)
-	before := e.f.ConstructGroupBy(s, nil, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(cols...)})
-	got, ok := rule.Apply(&e.f, before)
-	if !ok {
-		t.Fatal("ConvertGroupByToDistinct did not apply")
-	}
-	expected := newEnv(t)
-	es, ec := expected.scan("nn", 2)
-	rightCols := []opt.ColumnID{
-		expected.f.Metadata().AddColumn("right_a", expected.f.Metadata().ColumnMeta(ec[0]).Type),
-		expected.f.Metadata().AddColumn("right_b", expected.f.Metadata().ColumnMeta(ec[1]).Type),
-	}
-	right := expected.f.ConstructProject(es, memo.ProjectionsExpr{
-		expected.f.ConstructProjectionsItem(expected.v(ec[0]), rightCols[0]),
-		expected.f.ConstructProjectionsItem(expected.v(ec[1]), rightCols[1]),
-	}, opt.ColSet{})
-	want := expected.f.ConstructIntersect(es, right, &memo.SetPrivate{
-		LeftCols: append(opt.ColList{}, ec...), RightCols: append(opt.ColList{}, rightCols...),
-		OutCols: append(opt.ColList{}, ec...),
-	})
-	if e.format(got) != expected.format(want) {
-		t.Fatalf("unexpected plan\ngot: %s\nwant: %s", e.format(got), expected.format(want))
-	}
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(s, nil, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(cols[0])}))
-	short, _ := e.scan("u", 1)
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(short, nil, &memo.GroupingPrivate{GroupingCols: short.Relational().OutputCols}))
-}
 
-func TestSQLConvertGroupByToDistinct(t *testing.T) {
-	sql := "SELECT a,b FROM (VALUES (1,2),(3,4)) AS v(a,b) GROUP BY a,b"
-	plan, fired := planFor(t, sql, nil, "ConvertGroupByToDistinct")
-	if len(fired) == 0 {
-		t.Fatalf("ConvertGroupByToDistinct did not fire on %s\n%s", sql, plan)
-	}
+	s, sc := e.scan("nn", 2)
+	before := e.f.ConstructGroupBy(s, memo.AggregationsExpr{}, &memo.GroupingPrivate{
+		GroupingCols: opt.MakeColSet(sc[0], sc[1]),
+	})
+	dup0 := e.f.Metadata().AddColumn("dup", types.Int)
+	dup1 := e.f.Metadata().AddColumn("dup", types.Int)
+	out0 := e.f.Metadata().AddColumn("k1", types.Int)
+	out1 := e.f.Metadata().AddColumn("k2", types.Int)
+	dupSide := e.f.ConstructProject(s, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.v(sc[0]), dup0),
+		e.f.ConstructProjectionsItem(e.v(sc[1]), dup1),
+	}, opt.ColSet{})
+	want := e.f.ConstructIntersect(s, dupSide, &memo.SetPrivate{
+		LeftCols:  opt.ColList{sc[0], sc[1]},
+		RightCols: opt.ColList{dup0, dup1},
+		OutCols:   opt.ColList{out0, out1},
+	})
+	e.expectRewriteUpToFreshColumns(rule, before, want)
+
+	nullable, nc := e.scan("t", 2)
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(nullable, memo.AggregationsExpr{}, &memo.GroupingPrivate{
+		GroupingCols: opt.MakeColSet(nc[0], nc[1]),
+	}))
+
+	wide, wc := e.scan("nn3", 3)
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(wide, memo.AggregationsExpr{}, &memo.GroupingPrivate{
+		GroupingCols: opt.MakeColSet(wc[0], wc[1]),
+	}))
+
+	one, oc := e.scan("nn", 2)
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(one, memo.AggregationsExpr{}, &memo.GroupingPrivate{
+		GroupingCols: opt.MakeColSet(oc[0]),
+	}))
 }

@@ -5,26 +5,33 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestPushAssignmentCastsIntoValues(t *testing.T) {
 	rule := loadRule(t, "PushAssignmentCastsIntoValues")
-	e := newEnv(t)
-	s, cols := e.scan("u", 1)
-	md := e.f.Metadata()
-	casted := md.AddColumn("casted", types.Float)
-	flag := md.AddColumn("flag", types.Bool)
-	castItem := e.f.ConstructProjectionsItem(e.f.ConstructCast(e.v(cols[0]), types.Float), casted)
-	before := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		castItem, e.f.ConstructProjectionsItem(e.f.ConstructTrue(), flag),
-	}, opt.ColSet{})
-	inner := e.f.ConstructProject(s, memo.ProjectionsExpr{castItem}, opt.ColSet{})
-	want := e.f.ConstructProject(inner, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructTrue(), flag),
-	}, opt.MakeColSet(casted))
-	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructProject(s, memo.ProjectionsExpr{
-		castItem, e.f.ConstructProjectionsItem(e.f.ConstructFalse(), flag),
-	}, opt.ColSet{}))
+	t.Run("match", func(t *testing.T) {
+		e := newEnv(t)
+		input, cols := e.scan("t", 1)
+		castCol := e.f.Metadata().AddColumn("cast", e.v(cols[0]).DataType())
+		before := e.f.ConstructProject(input, memo.ProjectionsExpr{
+			e.f.ConstructProjectionsItem(e.v(cols[0]), castCol),
+			e.f.ConstructProjectionsItem(memo.TrueSingleton, e.f.Metadata().AddColumn("other", e.v(cols[0]).DataType())),
+		}, opt.ColSet{})
+		pushed := e.f.ConstructProject(input, memo.ProjectionsExpr{
+			e.f.ConstructProjectionsItem(e.v(cols[0]), castCol),
+		}, opt.ColSet{})
+		want := e.f.ConstructProject(pushed, memo.ProjectionsExpr{
+			e.f.ConstructProjectionsItem(memo.TrueSingleton, e.f.Metadata().AddColumn("other", e.v(cols[0]).DataType())),
+		}, opt.MakeColSet(castCol))
+		e.expectRewriteUpToFreshColumns(rule, before, want)
+	})
+	t.Run("near-miss", func(t *testing.T) {
+		e := newEnv(t)
+		input, cols := e.scan("t", 1)
+		castCol := e.f.Metadata().AddColumn("cast", e.v(cols[0]).DataType())
+		plan := e.f.ConstructProject(input, memo.ProjectionsExpr{
+			e.f.ConstructProjectionsItem(e.v(cols[0]), castCol),
+		}, opt.ColSet{})
+		e.expectNoMatch(rule, plan)
+	})
 }

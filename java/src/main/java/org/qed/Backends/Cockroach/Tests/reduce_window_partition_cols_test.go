@@ -9,35 +9,55 @@ import (
 )
 
 func TestReduceWindowPartitionCols(t *testing.T) {
-	rule := loadRule(t, "ReduceWindowPartitionCols")
 	e := newEnv(t)
-	md := e.f.Metadata()
-	left, lc := e.scan("t", 2)
-	right, rc := e.scan("t", 2)
-	fl, fr := md.AddColumn("fl", types.Int), md.AddColumn("fr", types.Int)
-	w, z := md.AddColumn("w", types.Int), md.AddColumn("z", types.Int)
-	window := func(input memo.RelExpr, cols []opt.ColumnID, f opt.ColumnID) memo.RelExpr {
-		return e.f.ConstructProject(input, memo.ProjectionsExpr{
-			e.f.ConstructProjectionsItem(e.f.ConstructUnaryMinus(e.v(cols[0])), f),
-		}, opt.MakeColSet(cols[0], cols[1]))
+	rule := loadRule(t, "ReduceWindowPartitionCols")
+	build := func(extraGroup bool) (memo.RelExpr, memo.RelExpr) {
+		leftBase, leftSource := e.scan("u", 2)
+		k, v := leftSource[0], leftSource[1]
+		fk := e.f.Metadata().AddColumn("fk", types.Int)
+		win := e.f.ConstructProject(leftBase, memo.ProjectionsExpr{
+			e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(k), e.num(1)), fk),
+		}, opt.MakeColSet(k, v))
+		rightBase, rightSource := e.scan("u", 2)
+		rk, rv := rightSource[0], rightSource[1]
+		rfk := e.f.Metadata().AddColumn("rfk", types.Int)
+		rightWin := e.f.ConstructProject(rightBase, memo.ProjectionsExpr{
+			e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(rk), e.num(1)), rfk),
+		}, opt.MakeColSet(rk, rv))
+		w := e.f.Metadata().AddColumn("w", types.Int)
+		groupCols := opt.MakeColSet(rk, rfk)
+		if extraGroup {
+			groupCols.Add(rv)
+		}
+		full := e.f.ConstructGroupBy(rightWin, memo.AggregationsExpr{
+			e.f.ConstructAggregationsItem(e.f.ConstructCountRows(), w),
+		}, &memo.GroupingPrivate{GroupingCols: groupCols})
+		join := e.f.ConstructInnerJoin(win, full, e.filters(
+			e.f.ConstructEq(e.v(k), e.v(rk)),
+			e.f.ConstructEq(e.v(fk), e.v(rfk)),
+		), &memo.JoinPrivate{})
+		top := e.f.ConstructPlus(e.f.ConstructPlus(e.v(k), e.v(fk)), e.f.ConstructPlus(e.v(v), e.v(w)))
+		before := e.f.ConstructProject(join, memo.ProjectionsExpr{
+			e.f.ConstructProjectionsItem(top, e.f.Metadata().AddColumn("top", types.Int)),
+		}, opt.ColSet{})
+		reduced := e.f.ConstructGroupBy(rightWin, memo.AggregationsExpr{
+			e.f.ConstructAggregationsItem(e.f.ConstructCountRows(), w),
+		}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(rk)})
+		right := e.f.ConstructProject(reduced, memo.ProjectionsExpr{
+			e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(rk), e.num(1)), rfk),
+		}, opt.MakeColSet(rk, w))
+		rightJoin := e.f.ConstructInnerJoin(win, right, e.filters(
+			e.f.ConstructEq(e.v(k), e.v(rk)),
+			e.f.ConstructEq(e.v(fk), e.v(rfk)),
+		), &memo.JoinPrivate{})
+		wantTop := e.f.ConstructPlus(e.f.ConstructPlus(e.v(k), e.v(fk)), e.f.ConstructPlus(e.v(v), e.v(w)))
+		want := e.f.ConstructProject(rightJoin, memo.ProjectionsExpr{
+			e.f.ConstructProjectionsItem(wantTop, e.f.Metadata().AddColumn("want", types.Int)),
+		}, opt.ColSet{})
+		return before, want
 	}
-	winLeft, winRight := window(left, lc, fl), window(right, rc, fr)
-	maxOf := func() memo.AggregationsExpr {
-		return memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(rc[1])), w)}
-	}
-	on := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])), e.f.ConstructEq(e.v(fl), e.v(fr)))
-	top := func(join memo.RelExpr) memo.RelExpr {
-		sum := e.f.ConstructPlus(
-			e.f.ConstructPlus(e.v(lc[0]), e.v(fl)), e.f.ConstructPlus(e.v(lc[1]), e.v(w)))
-		return e.f.ConstructProject(join, memo.ProjectionsExpr{e.f.ConstructProjectionsItem(sum, z)}, opt.ColSet{})
-	}
-	full := e.f.ConstructGroupBy(winRight, maxOf(), &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(rc[0], fr)})
-	reduced := e.f.ConstructProject(
-		e.f.ConstructGroupBy(winRight, maxOf(), &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(rc[0])}),
-		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.f.ConstructUnaryMinus(e.v(rc[0])), fr)},
-		opt.MakeColSet(rc[0], w))
-	before := top(e.f.ConstructInnerJoin(winLeft, full, on, &memo.JoinPrivate{}))
-	want := top(e.f.ConstructInnerJoin(winLeft, reduced, on, &memo.JoinPrivate{}))
-	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, want)
+	before, want := build(false)
+	e.expectRewriteUpToFreshColumns(rule, before, want)
+	nearMiss, _ := build(true)
+	e.expectNoMatch(rule, nearMiss)
 }

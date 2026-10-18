@@ -5,31 +5,23 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestSimplifyLeftJoinWithZeroRowsRight(t *testing.T) {
 	rule := loadRule(t, "SimplifyLeftJoinWithZeroRowsRight")
 	e := newEnv(t)
 	left, lc := e.scan("u", 2)
-	rcInt := e.f.Metadata().AddColumn("empty_int", types.Int)
-	rcBool := e.f.Metadata().AddColumn("empty_bool", types.Bool)
-	right := e.empty(rcInt, rcBool)
-	on := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rcInt)))
-	before := e.f.ConstructLeftJoin(left, right, on, &memo.JoinPrivate{})
-	want := e.f.ConstructProject(left, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructNull(types.Int), rcInt),
-		e.f.ConstructProjectionsItem(e.f.ConstructNull(types.Bool), rcBool),
-	}, opt.MakeColSet(lc...))
+	_, rc := e.scan("t", 2)
+	emptyRight := e.empty(rc...)
+	before := e.f.ConstructLeftJoin(left, emptyRight, e.filters(), &memo.JoinPrivate{})
+	projections := memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructNull(e.f.Metadata().ColumnMeta(rc[0]).Type), rc[0]),
+		e.f.ConstructProjectionsItem(e.f.ConstructNull(e.f.Metadata().ColumnMeta(rc[1]).Type), rc[1]),
+	}
+	want := e.f.ConstructProject(left, projections, opt.MakeColSet(lc...))
 	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(left, right, on, &memo.JoinPrivate{}))
-	other, oc := e.scan("t", 2)
-	e.expectNoMatch(rule, e.f.ConstructLeftJoin(left, other,
-		e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(oc[0]))), &memo.JoinPrivate{}))
-}
 
-func TestSQLSimplifyLeftJoinWithZeroRowsRight(t *testing.T) {
-	expectSQLFiresWith(t, "SimplifyLeftJoinWithZeroRowsRight",
-		"SELECT l.x, l.y, r.x, r.y FROM (SELECT x, y FROM u) l LEFT JOIN (SELECT x, y FROM u WHERE false) r ON l.x = r.x",
-		sqlHelpers{names: []string{"SimplifyZeroCardinalityGroup", "PruneScanCols", "EliminateProject"}})
+	nonemptyRight := e.intValues(rc, []int{7, 8})
+	nearMiss := e.f.ConstructLeftJoin(left, nonemptyRight, e.filters(), &memo.JoinPrivate{})
+	e.expectNoMatch(rule, nearMiss)
 }

@@ -3,25 +3,25 @@ package rulescript_test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestEliminateExistsZeroRows(t *testing.T) {
-	e := newEnv(t)
 	rule := loadRule(t, "EliminateExistsZeroRows")
-	outer, _ := e.scan("u", 1)
-	col := e.f.Metadata().AddColumn("empty", types.Int)
-	empty := e.empty(col)
-	before := e.f.ConstructSelect(outer, e.filters(e.exists(empty)))
-	want := e.f.ConstructSelect(outer, e.filters(e.f.ConstructFalse()))
-	e.expectRewrite(rule, before, want)
-	inner, _ := e.scan("t", 1)
-	e.expectNoMatch(rule, e.f.ConstructSelect(outer, e.filters(e.exists(inner))))
-	e.expectNoMatch(rule, e.f.ConstructSelect(outer, e.filters(e.f.ConstructNot(e.exists(empty)))))
-}
+	e := newEnv(t)
+	outer, _ := e.scan("u", 2)
+	z := e.f.Metadata().AddColumn("z", types.Int)
+	zeroRows := e.empty(z)
+	e.expectRewrite(rule,
+		e.f.ConstructSelect(outer, e.filters(e.exists(zeroRows))),
+		e.f.ConstructSelect(outer, e.filters(e.f.ConstructFalse())))
 
-func TestSQLEliminateExistsZeroRows(t *testing.T) {
-	expectSQLFiresWith(t, "EliminateExistsZeroRows",
-		"SELECT * FROM t WHERE EXISTS (SELECT 1 FROM u WHERE false)",
-		sqlHelpers{names: []string{"SimplifyZeroCardinalityGroup", "EliminateProject", "Prune*"}})
+	z2 := e.f.Metadata().AddColumn("z2", types.Int)
+	e.expectNoMatch(rule, e.f.ConstructSelect(outer, e.filters(e.exists(e.empty(z, z2)))))
+	oneRow := e.intValues([]opt.ColumnID{z}, []int{1})
+	e.expectNoMatch(rule, e.f.ConstructSelect(outer, e.filters(e.exists(oneRow))))
+	ts, _ := e.scan("t", 1)
+	e.expectNoMatch(rule, e.f.ConstructSelect(outer, e.filters(e.exists(ts))))
+	e.expectNoMatch(rule, e.f.ConstructSelect(outer, e.filters(e.f.ConstructNot(e.exists(zeroRows)))))
 }

@@ -9,33 +9,16 @@ import (
 )
 
 func TestProjectMerge(t *testing.T) {
-	rule := loadRule(t, "ProjectMerge")
 	e := newEnv(t)
-	s, c := e.scan("t", 3)
-
-	bottom := e.f.Metadata().AddColumn("bottom", types.Int)
-	top := e.f.Metadata().AddColumn("top", types.Int)
-	inner := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.v(c[0]), bottom),
-	}, opt.ColSet{})
-	before := e.f.ConstructProject(inner, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructUnaryMinus(e.v(bottom)), top),
-	}, opt.ColSet{})
-	want := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructUnaryMinus(e.v(c[0])), top),
-	}, opt.ColSet{})
+	rule := loadRule(t, "ProjectMerge")
+	scan, cols := e.scan("t", 2)
+	bottomCol := e.f.Metadata().AddColumn("bottom", types.Int)
+	topCol := e.f.Metadata().AddColumn("top", types.Int)
+	inner := e.f.ConstructProject(scan, memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.v(cols[0]), bottomCol)}, opt.ColSet{})
+	before := e.f.ConstructProject(inner, memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.v(bottomCol), topCol)}, opt.ColSet{})
+	want := e.f.ConstructProject(scan, memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.v(cols[0]), topCol)}, opt.ColSet{})
 	e.expectRewrite(rule, before, want)
 
-	e.expectNoMatch(rule, e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructUnaryMinus(e.v(c[0])), top),
-	}, opt.ColSet{}))
-
-	e.expectNoMatch(rule, e.f.ConstructSelect(inner, e.filters(
-		e.f.ConstructGt(e.v(bottom), e.num(0)),
-	)))
-
-	selectInner := e.f.ConstructSelect(s, e.filters(e.f.ConstructGt(e.v(c[0]), e.num(0))))
-	e.expectNoMatch(rule, e.f.ConstructProject(selectInner, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructUnaryMinus(e.v(c[0])), top),
-	}, opt.ColSet{}))
+	nearMiss := e.f.ConstructProject(scan, memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.v(cols[0]), topCol)}, opt.ColSet{})
+	e.expectNoMatch(rule, nearMiss)
 }

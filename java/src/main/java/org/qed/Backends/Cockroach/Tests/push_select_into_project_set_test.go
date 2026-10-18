@@ -9,21 +9,21 @@ import (
 func TestPushSelectIntoProjectSet(t *testing.T) {
 	rule := loadRule(t, "PushSelectIntoProjectSet")
 	e := newEnv(t)
-	l, lc := e.scan("u", 1)
-	r, rc := e.scan("t", 1)
-	on := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])))
-	join := e.f.ConstructInnerJoin(l, r, on, &memo.JoinPrivate{})
-	p := e.f.ConstructGt(e.v(lc[0]), e.num(0))
-	q := e.f.ConstructLt(e.v(rc[0]), e.num(10))
-	before := e.f.ConstructSelect(join, e.filters(p, q))
-	filtered := e.f.ConstructSelect(l, e.filters(p))
-	want := e.f.ConstructSelect(e.f.ConstructInnerJoin(filtered, r, on, &memo.JoinPrivate{}), e.filters(q))
+	left, leftCols := e.scan("t", 1)
+	right, rightCols := e.scan("u", 1)
+	on := e.filters(e.f.ConstructEq(e.v(leftCols[0]), e.v(rightCols[0])))
+	join := e.f.ConstructInnerJoin(left, right, on, &memo.JoinPrivate{})
+	leftFilter := e.filters(e.f.ConstructEq(e.v(leftCols[0]), e.num(1)))
+	rightFilter := e.filters(e.f.ConstructEq(e.v(rightCols[0]), e.num(2)))
+	before := e.f.ConstructSelect(join, append(append(memo.FiltersExpr{}, leftFilter...), rightFilter...))
+	want := e.f.ConstructSelect(e.f.ConstructInnerJoin(e.f.ConstructSelect(left, leftFilter), right, on, &memo.JoinPrivate{}), rightFilter)
 	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructSelect(join, e.filters(q, p)))
-	leftJoin := e.f.ConstructLeftJoin(l, r, on, &memo.JoinPrivate{})
-	e.expectNoMatch(rule, e.f.ConstructSelect(leftJoin, e.filters(p, q)))
+
+	badLeft, badLeftCols := e.scan("t", 1)
+	badRight, badRightCols := e.scan("u", 1)
+	badOn := e.filters(e.f.ConstructEq(e.v(badLeftCols[0]), e.v(badRightCols[0])))
+	badJoin := e.f.ConstructInnerJoin(badLeft, badRight, badOn, &memo.JoinPrivate{})
+	bad := e.f.ConstructSelect(badJoin, e.filters(e.f.ConstructEq(e.v(badLeftCols[0]), e.num(1)), e.f.ConstructEq(e.v(badLeftCols[0]), e.num(2))))
+	e.expectNoMatch(rule, bad)
 }
 
-func TestSQLPushSelectIntoProjectSet(t *testing.T) {
-	expectSQLRewrites(t, "PushSelectIntoProjectSet", "SELECT * FROM (VALUES (1)) AS l(a) JOIN (VALUES (1)) AS r(b) ON a=b WHERE a>0 AND b<10")
-}

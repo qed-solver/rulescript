@@ -10,27 +10,26 @@ import (
 
 func TestReduceNotNullGroupingCols(t *testing.T) {
 	rule := loadRule(t, "ReduceNotNullGroupingCols")
+
 	e := newEnv(t)
-	s, cols := e.scan("u", 1)
-	alias := e.f.Metadata().AddColumn("alias", types.Int)
-	project := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.v(cols[0]), alias),
-	}, opt.MakeColSet(cols[0]))
-	before := e.f.ConstructGroupBy(project, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(cols[0], alias),
-	})
-	grouped := e.f.ConstructGroupBy(project, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(cols[0]),
-	})
-	want := e.f.ConstructProject(grouped, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.v(cols[0]), alias),
-	}, opt.MakeColSet(cols[0]))
-	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, grouped)
-	wrongProject := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.num(1), alias),
-	}, opt.MakeColSet(cols[0]))
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(wrongProject, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(cols[0], alias),
-	}))
+	scan, scanCols := e.scan("nn", 1)
+	second := e.f.Metadata().AddColumn("second", types.Int)
+	input := e.f.ConstructProject(scan, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.v(scanCols[0]), second),
+	}, opt.MakeColSet(scanCols[0]))
+	grouped := e.f.ConstructGroupBy(input, nil, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(scanCols[0], second)})
+	reduced := e.f.ConstructGroupBy(input, nil, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(scanCols[0])})
+	want := e.f.ConstructProject(reduced, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.v(scanCols[0]), second),
+	}, opt.MakeColSet(scanCols[0]))
+	e.expectRewriteUpToFreshColumns(rule, grouped, want)
+
+	e2 := newEnv(t)
+	scan2, scanCols2 := e2.scan("nn", 1)
+	second2 := e2.f.Metadata().AddColumn("second", types.Int)
+	input2 := e2.f.ConstructProject(scan2, memo.ProjectionsExpr{
+		e2.f.ConstructProjectionsItem(e2.v(scanCols2[0]), second2),
+	}, opt.MakeColSet(scanCols2[0]))
+	nearMiss := e2.f.ConstructGroupBy(input2, nil, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(scanCols2[0])})
+	e2.expectNoMatch(rule, nearMiss)
 }

@@ -1,7 +1,6 @@
 package rulescript_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -12,37 +11,37 @@ import (
 func TestInlineProjectInProject(t *testing.T) {
 	rule := loadRule(t, "InlineProjectInProject")
 	e := newEnv(t)
-	s, cols := e.scan("u", 1)
-	fcol := e.f.Metadata().AddColumn("f", types.Int)
-	tcol := e.f.Metadata().AddColumn("top", types.Int)
-	inner := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(cols[0]), e.num(1)), fcol),
-	}, opt.ColSet{})
-	before := e.f.ConstructProject(inner, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructMult(e.v(fcol), e.num(2)), tcol),
-	}, opt.MakeColSet(fcol))
-	want := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructMult(e.f.ConstructPlus(e.v(cols[0]), e.num(1)), e.num(2)), tcol),
-		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(cols[0]), e.num(1)), fcol),
-	}, opt.ColSet{})
-	e.expectRewrite(rule, before, want)
+	src, sc := e.scan("t", 1)
+	x2 := e.f.Metadata().AddColumn("x2", types.Int)
+	t1 := e.f.Metadata().AddColumn("t1", types.Int)
+	f1 := e.f.Metadata().AddColumn("f1", types.Int)
 
-	e.expectNoMatch(rule, e.f.ConstructProject(inner, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructMult(e.v(fcol), e.num(2)), tcol),
-	}, opt.ColSet{}))
-	e.expectNoMatch(rule, inner)
-	e.expectNoMatch(rule, e.f.ConstructSelect(inner, e.filters(e.f.ConstructGt(e.v(fcol), e.num(0)))))
-}
+	fOf := func() opt.ScalarExpr { return e.f.ConstructPlus(e.v(sc[0]), e.num(1)) }
+	inner := e.f.ConstructProject(src, memo.ProjectionsExpr{e.f.ConstructProjectionsItem(fOf(), x2)}, opt.ColSet{})
+	before := e.f.ConstructProject(
+		inner,
+		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.f.ConstructMult(e.v(x2), e.num(2)), t1)},
+		opt.MakeColSet(x2),
+	)
+	want := e.f.ConstructProject(src, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructMult(fOf(), e.num(2)), t1),
+		e.f.ConstructProjectionsItem(fOf(), f1),
+	}, opt.ColSet{})
+	e.expectRewriteUpToFreshColumns(rule, before, want)
 
-func TestSQLInlineProjectInProject(t *testing.T) {
-	sql := "SELECT x2 * 2 AS z, x2 FROM (SELECT x + 1 AS x2 FROM u)"
-	prune := func(r opt.RuleName) bool { return strings.HasPrefix(r.String(), "Prune") }
-	before, _ := planFor(t, sql, prune)
-	if strings.Count(before, "project\n") < 2 {
-		t.Fatalf("expected nested projects before the rule:\n%s", before)
-	}
-	got, fired := planFor(t, sql, prune, "InlineProjectInProject")
-	if strings.Join(fired, ",") != "InlineProjectInProject" || strings.Count(got, "project\n") != 1 {
-		t.Fatalf("expected inlined project, got %v:\n%s", fired, got)
-	}
+	innerWithPassthrough := e.f.ConstructProject(src, memo.ProjectionsExpr{e.f.ConstructProjectionsItem(fOf(), x2)}, opt.MakeColSet(sc[0]))
+	outerOfSourceColumn := e.f.ConstructProject(
+		innerWithPassthrough,
+		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.f.ConstructMult(e.v(x2), e.num(2)), t1)},
+		opt.MakeColSet(sc[0]),
+	)
+	e.expectNoMatch(rule, outerOfSourceColumn)
+
+	sel := e.f.ConstructSelect(src, e.filters(e.f.ConstructEq(e.v(sc[0]), e.num(1))))
+	outerOverSelect := e.f.ConstructProject(
+		sel,
+		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.f.ConstructMult(e.v(sc[0]), e.num(2)), t1)},
+		opt.MakeColSet(sc[0]),
+	)
+	e.expectNoMatch(rule, outerOverSelect)
 }

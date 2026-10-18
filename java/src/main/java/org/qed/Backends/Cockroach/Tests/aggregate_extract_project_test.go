@@ -11,30 +11,31 @@ import (
 func TestAggregateExtractProject(t *testing.T) {
 	rule := loadRule(t, "AggregateExtractProject")
 	e := newEnv(t)
-	a, ac := e.scan("t", 3)
-	b, _ := e.scan("u", 2)
-	c, cc := e.scan("u", 1)
-	ab := e.f.ConstructInnerJoin(a, b, nil, &memo.JoinPrivate{})
-	base := e.f.ConstructInnerJoin(ab, c, nil, &memo.JoinPrivate{})
-	fcol := e.f.Metadata().AddColumn("f", types.Int)
-	aggs := memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(ac[1])), fcol)}
-	private := &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(ac[0])}
-	before := e.f.ConstructGroupBy(base, aggs, private)
-	project := e.f.ConstructProject(base, nil, opt.MakeColSet(ac[0], ac[1]))
-	want := e.f.ConstructGroupBy(project, aggs, private)
+	a, ac := e.scan("t", 1)
+	b, bc := e.scan("u", 1)
+	c, cc := e.scan("nn", 1)
+	on := e.filters()
+	sumCol := e.f.Metadata().AddColumn("sum", types.Int)
+	sumItems := func() memo.AggregationsExpr {
+		return memo.AggregationsExpr{
+			e.f.ConstructAggregationsItem(e.f.ConstructSum(e.v(bc[0])), sumCol),
+		}
+	}
+	grouping := func(col opt.ColumnID) *memo.GroupingPrivate {
+		return &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(col)}
+	}
+
+	ab := e.f.ConstructInnerJoin(a, b, on, &memo.JoinPrivate{})
+	abc := e.f.ConstructInnerJoin(ab, c, on, &memo.JoinPrivate{})
+	before := e.f.ConstructGroupBy(abc, sumItems(), grouping(ac[0]))
+	projected := e.f.ConstructProject(abc, nil, opt.MakeColSet(ac[0], bc[0]))
+	want := e.f.ConstructGroupBy(projected, sumItems(), grouping(ac[0]))
 	e.expectRewrite(rule, before, want)
 
-	leftOuter := e.f.ConstructLeftJoin(ab, c, nil, &memo.JoinPrivate{})
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(leftOuter, aggs, private))
+	leftABC := e.f.ConstructLeftJoin(ab, c, on, &memo.JoinPrivate{})
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(leftABC, sumItems(), grouping(ac[0])))
 
-	cond := e.f.ConstructInnerJoin(ab, c,
-		e.filters(e.f.ConstructEq(e.v(ac[0]), e.v(cc[0]))), &memo.JoinPrivate{})
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(cond, aggs, private))
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(ab, sumItems(), grouping(ac[0])))
 
-	wide, _ := e.scan("t", 3)
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(
-		e.f.ConstructInnerJoin(ab, wide, nil, &memo.JoinPrivate{}), aggs, private))
-
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(
-		e.f.ConstructInnerJoin(a, c, nil, &memo.JoinPrivate{}), aggs, private))
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(abc, sumItems(), grouping(cc[0])))
 }

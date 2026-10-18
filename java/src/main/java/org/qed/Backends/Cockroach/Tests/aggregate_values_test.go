@@ -1,59 +1,71 @@
 package rulescript_test
 
 import (
+	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/rulescript"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-func TestAggregateValues(t *testing.T) {
-	rule := loadRule(t, "AggregateValues")
-	e := newEnv(t)
-	s, c := e.scan("u", 1)
-	before := e.f.ConstructGroupBy(s, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(c[0]),
+var freshColumnRef = regexp.MustCompile(`\((item|var) ([0-9]+)`)
+
+func normalizeFreshColumns(plan string, keep opt.ColumnID) string {
+	labels := make(map[string]string)
+	return freshColumnRef.ReplaceAllStringFunc(plan, func(m string) string {
+		sub := freshColumnRef.FindStringSubmatch(m)
+		if sub[2] == fmt.Sprint(keep) {
+			return m
+		}
+		label, ok := labels[sub[2]]
+		if !ok {
+			label = fmt.Sprintf("fresh%d", len(labels)+1)
+			labels[sub[2]] = label
+		}
+		return fmt.Sprintf("(%s %s", sub[1], label)
 	})
+}
+
+func (e *env) expectRewriteFreshColumns(rule *rulescript.Rule, before, want memo.RelExpr, keep opt.ColumnID) {
+	e.t.Helper()
 	got, ok := rule.Apply(&e.f, before)
 	if !ok {
 		e.t.Fatalf("%s did not apply to:\n%s", rule.Name, e.format(before))
 	}
-	out, ok := got.(*memo.ProjectExpr)
-	if !ok || len(out.Projections) != 1 || out.Projections[0].Col != c[0] {
-		e.t.Fatalf("%s did not produce a projection of the grouping column:\n%s", rule.Name, e.format(got))
+	g := normalizeFreshColumns(e.format(got), keep)
+	w := normalizeFreshColumns(e.format(want), keep)
+	if g != w {
+		e.t.Fatalf("%s produced an unexpected plan\ninput:\n%s\ngot:\n%s\nwant:\n%s",
+			rule.Name, e.format(before), e.format(got), e.format(want))
 	}
-	union, ok := out.Input.(*memo.UnionExpr)
-	if !ok {
-		e.t.Fatalf("%s did not produce a union:\n%s", rule.Name, e.format(got))
-	}
-	set := union.Private().(*memo.SetPrivate)
-	if e.format(union.Left) != e.format(s) || len(set.LeftCols) != 1 || set.LeftCols[0] != c[0] {
-		e.t.Fatalf("%s union left branch is not the source scan:\n%s", rule.Name, e.format(got))
-	}
-	right, ok := union.Right.(*memo.ProjectExpr)
-	if !ok || e.format(right.Input) != e.format(s) || len(set.RightCols) != 1 || set.RightCols[0] != right.Projections[0].Col {
-		e.t.Fatalf("%s union right branch is not a renamed copy of the source scan:\n%s", rule.Name, e.format(got))
-	}
-	if out.Projections[0].Element.(*memo.VariableExpr).Col != set.OutCols[0] {
-		e.t.Fatalf("%s projection does not read the union output:\n%s", rule.Name, e.format(got))
-	}
+}
 
-	ts, tc := e.scan("t", 2)
-	fcol := e.f.Metadata().AddColumn("f", types.Int)
-	aggs := memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(tc[0])), fcol)}
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(ts, aggs, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(tc[0]),
-	}))
+func TestAggregateValues(t *testing.T) {
+	rule := loadRule(t, "AggregateValues")
+	e := newEnv(t)
+	s, sc := e.scan("u", 1)
+	before := e.f.ConstructGroupBy(s, memo.AggregationsExpr{}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(sc[0])})
+	dup := e.f.Metadata().AddColumn("dup", types.Int)
+	out := e.f.Metadata().AddColumn("union", types.Int)
+	right := e.f.ConstructProject(s, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.v(sc[0]), dup),
+	}, opt.ColSet{})
+	union := e.f.ConstructUnion(s, right, &memo.SetPrivate{
+		LeftCols: opt.ColList{sc[0]}, RightCols: opt.ColList{dup}, OutCols: opt.ColList{out},
+	})
+	want := e.f.ConstructProject(union, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.v(out), sc[0]),
+	}, opt.ColSet{})
+	e.expectRewriteFreshColumns(rule, before, want, sc[0])
+	e.expectNoMatch(rule, e.f.ConstructScalarGroupBy(s, memo.AggregationsExpr{}, &memo.GroupingPrivate{}))
+}
 
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(ts, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(tc[1]),
-	}))
-
-	filtered := e.f.ConstructSelect(ts, e.filters(e.f.ConstructGt(e.v(tc[0]), e.num(1))))
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(filtered, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(tc[0]),
-	}))
-
-	e.expectNoMatch(rule, s)
+func TestAggregateValuesGroupSubset(t *testing.T) {
+	rule := loadRule(t, "AggregateValues")
+	e := newEnv(t)
+	s, sc := e.scan("t", 2)
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(s, memo.AggregationsExpr{}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(sc[0])}))
 }

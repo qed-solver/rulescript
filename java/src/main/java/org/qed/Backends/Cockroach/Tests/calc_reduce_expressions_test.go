@@ -11,22 +11,32 @@ import (
 func TestCalcReduceExpressions(t *testing.T) {
 	rule := loadRule(t, "CalcReduceExpressions")
 	e := newEnv(t)
-	s, sc := e.scan("u", 2)
-	out1 := e.f.Metadata().AddColumn("e1", types.Int)
-	out2 := e.f.Metadata().AddColumn("e2", types.Int)
-	items := func() memo.ProjectionsExpr {
+	l, lc := e.scan("u", 2)
+	e1 := e.f.Metadata().AddColumn("e1", types.Int)
+	e2 := e.f.Metadata().AddColumn("e2", types.Int)
+	projs := func() memo.ProjectionsExpr {
 		return memo.ProjectionsExpr{
-			e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(sc[0]), e.v(sc[1])), out1),
-			e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(sc[0]), e.num(1)), out2),
+			e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(lc[0]), e.v(lc[1])), e1),
+			e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(lc[0]), e.num(1)), e2),
 		}
 	}
-	falseFilter := e.f.ConstructSelect(s, e.filters(e.f.ConstructFalse()))
-	before := e.f.ConstructProject(falseFilter, items(), opt.ColSet{})
-	e.expectRewrite(rule, before, e.empty(out1, out2))
 
-	trueFilter := e.f.ConstructSelect(s, e.filters(e.f.ConstructGt(e.v(sc[0]), e.num(0))))
-	e.expectNoMatch(rule, e.f.ConstructProject(trueFilter, items(), opt.ColSet{}))
-	e.expectNoMatch(rule, e.f.ConstructProject(s, items(), opt.ColSet{}))
-	e.expectNoMatch(rule, e.f.ConstructProject(falseFilter, items()[:1], opt.ColSet{}))
-	e.expectNoMatch(rule, falseFilter)
+	falseSel := e.f.ConstructSelect(l, e.filters(e.f.ConstructFalse()))
+	e.expectRewrite(rule, e.f.ConstructProject(falseSel, projs(), opt.ColSet{}), e.empty(e1, e2))
+
+	trueSel := e.f.ConstructSelect(l, e.filters(e.f.ConstructTrue()))
+	e.expectNoMatch(rule, e.f.ConstructProject(trueSel, projs(), opt.ColSet{}))
+
+	eqSel := e.f.ConstructSelect(l, e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(lc[1]))))
+	e.expectNoMatch(rule, e.f.ConstructProject(eqSel, projs(), opt.ColSet{}))
+
+	wide, wc := e.scan("t", 3)
+	wideSel := e.f.ConstructSelect(wide, e.filters(e.f.ConstructFalse()))
+	wideProjs := memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(wc[0]), e.v(wc[1])), e1),
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(wc[0]), e.num(1)), e2),
+	}
+	e.expectNoMatch(rule, e.f.ConstructProject(wideSel, wideProjs, opt.ColSet{}))
+
+	e.expectNoMatch(rule, falseSel)
 }

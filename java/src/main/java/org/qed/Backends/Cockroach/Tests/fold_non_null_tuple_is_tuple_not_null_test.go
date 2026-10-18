@@ -9,14 +9,22 @@ import (
 func TestFoldNonNullTupleIsTupleNotNull(t *testing.T) {
 	rule := loadRule(t, "FoldNonNullTupleIsTupleNotNull")
 	e := newEnv(t)
-	s, cols := e.scan("nn", 2)
-	notNullA := e.f.ConstructIsNot(e.v(cols[0]), memo.NullSingleton)
-	notNullB := e.f.ConstructIsNot(e.v(cols[1]), memo.NullSingleton)
-	e.expectRewrite(rule, e.f.ConstructSelect(s, e.filters(notNullA, notNullB)), s)
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(notNullB, notNullA)))
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(notNullA)))
-}
+	s, c := e.scan("nn", 2)
+	notNullA := e.f.ConstructIsNot(e.v(c[0]), memo.NullSingleton)
+	notNullB := e.f.ConstructIsNot(e.v(c[1]), memo.NullSingleton)
+	before := e.f.ConstructSelect(s, e.filters(e.f.ConstructAnd(notNullA, notNullB)))
+	e.expectRewrite(rule, before, s)
 
-func TestSQLFoldNonNullTupleIsTupleNotNull(t *testing.T) {
-	expectSQLFires(t, "FoldNonNullTupleIsTupleNotNull", "SELECT a,b FROM (VALUES (1, 2), (3, 4)) AS v(a,b) WHERE a IS NOT NULL AND b IS NOT NULL")
+	nullable, nc := e.scan("t", 2)
+	nullableA := e.f.ConstructIsNot(e.v(nc[0]), memo.NullSingleton)
+	nullableB := e.f.ConstructIsNot(e.v(nc[1]), memo.NullSingleton)
+	e.expectNoMatch(rule, e.f.ConstructSelect(nullable, e.filters(e.f.ConstructAnd(nullableA, nullableB))))
+
+	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructAnd(
+		e.f.ConstructIs(e.v(c[0]), memo.NullSingleton),
+		e.f.ConstructIs(e.v(c[1]), memo.NullSingleton),
+	))))
+
+	one, oc := e.scan("u", 1)
+	e.expectNoMatch(rule, e.f.ConstructSelect(one, e.filters(e.f.ConstructIsNot(e.v(oc[0]), memo.NullSingleton))))
 }

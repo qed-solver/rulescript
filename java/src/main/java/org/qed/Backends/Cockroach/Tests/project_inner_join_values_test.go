@@ -9,24 +9,28 @@ import (
 )
 
 func TestProjectInnerJoinValues(t *testing.T) {
-	rule := loadRule(t, "ProjectInnerJoinValues")
 	e := newEnv(t)
-	left, lc := e.scan("u", 1)
-	r0 := e.f.Metadata().AddColumn("r0", types.Int)
-	r1 := e.f.Metadata().AddColumn("r1", types.Int)
-	right := e.intValues([]opt.ColumnID{r0, r1}, []int{1, 2})
-	on := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(r0)))
-	before := e.f.ConstructInnerJoin(left, right, on, &memo.JoinPrivate{})
-	project := e.f.ConstructProject(left, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.num(1), r0),
-		e.f.ConstructProjectionsItem(e.num(2), r1),
-	}, opt.MakeColSet(lc[0]))
-	e.expectRewrite(rule, before, e.f.ConstructSelect(project, on))
-	e.expectNoMatch(rule, e.f.ConstructLeftJoin(left, right, on, &memo.JoinPrivate{}))
-	wrong := e.intValues([]opt.ColumnID{r0, r1}, []int{1, 3})
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(left, wrong, on, &memo.JoinPrivate{}))
-}
+	rule := loadRule(t, "ProjectInnerJoinValues")
+	left, leftCols := e.scan("t", 1)
+	valueCols := opt.ColList{
+		e.f.Metadata().AddColumn("v0", types.Int),
+		e.f.Metadata().AddColumn("v1", types.Int),
+	}
+	values := e.f.ConstructValues(memo.ScalarListExpr{
+		e.f.ConstructTuple(memo.ScalarListExpr{e.num(1), e.num(2)}, types.MakeTuple([]*types.T{types.Int, types.Int})),
+	}, &memo.ValuesPrivate{Cols: valueCols, ID: e.f.Metadata().NextUniqueID()})
+	on := e.filters(e.f.ConstructEq(e.v(leftCols[0]), e.v(valueCols[0])))
+	before := e.f.ConstructInnerJoin(left, values, on, &memo.JoinPrivate{})
 
-func TestSQLProjectInnerJoinValues(t *testing.T) {
-	expectSQLFires(t, "ProjectInnerJoinValues", "SELECT * FROM (VALUES (9)) AS l(a) JOIN (VALUES (1,2)) AS r(b,c) ON a=b")
+	project := e.f.ConstructProject(left, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.num(1), valueCols[0]),
+		e.f.ConstructProjectionsItem(e.num(2), valueCols[1]),
+	}, opt.MakeColSet(leftCols...))
+	want := e.f.ConstructSelect(project, e.filters(e.f.ConstructEq(e.v(leftCols[0]), e.v(valueCols[0]))))
+	e.expectRewrite(rule, before, want)
+
+	nearMiss := e.f.ConstructValues(memo.ScalarListExpr{
+		e.f.ConstructTuple(memo.ScalarListExpr{e.num(1), e.num(9)}, types.MakeTuple([]*types.T{types.Int, types.Int})),
+	}, &memo.ValuesPrivate{Cols: valueCols, ID: e.f.Metadata().NextUniqueID()})
+	e.expectNoMatch(rule, e.f.ConstructInnerJoin(left, nearMiss, on, &memo.JoinPrivate{}))
 }

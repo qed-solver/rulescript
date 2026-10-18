@@ -11,22 +11,21 @@ import (
 func TestAggregateFilterTranspose(t *testing.T) {
 	rule := loadRule(t, "AggregateFilterTranspose")
 	e := newEnv(t)
-	a, ac := e.scan("t", 1)
-	b, bc := e.scan("u", 1)
-	base := e.f.ConstructInnerJoin(a, b, nil, &memo.JoinPrivate{})
-	fcol := e.f.Metadata().AddColumn("f", types.Int)
-	aggs := memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(bc[0])), fcol)}
-	private := &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(ac[0])}
-	p := e.f.ConstructGt(e.v(ac[0]), e.num(1))
-	before := e.f.ConstructGroupBy(e.f.ConstructSelect(base, e.filters(p)), aggs, private)
-	want := e.f.ConstructSelect(e.f.ConstructGroupBy(base, aggs, private), e.filters(p))
+	l, lc := e.scan("t", 1)
+	r, rc := e.scan("u", 1)
+	sum := e.f.Metadata().AddColumn("sum", types.Int)
+	groupBy := func(input memo.RelExpr) memo.RelExpr {
+		aggs := memo.AggregationsExpr{
+			e.f.ConstructAggregationsItem(e.f.ConstructSum(e.v(rc[0])), sum),
+		}
+		return e.f.ConstructGroupBy(input, aggs, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(lc[0])})
+	}
+	inner := e.f.ConstructInnerJoin(l, r, memo.FiltersExpr{}, &memo.JoinPrivate{})
+	before := groupBy(e.f.ConstructSelect(inner, e.filters(e.f.ConstructGt(e.v(lc[0]), e.num(5)))))
+	want := e.f.ConstructSelect(groupBy(inner), e.filters(e.f.ConstructGt(e.v(lc[0]), e.num(5))))
 	e.expectRewrite(rule, before, want)
 
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(
-		e.f.ConstructSelect(base, e.filters(e.f.ConstructGt(e.v(bc[0]), e.num(1)))), aggs, private))
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(base, aggs, private))
-	e.expectNoMatch(rule, want)
-
-	left := e.f.ConstructLeftJoin(a, b, nil, &memo.JoinPrivate{})
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(e.f.ConstructSelect(left, e.filters(p)), aggs, private))
+	left := e.f.ConstructLeftJoin(l, r, memo.FiltersExpr{}, &memo.JoinPrivate{})
+	e.expectNoMatch(rule, groupBy(e.f.ConstructSelect(left, e.filters(e.f.ConstructGt(e.v(lc[0]), e.num(5))))))
+	e.expectNoMatch(rule, groupBy(e.f.ConstructSelect(inner, e.filters(e.f.ConstructGt(e.v(rc[0]), e.num(5))))))
 }

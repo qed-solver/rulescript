@@ -11,25 +11,25 @@ import (
 func TestFoldColumnAccess(t *testing.T) {
 	rule := loadRule(t, "FoldColumnAccess")
 	e := newEnv(t)
-	s, cols := e.scan("u", 1)
-	e0 := e.f.Metadata().AddColumn("e0", types.Int)
-	e1 := e.f.Metadata().AddColumn("e1", types.Int)
-	second := e.f.ConstructPlus(e.v(cols[0]), e.num(1))
-	inner := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.v(cols[0]), e0),
-		e.f.ConstructProjectionsItem(second, e1),
+	base, bc := e.scan("t", 3)
+	x := e.f.Metadata().AddColumn("e0", types.Int)
+	y := e.f.Metadata().AddColumn("e1", types.Int)
+	tuple := e.f.ConstructProject(base, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.v(bc[0]), x),
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(bc[0]), e.num(1)), y),
 	}, opt.ColSet{})
-	before := e.f.ConstructProject(inner, nil, opt.MakeColSet(e1))
-	want := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(cols[0]), e.num(1)), e1),
+	before := e.f.ConstructProject(tuple, memo.ProjectionsExpr{}, opt.MakeColSet(y))
+	want := e.f.ConstructProject(base, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(bc[0]), e.num(1)), y),
 	}, opt.ColSet{})
 	e.expectRewrite(rule, before, want)
 
-	e.expectNoMatch(rule, e.f.ConstructProject(inner, nil, opt.MakeColSet(e0)))
-	e.expectNoMatch(rule, e.f.ConstructProject(inner, nil, opt.MakeColSet(e0, e1)))
-	e.expectNoMatch(rule, inner)
-}
-
-func TestSQLFoldColumnAccess(t *testing.T) {
-	expectSQLFiresOrNot(t, "FoldColumnAccess", "SELECT b FROM (SELECT a+1 AS a, a+2 AS b FROM (VALUES (1),(2)) AS v(a)) AS q", true)
+	z := e.f.Metadata().AddColumn("e2", types.Int)
+	wide := e.f.ConstructProject(base, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.v(bc[0]), x),
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(bc[0]), e.num(1)), y),
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(bc[0]), e.num(2)), z),
+	}, opt.ColSet{})
+	e.expectNoMatch(rule, e.f.ConstructProject(wide, memo.ProjectionsExpr{}, opt.MakeColSet(y)))
+	e.expectNoMatch(rule, e.f.ConstructProject(tuple, memo.ProjectionsExpr{}, opt.MakeColSet(x)))
 }

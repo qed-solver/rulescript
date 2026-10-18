@@ -9,15 +9,15 @@ import (
 func TestJoinReduceExpressions(t *testing.T) {
 	rule := loadRule(t, "JoinReduceExpressions")
 	e := newEnv(t)
-	l, lc := e.scan("u", 1)
-	r, rc := e.scan("t", 1)
-	on := e.f.ConstructEq(e.v(lc[0]), e.v(rc[0]))
-
-	before := e.f.ConstructInnerJoin(l, r, e.filters(e.f.ConstructAnd(on, e.f.ConstructFalse())), &memo.JoinPrivate{})
-	want := e.f.ConstructInnerJoin(l, r, e.filters(e.f.ConstructFalse()), &memo.JoinPrivate{})
+	left, leftCols := e.scan("u", 1)
+	right, _ := e.scan("t", 1)
+	predicate := e.f.ConstructEq(e.v(leftCols[0]), e.num(7))
+	before := e.f.ConstructInnerJoin(left, right, e.filters(e.f.ConstructAnd(predicate, e.f.ConstructFalse())), &memo.JoinPrivate{})
+	want := e.f.ConstructInnerJoin(left, right, e.filters(e.f.ConstructFalse()), &memo.JoinPrivate{})
 	e.expectRewrite(rule, before, want)
 
-	e.expectNoMatch(rule, e.f.ConstructLeftJoin(l, r, e.filters(e.f.ConstructAnd(on, e.f.ConstructFalse())), &memo.JoinPrivate{}))
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(l, r, e.filters(e.f.ConstructAnd(e.f.ConstructFalse(), on)), &memo.JoinPrivate{}))
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(l, r, e.filters(e.f.ConstructAnd(on, e.f.ConstructTrue())), &memo.JoinPrivate{}))
+	left2, leftCols2 := e.scan("u", 1)
+	right2, _ := e.scan("t", 1)
+	nearMiss := e.f.ConstructInnerJoin(left2, right2, e.filters(e.f.ConstructAnd(e.f.ConstructEq(e.v(leftCols2[0]), e.num(7)), e.f.ConstructTrue())), &memo.JoinPrivate{})
+	e.expectNoMatch(rule, nearMiss)
 }

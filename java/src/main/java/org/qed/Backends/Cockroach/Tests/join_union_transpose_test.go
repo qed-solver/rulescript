@@ -1,52 +1,52 @@
 package rulescript_test
 
 import (
-	"regexp"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestJoinUnionTranspose(t *testing.T) {
 	rule := loadRule(t, "JoinUnionTranspose")
 	e := newEnv(t)
-	x, xc := e.scan("t", 1)
-	y, yc := e.scan("t", 1)
-	o, oc := e.scan("u", 1)
-	out := e.f.Metadata().AddColumn("union", types.Int)
-	priv := &memo.SetPrivate{
-		LeftCols:  opt.ColList{xc[0]},
-		RightCols: opt.ColList{yc[0]},
-		OutCols:   opt.ColList{out},
-	}
-	jp := &memo.JoinPrivate{}
-	onU := e.filters(e.f.ConstructEq(e.v(out), e.v(oc[0])))
-	onX := e.filters(e.f.ConstructEq(e.v(xc[0]), e.v(oc[0])))
 
-	before := e.f.ConstructInnerJoin(e.f.ConstructUnionAll(x, y, priv), o, onU, jp)
+	x, xc := e.scan("u", 1)
+	y, yc := e.scan("nn", 1)
+	o, oc := e.scan("t", 1)
+	u := e.f.Metadata().AddColumn("union", e.v(xc[0]).DataType())
+	left := e.f.ConstructUnionAll(x, y, &memo.SetPrivate{
+		LeftCols: opt.ColList{xc[0]}, RightCols: opt.ColList{yc[0]}, OutCols: opt.ColList{u},
+	})
+	before := e.f.ConstructInnerJoin(left, o, e.filters(e.f.ConstructGt(e.v(u), e.v(oc[0]))), &memo.JoinPrivate{})
+	branch1 := e.f.ConstructInnerJoin(x, o, e.filters(e.f.ConstructGt(e.v(xc[0]), e.v(oc[0]))), &memo.JoinPrivate{})
+	branch2 := e.f.ConstructInnerJoin(y, o, e.filters(e.f.ConstructGt(e.v(yc[0]), e.v(oc[0]))), &memo.JoinPrivate{})
+	branch2Left := e.f.Metadata().AddColumn("union_y", e.v(yc[0]).DataType())
+	branch2Right := e.f.Metadata().AddColumn("union_o", e.v(oc[0]).DataType())
+	branch2 = e.f.ConstructProject(branch2, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.v(yc[0]), branch2Left),
+		e.f.ConstructProjectionsItem(e.v(oc[0]), branch2Right),
+	}, opt.ColSet{})
 	got, ok := rule.Apply(&e.f, before)
 	if !ok {
-		t.Fatalf("%s did not apply to:\n%s", rule.Name, e.format(before))
+		t.Fatal("JoinUnionTranspose did not apply")
 	}
-	ids := regexp.MustCompile(`\((var|item) [0-9]+|\(scan \([0-9,-]+\)\)`)
-	normalized := ids.ReplaceAllStringFunc(e.format(got), func(m string) string {
-		if m[:5] == "(scan" {
-			return "(scan _)"
-		}
-		return strings.Fields(m)[0] + " _"
+	gotOut := got.(*memo.ProjectExpr).Input.(*memo.UnionAllExpr).SetPrivate.OutCols
+	unionOut1, unionOut2 := gotOut[0], gotOut[1]
+	want := e.f.ConstructUnionAll(branch1, branch2, &memo.SetPrivate{
+		LeftCols: opt.ColList{xc[0], oc[0]}, RightCols: opt.ColList{branch2Left, branch2Right}, OutCols: opt.ColList{unionOut1, unionOut2},
 	})
-	want := "(project pass=() (union-all (inner-join (scan _) (scan _) (filters (filters-item (eq (var _) (var _))))) " +
-		"(project pass=() (inner-join (scan _) (scan _) (filters (filters-item (eq (var _) (var _))))) " +
-		"(projections (item _ (var _)) (item _ (var _))))) (projections (item _ (var _)) (item _ (var _))))"
-	if normalized != want {
-		t.Fatalf("%s produced an unexpected plan\ninput:\n%s\ngot:\n%s\nwant:\n%s",
-			rule.Name, e.format(before), normalized, want)
+	want = e.f.ConstructProject(want, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.v(unionOut1), u),
+		e.f.ConstructProjectionsItem(e.v(unionOut2), oc[0]),
+	}, opt.ColSet{})
+	g, _ := alphaComputedColumns(e.format(got))
+	w, _ := alphaComputedColumns(e.format(want))
+	if g != w {
+		t.Fatalf("JoinUnionTranspose produced an unexpected plan\ngot:\n%s\nwant:\n%s", g, w)
 	}
 
-	e.expectNoMatch(rule, e.f.ConstructLeftJoin(e.f.ConstructUnionAll(x, y, priv), o, onU, jp))
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(e.f.ConstructUnion(x, y, priv), o, onU, jp))
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(x, o, onX, jp))
+	a, ac := e.scan("u", 1)
+	b, bc := e.scan("t", 2)
+	e.expectNoMatch(rule, e.f.ConstructInnerJoin(a, b, e.filters(e.f.ConstructEq(e.v(ac[0]), e.v(bc[0]))), &memo.JoinPrivate{}))
 }

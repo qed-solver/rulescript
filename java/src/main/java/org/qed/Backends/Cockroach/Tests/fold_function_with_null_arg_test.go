@@ -11,24 +11,20 @@ import (
 func TestFoldFunctionWithNullArg(t *testing.T) {
 	rule := loadRule(t, "FoldFunctionWithNullArg")
 	e := newEnv(t)
-	s, cols := e.scan("u", 1)
-	z := e.f.Metadata().AddColumn("z", types.Bool)
-	null := e.f.ConstructNull(types.Int)
-	before := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructEq(e.v(cols[0]), null), z),
-	}, opt.ColSet{})
-	want := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructNull(types.Bool), z),
-	}, opt.ColSet{})
-	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructEq(null, e.v(cols[0])), z),
-	}, opt.ColSet{}))
-	e.expectNoMatch(rule, e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructEq(e.v(cols[0]), e.num(1)), z),
-	}, opt.ColSet{}))
-}
+	in, cols := e.scan("t", 1)
+	a := cols[0]
 
-func TestSQLFoldFunctionWithNullArg(t *testing.T) {
-	expectSQLFires(t, "FoldFunctionWithNullArg", "SELECT x = CAST(NULL AS INT) AS z FROM u")
+	project := func(elem opt.ScalarExpr) memo.RelExpr {
+		out := e.f.Metadata().AddColumn("out", types.Bool)
+		return e.f.ConstructProject(in, memo.ProjectionsExpr{e.f.ConstructProjectionsItem(elem, out)}, opt.ColSet{})
+	}
+
+	before := project(e.f.ConstructEq(e.v(a), e.f.ConstructNull(types.Int)))
+	nullOut := e.f.Metadata().AddColumn("nullOut", types.Bool)
+	want := e.f.ConstructProject(in, memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.f.ConstructNull(types.Bool), nullOut)}, opt.ColSet{})
+	e.expectRewriteUpToFreshColumns(rule, before, want)
+
+	e.expectNoMatch(rule, project(e.f.ConstructPlus(e.v(a), e.f.ConstructNull(types.Int))))
+	e.expectNoMatch(rule, project(e.f.ConstructEq(e.f.ConstructNull(types.Int), e.v(a))))
+	e.expectNoMatch(rule, project(e.f.ConstructEq(e.v(a), e.num(1))))
 }

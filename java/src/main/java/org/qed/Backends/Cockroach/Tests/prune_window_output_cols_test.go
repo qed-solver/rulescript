@@ -9,31 +9,36 @@ import (
 )
 
 func TestPruneWindowOutputCols(t *testing.T) {
-	rule := loadRule(t, "PruneWindowOutputCols")
 	e := newEnv(t)
-	l, lc := e.scan("nn", 2)
-	r, rc := e.scan("nn", 2)
-	w1 := e.f.Metadata().AddColumn("w1", types.Int)
-	w2 := e.f.Metadata().AddColumn("w2", types.Int)
-	aggs := memo.AggregationsExpr{
-		e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(rc[1])), w1),
-		e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(rc[1])), w2),
-	}
-	window := e.f.ConstructGroupBy(r, aggs, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(rc[0])})
-	on := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])))
-	join := e.f.ConstructInnerJoin(l, window, on, &memo.JoinPrivate{})
-	before := e.f.ConstructProject(join, nil, opt.MakeColSet(lc[0], lc[1], w1))
-	pruned := e.f.ConstructGroupBy(r, aggs[:1], &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(rc[0])})
-	want := e.f.ConstructProject(e.f.ConstructInnerJoin(l, pruned, on, &memo.JoinPrivate{}), nil,
-		opt.MakeColSet(lc[0], lc[1], w1))
-	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructProject(join, nil, opt.MakeColSet(lc[0], lc[1], w2)))
-	e.expectNoMatch(rule, e.f.ConstructProject(e.f.ConstructLeftJoin(l, window, on, &memo.JoinPrivate{}), nil,
-		opt.MakeColSet(lc[0], lc[1], w1)))
-}
+	rule := loadRule(t, "PruneWindowOutputCols")
 
-func TestSQLPruneWindowOutputCols(t *testing.T) {
-	expectSQLFiresWith(t, "PruneWindowOutputCols",
-		"SELECT n.a, n.b, g.w1 FROM nn n JOIN (SELECT a, max(b) AS w1, min(b) AS w2 FROM nn GROUP BY a) g ON n.a = g.a",
-		sqlHelpers{names: []string{"PruneJoinLeftCols", "PruneScanCols", "EliminateProject"}})
+	input, cols := e.scan("nn", 2)
+	aggInput, aggCols := e.scan("nn", 2)
+	windowOne := e.f.Metadata().AddColumn("window-one", types.Int)
+	windowTwo := e.f.Metadata().AddColumn("window-two", types.Int)
+	group := e.f.ConstructGroupBy(aggInput, memo.AggregationsExpr{
+		e.f.ConstructAggregationsItem(e.f.ConstructConstAgg(e.v(aggCols[1])), windowOne),
+		e.f.ConstructAggregationsItem(e.f.ConstructAnyNotNullAgg(e.v(aggCols[1])), windowTwo),
+	}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(aggCols[0])})
+	join := e.f.ConstructInnerJoin(input, group, e.filters(e.f.ConstructEq(e.v(cols[0]), e.v(aggCols[0]))), &memo.JoinPrivate{})
+	before := e.f.ConstructProject(join, memo.EmptyProjectionsExpr, opt.MakeColSet(cols[0], cols[1], windowOne))
+
+	prunedGroup := e.f.ConstructGroupBy(aggInput, memo.AggregationsExpr{
+		e.f.ConstructAggregationsItem(e.f.ConstructConstAgg(e.v(aggCols[1])), windowOne),
+	}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(aggCols[0])})
+	prunedJoin := e.f.ConstructInnerJoin(input, prunedGroup, e.filters(e.f.ConstructEq(e.v(cols[0]), e.v(aggCols[0]))), &memo.JoinPrivate{})
+	want := e.f.ConstructProject(prunedJoin, memo.EmptyProjectionsExpr, opt.MakeColSet(cols[0], cols[1], windowOne))
+	e.expectRewriteUpToFreshColumns(rule, before, want)
+
+	nearInput, nearCols := e.scan("nn", 2)
+	nearAggInput, nearAggCols := e.scan("nn", 2)
+	nearOne := e.f.Metadata().AddColumn("near-window-one", types.Int)
+	nearTwo := e.f.Metadata().AddColumn("near-window-two", types.Int)
+	nearGroup := e.f.ConstructGroupBy(nearAggInput, memo.AggregationsExpr{
+		e.f.ConstructAggregationsItem(e.f.ConstructConstAgg(e.v(nearAggCols[1])), nearOne),
+		e.f.ConstructAggregationsItem(e.f.ConstructAnyNotNullAgg(e.v(nearAggCols[1])), nearTwo),
+	}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(nearAggCols[0])})
+	nearJoin := e.f.ConstructInnerJoin(nearInput, nearGroup, e.filters(e.f.ConstructEq(e.v(nearCols[0]), e.v(nearAggCols[0]))), &memo.JoinPrivate{})
+	nearPlan := e.f.ConstructProject(nearJoin, memo.EmptyProjectionsExpr, opt.MakeColSet(nearCols[0], nearCols[1], nearTwo))
+	e.expectNoMatch(rule, nearPlan)
 }

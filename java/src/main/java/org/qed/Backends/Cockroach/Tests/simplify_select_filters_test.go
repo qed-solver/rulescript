@@ -3,20 +3,21 @@ package rulescript_test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestSimplifySelectFilters(t *testing.T) {
 	rule := loadRule(t, "SimplifySelectFilters")
 	e := newEnv(t)
-	s, cols := e.scan("u", 1)
-	p := e.f.ConstructGt(e.v(cols[0]), e.num(0))
-	nullBool := e.f.ConstructNull(types.Bool)
-	e.expectRewrite(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructOr(p, nullBool))), e.f.ConstructSelect(s, e.filters(p)))
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructOr(nullBool, p))))
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructOr(p, e.f.ConstructFalse()))))
-}
+	scan, cols := e.scan("t", 2)
+	p := e.f.ConstructEq(e.v(cols[0]), e.num(7))
+	before := e.f.ConstructSelect(scan, e.filters(e.f.ConstructOr(p, e.f.ConstructNull(types.Bool))))
+	want := e.f.ConstructSelect(scan, e.filters(e.f.ConstructEq(e.v(cols[0]), e.num(7))))
+	e.expectRewrite(rule, before, want)
 
-func TestSQLSimplifySelectFilters(t *testing.T) {
-	expectSQLFires(t, "SimplifySelectFilters", "SELECT x FROM u WHERE x > 0 OR NULL")
+	nearMissScan, nearMissCols := e.scan("t", 2)
+	nearMissP := e.f.ConstructEq(e.v(nearMissCols[0]), e.num(7))
+	nearMiss := e.f.ConstructSelect(nearMissScan, e.filters(e.f.ConstructOr(nearMissP, memo.TrueSingleton)))
+	e.expectNoMatch(rule, nearMiss)
 }

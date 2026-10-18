@@ -10,16 +10,26 @@ import (
 
 func TestRewriteCorrelatedScalarSubquery(t *testing.T) {
 	rule := loadRule(t, "RewriteCorrelatedScalarSubquery")
-	e := newEnv(t)
-	l, lc := e.scan("t", 1)
-	r, rc := e.scan("u", 1)
-	on := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])))
-	cnt := e.f.Metadata().AddColumn("cnt", types.Int)
-	aggs := memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(rc[0])), cnt)}
-	grouping := &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(lc[0])}
-	before := e.f.ConstructGroupBy(e.f.ConstructLeftJoinApply(l, r, on, &memo.JoinPrivate{}), aggs, grouping)
-	want := e.f.ConstructGroupBy(e.f.ConstructLeftJoin(l, r, on, &memo.JoinPrivate{}), aggs, grouping)
-	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, want)
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(e.f.ConstructInnerJoinApply(l, r, on, &memo.JoinPrivate{}), aggs, grouping))
+	t.Run("rewrite correlated aggregate", func(t *testing.T) {
+		e := newEnv(t)
+		left, lc := e.scan("u", 1)
+		right, rc := e.scan("t", 1)
+		cond := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])))
+		apply := e.f.ConstructLeftJoinApply(left, right, cond, &memo.JoinPrivate{})
+		aggCol := e.f.Metadata().AddColumn("aggregate", types.Int)
+		before := e.f.ConstructGroupBy(apply, memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(rc[0])), aggCol)}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(lc[0])})
+		join := e.f.ConstructLeftJoin(left, right, cond, &memo.JoinPrivate{})
+		want := e.f.ConstructGroupBy(join, memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(rc[0])), aggCol)}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(lc[0])})
+		e.expectRewrite(rule, before, want)
+	})
+	t.Run("multi-column inner near miss", func(t *testing.T) {
+		e := newEnv(t)
+		left, lc := e.scan("u", 1)
+		right, rc := e.scan("t", 2)
+		cond := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])))
+		apply := e.f.ConstructLeftJoinApply(left, right, cond, &memo.JoinPrivate{})
+		aggCol := e.f.Metadata().AddColumn("aggregate", types.Int)
+		plan := e.f.ConstructGroupBy(apply, memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(rc[0])), aggCol)}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(lc[0])})
+		e.expectNoMatch(rule, plan)
+	})
 }

@@ -9,17 +9,32 @@ import (
 func TestFilterJoin(t *testing.T) {
 	rule := loadRule(t, "FilterJoin")
 	e := newEnv(t)
-	l, lc := e.scan("u", 1)
-	r, rc := e.scan("t", 1)
-	on := e.f.ConstructEq(e.v(lc[0]), e.v(rc[0]))
-	above := e.f.ConstructGt(e.v(rc[0]), e.num(1))
-	join := e.f.ConstructInnerJoin(l, r, e.filters(on), &memo.JoinPrivate{})
-	before := e.f.ConstructSelect(join, e.filters(above))
-	want := e.f.ConstructInnerJoin(l, r, e.filters(on, above), &memo.JoinPrivate{})
+	l, lc := e.scan("t", 3)
+	r, rc := e.scan("u", 2)
+	joinCond := e.f.ConstructEq(e.v(lc[0]), e.v(rc[0]))
+	aboveFilter := e.f.ConstructGt(e.v(lc[1]), e.num(5))
+	before := e.f.ConstructSelect(
+		e.f.ConstructInnerJoin(l, r, e.filters(joinCond), &memo.JoinPrivate{}),
+		e.filters(aboveFilter),
+	)
+	want := e.f.ConstructInnerJoin(
+		l, r,
+		e.filters(joinCond, aboveFilter),
+		&memo.JoinPrivate{},
+	)
 	e.expectRewrite(rule, before, want)
 
-	left := e.f.ConstructLeftJoin(l, r, e.filters(on), &memo.JoinPrivate{})
-	e.expectNoMatch(rule, e.f.ConstructSelect(left, e.filters(above)))
-	e.expectNoMatch(rule, e.f.ConstructSelect(l, e.filters(above)))
-	e.expectNoMatch(rule, want)
+	e.expectNoMatch(rule, e.f.ConstructSelect(
+		e.f.ConstructLeftJoin(l, r, e.filters(joinCond), &memo.JoinPrivate{}),
+		e.filters(aboveFilter),
+	))
+	e.expectNoMatch(rule, e.f.ConstructSelect(
+		e.f.ConstructSemiJoin(l, r, e.filters(joinCond), &memo.JoinPrivate{}),
+		e.filters(aboveFilter),
+	))
+	e.expectNoMatch(rule, e.f.ConstructSelect(
+		e.f.ConstructInnerJoinApply(l, r, e.filters(joinCond), &memo.JoinPrivate{}),
+		e.filters(aboveFilter),
+	))
+	e.expectNoMatch(rule, e.f.ConstructSelect(l, e.filters(aboveFilter)))
 }

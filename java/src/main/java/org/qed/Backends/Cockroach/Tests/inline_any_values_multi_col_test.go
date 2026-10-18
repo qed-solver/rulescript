@@ -11,24 +11,29 @@ import (
 func TestInlineAnyValuesMultiCol(t *testing.T) {
 	rule := loadRule(t, "InlineAnyValuesMultiCol")
 	e := newEnv(t)
-	s, cols := e.scan("t", 2)
-	left := opt.ColList{e.f.Metadata().AddColumn("l0", types.Int), e.f.Metadata().AddColumn("l1", types.Int)}
-	right := opt.ColList{e.f.Metadata().AddColumn("r0", types.Int), e.f.Metadata().AddColumn("r1", types.Int)}
+	s, sc := e.scan("t", 2)
+	p := opt.ColList{e.f.Metadata().AddColumn("p0", types.Int), e.f.Metadata().AddColumn("p1", types.Int)}
+	q := opt.ColList{e.f.Metadata().AddColumn("q0", types.Int), e.f.Metadata().AddColumn("q1", types.Int)}
 	out := opt.ColList{e.f.Metadata().AddColumn("o0", types.Int), e.f.Metadata().AddColumn("o1", types.Int)}
-	union := func(last int) memo.RelExpr {
-		return e.f.ConstructUnionAll(e.intValues(left, []int{1, 2}), e.intValues(right, []int{3, last}),
-			&memo.SetPrivate{LeftCols: left, RightCols: right, OutCols: out})
-	}
+	first := e.intValues(p, []int{1, 2})
+	second := e.intValues(q, []int{3, 4})
+	values := e.f.ConstructUnionAll(first, second, &memo.SetPrivate{LeftCols: p, RightCols: q, OutCols: out})
 	on := e.filters(
-		e.f.ConstructEq(e.v(cols[0]), e.v(out[0])),
-		e.f.ConstructEq(e.v(cols[1]), e.v(out[1])))
-	before := e.f.ConstructSemiJoin(s, union(4), on, &memo.JoinPrivate{})
-	tuple := func(x, y int) opt.ScalarExpr {
-		return e.f.ConstructAnd(
-			e.f.ConstructEq(e.v(cols[0]), e.num(x)), e.f.ConstructEq(e.v(cols[1]), e.num(y)))
-	}
-	want := e.f.ConstructSelect(s, e.filters(e.f.ConstructOr(tuple(1, 2), tuple(3, 4))))
+		e.f.ConstructEq(e.v(sc[0]), e.v(out[0])),
+		e.f.ConstructEq(e.v(sc[1]), e.v(out[1])),
+	)
+	before := e.f.ConstructSemiJoin(s, values, on, &memo.JoinPrivate{})
+	want := e.f.ConstructSelect(s, e.filters(e.f.ConstructOr(
+		e.f.ConstructAnd(e.f.ConstructEq(e.v(sc[0]), e.num(1)), e.f.ConstructEq(e.v(sc[1]), e.num(2))),
+		e.f.ConstructAnd(e.f.ConstructEq(e.v(sc[0]), e.num(3)), e.f.ConstructEq(e.v(sc[1]), e.num(4))),
+	)))
 	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructSemiJoin(s, union(5), on, &memo.JoinPrivate{}))
-	e.expectNoMatch(rule, e.f.ConstructAntiJoin(s, union(4), on, &memo.JoinPrivate{}))
+	e.expectNoMatch(rule, e.f.ConstructInnerJoin(s, values, on, &memo.JoinPrivate{}))
+	e.expectNoMatch(rule, e.f.ConstructSemiJoin(s, values, e.filters(
+		e.f.ConstructEq(e.v(sc[0]), e.v(out[0])),
+	), &memo.JoinPrivate{}))
+	e.expectNoMatch(rule, e.f.ConstructSemiJoin(s, values, e.filters(
+		e.f.ConstructEq(e.v(sc[0]), e.v(out[1])),
+		e.f.ConstructEq(e.v(sc[1]), e.v(out[0])),
+	), &memo.JoinPrivate{}))
 }

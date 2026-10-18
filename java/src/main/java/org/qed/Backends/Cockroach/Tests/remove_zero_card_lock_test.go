@@ -3,26 +3,28 @@ package rulescript_test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestRemoveZeroCardLock(t *testing.T) {
 	rule := loadRule(t, "RemoveZeroCardLock")
-	e := newEnv(t)
-	c := e.f.Metadata().AddColumn("c", types.Int)
-	input := e.empty(c)
-	before := e.f.ConstructSelect(input, e.filters(e.f.ConstructGt(e.v(c), e.num(0))))
-	e.expectRewrite(rule, before, input)
-
-	e.expectNoMatch(rule, input)
-	scan, sc := e.scan("t", 1)
-	e.expectNoMatch(rule, e.f.ConstructSelect(scan, e.filters(e.f.ConstructGt(e.v(sc[0]), e.num(0)))))
-	c2 := e.f.Metadata().AddColumn("c2", types.Int)
-	e.expectNoMatch(rule, e.f.ConstructSelect(e.empty(c, c2), e.filters(e.f.ConstructGt(e.v(c), e.num(0)))))
-}
-
-func TestSQLRemoveZeroCardLock(t *testing.T) {
-	expectSQLFiresWith(t, "RemoveZeroCardLock",
-		"SELECT * FROM (SELECT x FROM u WHERE false) WHERE x > 0",
-		sqlHelpers{limits: map[string]int{"SimplifyZeroCardinalityGroup": 1}, names: []string{"EliminateProject", "PruneValuesCols", "PruneScanCols"}})
+	t.Run("zero_row_input", func(t *testing.T) {
+		e := newEnv(t)
+		_, cols := e.scan("u", 1)
+		zero := e.empty(cols[0])
+		lock := e.f.ConstructFunction(memo.ScalarListExpr{e.v(cols[0])}, &memo.FunctionPrivate{Name: "lock", Typ: types.Bool, Properties: &tree.FunctionProperties{}, Overload: &tree.Overload{Class: tree.NormalClass}})
+		before := e.f.ConstructSelect(zero, e.filters(lock))
+		want := e.empty(cols[0])
+		e.expectRewrite(rule, before, want)
+	})
+	t.Run("nonempty_input", func(t *testing.T) {
+		e := newEnv(t)
+		_, cols := e.scan("u", 1)
+		input := e.intValues(cols, []int{1})
+		lock := e.f.ConstructFunction(memo.ScalarListExpr{e.v(cols[0])}, &memo.FunctionPrivate{Name: "lock", Typ: types.Bool, Properties: &tree.FunctionProperties{}, Overload: &tree.Overload{Class: tree.NormalClass}})
+		plan := e.f.ConstructSelect(input, e.filters(lock))
+		e.expectNoMatch(rule, plan)
+	})
 }

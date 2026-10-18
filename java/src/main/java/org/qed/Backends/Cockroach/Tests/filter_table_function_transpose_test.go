@@ -10,32 +10,31 @@ import (
 func TestFilterTableFunctionTranspose(t *testing.T) {
 	rule := loadRule(t, "FilterTableFunctionTranspose")
 	e := newEnv(t)
-	s, sc := e.scan("u", 2)
-	tv, tc := e.scan("t", 1)
-	on := e.f.ConstructEq(e.v(sc[0]), e.v(tc[0]))
-	pred := e.f.ConstructLt(e.v(sc[0]), e.v(sc[1]))
-	outCols := opt.MakeColSet(sc[0], sc[1])
-
-	join := e.f.ConstructInnerJoin(s, tv, e.filters(on), &memo.JoinPrivate{})
-	tfs := e.f.ConstructProject(join, nil, outCols)
-	before := e.f.ConstructSelect(tfs, e.filters(pred))
-	want := e.f.ConstructProject(
-		e.f.ConstructInnerJoin(
-			e.f.ConstructSelect(s, e.filters(pred)),
-			tv,
-			e.filters(on),
-			&memo.JoinPrivate{},
-		),
-		nil,
-		outCols,
+	l, lc := e.scan("u", 2)
+	r, rc := e.scan("t", 1)
+	on := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])))
+	pass := opt.MakeColSet(lc[0], lc[1])
+	pred := func(in memo.RelExpr) memo.RelExpr {
+		return e.f.ConstructSelect(in, e.filters(e.f.ConstructLt(e.v(lc[0]), e.v(lc[1]))))
+	}
+	join := e.f.ConstructInnerJoin(l, r, on, &memo.JoinPrivate{})
+	before := pred(e.f.ConstructProject(join, memo.EmptyProjectionsExpr, pass))
+	after := e.f.ConstructProject(
+		e.f.ConstructInnerJoin(pred(l), r, on, &memo.JoinPrivate{}),
+		memo.EmptyProjectionsExpr, pass,
 	)
-	e.expectRewrite(rule, before, want)
+	e.expectRewrite(rule, before, after)
 
-	left := e.f.ConstructLeftJoin(s, tv, e.filters(on), &memo.JoinPrivate{})
-	e.expectNoMatch(rule, e.f.ConstructSelect(e.f.ConstructProject(left, nil, outCols), e.filters(pred)))
+	left := e.f.ConstructLeftJoin(l, r, on, &memo.JoinPrivate{})
+	e.expectNoMatch(rule, pred(e.f.ConstructProject(left, memo.EmptyProjectionsExpr, pass)))
 
-	e.expectNoMatch(rule, e.f.ConstructSelect(join, e.filters(pred)))
+	e.expectNoMatch(rule, e.f.ConstructProject(pred(join), memo.EmptyProjectionsExpr, pass))
 
-	noJoin := e.f.ConstructProject(s, nil, outCols)
-	e.expectNoMatch(rule, e.f.ConstructSelect(noJoin, e.filters(pred)))
+	w, wc := e.scan("nn3", 3)
+	wjoin := e.f.ConstructInnerJoin(w, r, e.filters(e.f.ConstructEq(e.v(wc[0]), e.v(rc[0]))), &memo.JoinPrivate{})
+	wpass := opt.MakeColSet(wc[0], wc[1])
+	e.expectNoMatch(rule, e.f.ConstructSelect(
+		e.f.ConstructProject(wjoin, memo.EmptyProjectionsExpr, wpass),
+		e.filters(e.f.ConstructLt(e.v(wc[0]), e.v(wc[1]))),
+	))
 }

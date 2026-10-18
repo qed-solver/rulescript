@@ -11,14 +11,27 @@ import (
 func TestInvertMinus(t *testing.T) {
 	rule := loadRule(t, "InvertMinus")
 	e := newEnv(t)
-	s, cols := e.scan("t", 2)
-	z := e.f.Metadata().AddColumn("z", types.Int)
-	project := func(x opt.ScalarExpr) memo.RelExpr {
-		return e.f.ConstructProject(s, memo.ProjectionsExpr{e.f.ConstructProjectionsItem(x, z)}, opt.ColSet{})
-	}
-	a, b := e.v(cols[0]), e.v(cols[1])
-	e.expectRewrite(rule, project(e.f.ConstructUnaryMinus(e.f.ConstructMinus(a, b))),
-		project(e.f.ConstructMinus(b, a)))
-	e.expectNoMatch(rule, project(e.f.ConstructMinus(a, b)))
-	e.expectNoMatch(rule, project(e.f.ConstructUnaryMinus(e.f.ConstructPlus(a, b))))
+	s, c := e.scan("t", 2)
+	out := e.f.Metadata().AddColumn("neg", types.Int)
+	neg := e.f.ConstructUnaryMinus(e.f.ConstructMinus(e.v(c[0]), e.v(c[1])))
+	before := e.f.ConstructProject(s, memo.ProjectionsExpr{e.f.ConstructProjectionsItem(neg, out)}, opt.ColSet{})
+	want := e.f.ConstructProject(s, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructMinus(e.v(c[1]), e.v(c[0])), out),
+	}, opt.ColSet{})
+	e.expectRewriteUpToFreshColumns(rule, before, want)
+
+	plus := e.f.ConstructUnaryMinus(e.f.ConstructPlus(e.v(c[0]), e.v(c[1])))
+	e.expectNoMatch(rule, e.f.ConstructProject(s, memo.ProjectionsExpr{e.f.ConstructProjectionsItem(plus, out)}, opt.ColSet{}))
+
+	e.expectNoMatch(rule, e.f.ConstructProject(s, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructMinus(e.v(c[0]), e.v(c[1])), out),
+	}, opt.ColSet{}))
+
+	e.expectNoMatch(rule, e.f.ConstructProject(s, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructUnaryMinus(e.v(c[0])), out),
+	}, opt.ColSet{}))
+
+	wide, wc := e.scan("t", 3)
+	wideNeg := e.f.ConstructUnaryMinus(e.f.ConstructMinus(e.v(wc[0]), e.v(wc[1])))
+	e.expectNoMatch(rule, e.f.ConstructProject(wide, memo.ProjectionsExpr{e.f.ConstructProjectionsItem(wideNeg, out)}, opt.ColSet{}))
 }

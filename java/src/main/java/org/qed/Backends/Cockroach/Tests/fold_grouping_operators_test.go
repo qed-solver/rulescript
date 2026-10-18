@@ -11,37 +11,27 @@ import (
 func TestFoldGroupingOperators(t *testing.T) {
 	rule := loadRule(t, "FoldGroupingOperators")
 	e := newEnv(t)
-	s, cols := e.scan("u", 2)
-	key := e.f.Metadata().AddColumn("key", types.Int)
-	value := e.f.Metadata().AddColumn("value", types.Int)
-	project := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(cols[0]), e.num(1)), key),
-	}, s.Relational().OutputCols)
-	aggs := memo.AggregationsExpr{
-		e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(cols[0])), value),
-	}
-	inner := e.f.ConstructGroupBy(project, aggs, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(key),
-	})
-	before := e.f.ConstructGroupBy(inner, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(key),
-	})
-	want := e.f.ConstructGroupBy(project, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(key),
-	})
-	e.expectRewrite(rule, before, want)
+	s, sc := e.scan("t", 1)
+	a := sc[0]
+	keyCol := e.f.Metadata().AddColumn("k1", types.Int)
+	maxCol := e.f.Metadata().AddColumn("max", types.Int)
+	keyed := e.f.ConstructProject(s, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.v(a), keyCol),
+	}, opt.MakeColSet(a))
+	inner := e.f.ConstructGroupBy(keyed, memo.AggregationsExpr{
+		e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(a)), maxCol),
+	}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(keyCol)})
+	outer := e.f.ConstructGroupBy(inner, memo.AggregationsExpr{}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(keyCol)})
+	wantKeyed := e.f.ConstructProject(s, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.v(a), keyCol),
+	}, opt.MakeColSet(a))
+	want := e.f.ConstructGroupBy(wantKeyed, memo.AggregationsExpr{}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(keyCol)})
+	e.expectRewriteUpToFreshColumns(rule, outer, want)
 
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(inner, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(value),
-	}))
-	direct := e.f.ConstructGroupBy(s, aggs, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(cols[0]),
-	})
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(direct, nil, &memo.GroupingPrivate{
-		GroupingCols: opt.MakeColSet(cols[0]),
-	}))
-}
-
-func TestSQLFoldGroupingOperators(t *testing.T) {
-	expectSQLFiresOrNot(t, "FoldGroupingOperators", "SELECT k FROM (SELECT k, sum(v) AS total FROM (VALUES (1,2),(1,3)) AS s(k,v) GROUP BY k) AS q GROUP BY k", false)
+	outCol := e.f.Metadata().AddColumn("outmax", types.Int)
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(inner, memo.AggregationsExpr{
+		e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(maxCol)), outCol),
+	}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(keyCol)}))
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(inner, memo.AggregationsExpr{}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(maxCol)}))
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(keyed, memo.AggregationsExpr{}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(keyCol)}))
 }

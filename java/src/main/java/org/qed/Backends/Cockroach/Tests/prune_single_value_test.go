@@ -9,35 +9,28 @@ import (
 )
 
 func TestPruneSingleValue(t *testing.T) {
-	rule := loadRule(t, "PruneSingleValue")
 	e := newEnv(t)
-	s, c := e.scan("t", 1)
+	rule := loadRule(t, "PruneSingleValue")
+	left, cols := e.scan("t", 1)
+	rightCol := e.f.Metadata().AddColumn("single", types.Bool)
+	trueValue := e.f.ConstructTrue()
+	right := e.f.ConstructValues(memo.ScalarListExpr{
+		e.f.ConstructTuple(memo.ScalarListExpr{trueValue}, types.MakeTuple([]*types.T{types.Bool})),
+	}, &memo.ValuesPrivate{Cols: opt.ColList{rightCol}, ID: e.f.Metadata().NextUniqueID()})
+	predicate := e.f.ConstructEq(e.v(rightCol), trueValue)
+	before := e.f.ConstructInnerJoin(left, right, e.filters(predicate), &memo.JoinPrivate{})
+	filtered := e.f.ConstructSelect(left, e.filters(e.f.ConstructEq(trueValue, trueValue)))
+	constantCol := e.f.Metadata().AddColumn("constant", types.Bool)
+	want := e.f.ConstructProject(filtered,
+		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.f.ConstructTrue(), constantCol)},
+		opt.MakeColSet(cols[0]))
+	e.expectRewriteUpToFreshColumns(rule, before, want)
 
-	boolValues := func(lit opt.ScalarExpr) (memo.RelExpr, opt.ColumnID) {
-		col := e.f.Metadata().AddColumn("v", types.Bool)
-		rows := memo.ScalarListExpr{
-			e.f.ConstructTuple(memo.ScalarListExpr{lit}, types.MakeTuple([]*types.T{types.Bool})),
-		}
-		return e.f.ConstructValues(rows, &memo.ValuesPrivate{
-			Cols: opt.ColList{col},
-			ID:   e.f.Metadata().NextUniqueID(),
-		}), col
-	}
-
-	values, vcol := boolValues(e.f.ConstructTrue())
-	on := e.filters(e.v(vcol))
-	before := e.f.ConstructInnerJoin(s, values, on, &memo.JoinPrivate{})
-	want := e.f.ConstructProject(
-		e.f.ConstructSelect(s, e.filters(e.f.ConstructTrue())),
-		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.f.ConstructTrue(), vcol)},
-		opt.MakeColSet(c[0]),
-	)
-	e.expectRewrite(rule, before, want)
-
-	u, uc := e.scan("u", 2)
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(s, u, e.filters(e.f.ConstructEq(e.v(c[0]), e.v(uc[0]))), &memo.JoinPrivate{}))
-
-	falseValues, fcol := boolValues(e.f.ConstructFalse())
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(s, falseValues, e.filters(e.v(fcol)), &memo.JoinPrivate{}))
-	e.expectNoMatch(rule, e.f.ConstructLeftJoin(s, values, on, &memo.JoinPrivate{}))
+	secondRightCol := e.f.Metadata().AddColumn("second", types.Bool)
+	twoRows := e.f.ConstructValues(memo.ScalarListExpr{
+		e.f.ConstructTuple(memo.ScalarListExpr{trueValue}, types.MakeTuple([]*types.T{types.Bool})),
+		e.f.ConstructTuple(memo.ScalarListExpr{trueValue}, types.MakeTuple([]*types.T{types.Bool})),
+	}, &memo.ValuesPrivate{Cols: opt.ColList{secondRightCol}, ID: e.f.Metadata().NextUniqueID()})
+	nearMiss := e.f.ConstructInnerJoin(left, twoRows, e.filters(predicate), &memo.JoinPrivate{})
+	e.expectNoMatch(rule, nearMiss)
 }

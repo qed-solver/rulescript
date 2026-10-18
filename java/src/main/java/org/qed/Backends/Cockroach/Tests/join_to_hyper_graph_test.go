@@ -9,32 +9,21 @@ import (
 func TestJoinToHyperGraph(t *testing.T) {
 	rule := loadRule(t, "JoinToHyperGraph")
 	e := newEnv(t)
-	a, ca := e.scan("t", 1)
-	b, cb := e.scan("u", 1)
+	a, ac := e.scan("u", 1)
+	b, bc := e.scan("t", 1)
 	c, cc := e.scan("nn", 1)
 
-	ab := e.f.ConstructInnerJoin(a, b, e.filters(
-		e.f.ConstructEq(e.v(ca[0]), e.v(cb[0])),
-	), &memo.JoinPrivate{})
-	topOn := e.filters(
-		e.f.ConstructEq(e.v(ca[0]), e.v(cc[0])),
-		e.f.ConstructLt(e.v(cb[0]), e.v(cc[0])),
-	)
-	before := e.f.ConstructInnerJoin(ab, c, topOn, &memo.JoinPrivate{})
-	bc := e.f.ConstructInnerJoin(b, c, e.filters(
-		e.f.ConstructLt(e.v(cb[0]), e.v(cc[0])),
-	), &memo.JoinPrivate{})
-	want := e.f.ConstructInnerJoin(a, bc, e.filters(
-		e.f.ConstructEq(e.v(ca[0]), e.v(cb[0])),
-		e.f.ConstructEq(e.v(ca[0]), e.v(cc[0])),
-	), &memo.JoinPrivate{})
+	ab := e.f.ConstructEq(e.v(ac[0]), e.v(bc[0]))
+	beforeLeft := e.f.ConstructInnerJoin(a, b, e.filters(ab), &memo.JoinPrivate{})
+	acCond := e.f.ConstructEq(e.v(ac[0]), e.v(cc[0]))
+	bcCond := e.f.ConstructEq(e.v(bc[0]), e.v(cc[0]))
+	before := e.f.ConstructInnerJoin(beforeLeft, c, e.filters(acCond, bcCond), &memo.JoinPrivate{})
+
+	wantRight := e.f.ConstructInnerJoin(b, c, e.filters(bcCond), &memo.JoinPrivate{})
+	want := e.f.ConstructInnerJoin(a, wantRight, e.filters(ab, acCond), &memo.JoinPrivate{})
 	e.expectRewrite(rule, before, want)
 
-	e.expectNoMatch(rule, e.f.ConstructLeftJoin(ab, c, topOn, &memo.JoinPrivate{}))
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(a, c, e.filters(
-		e.f.ConstructEq(e.v(ca[0]), e.v(cc[0])),
-	), &memo.JoinPrivate{}))
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(ab, c, e.filters(
-		e.f.ConstructEq(e.v(ca[0]), e.v(cc[0])),
-	), &memo.JoinPrivate{}))
+	wrongBC := e.f.ConstructEq(e.v(ac[0]), e.v(cc[0]))
+	nearMiss := e.f.ConstructInnerJoin(beforeLeft, c, e.filters(acCond, wrongBC), &memo.JoinPrivate{})
+	e.expectNoMatch(rule, nearMiss)
 }

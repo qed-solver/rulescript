@@ -9,18 +9,32 @@ import (
 
 func TestLoptOptimizeJoin(t *testing.T) {
 	rule := loadRule(t, "LoptOptimizeJoin")
-	e := newEnv(t)
-	a, ac := e.scan("t", 1)
-	b, bc := e.scan("u", 1)
-	c, cc := e.scan("nn", 1)
-	pAB := e.f.ConstructEq(e.v(ac[0]), e.v(bc[0]))
-	pAC := e.f.ConstructEq(e.v(ac[0]), e.v(cc[0]))
-	ab := e.f.ConstructInnerJoin(a, b, nil, &memo.JoinPrivate{})
-	before := e.f.ConstructInnerJoin(ab, c, e.filters(pAB, pAC), &memo.JoinPrivate{})
-	ac2 := e.f.ConstructInnerJoin(a, c, e.filters(pAC), &memo.JoinPrivate{})
-	acb := e.f.ConstructInnerJoin(ac2, b, e.filters(pAB), &memo.JoinPrivate{})
-	want := e.f.ConstructProject(acb, nil, opt.MakeColSet(ac[0], bc[0], cc[0]))
-	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(ab, c, e.filters(pAB), &memo.JoinPrivate{}))
-	e.expectNoMatch(rule, e.f.ConstructLeftJoin(ab, c, e.filters(pAB, pAC), &memo.JoinPrivate{}))
+	t.Run("threeWayInnerJoin", func(t *testing.T) {
+		e := newEnv(t)
+		a, acols := e.scan("t", 1)
+		b, bcols := e.scan("u", 1)
+		c, ccols := e.scan("nn", 1)
+		ab := e.f.ConstructInnerJoin(a, b, memo.TrueFilter, &memo.JoinPrivate{})
+		before := e.f.ConstructInnerJoin(ab, c, e.filters(
+			e.f.ConstructEq(e.v(acols[0]), e.v(bcols[0])),
+			e.f.ConstructEq(e.v(acols[0]), e.v(ccols[0])),
+		), &memo.JoinPrivate{})
+
+		ac := e.f.ConstructInnerJoin(a, c, e.filters(
+			e.f.ConstructEq(e.v(acols[0]), e.v(ccols[0])),
+		), &memo.JoinPrivate{})
+		acb := e.f.ConstructInnerJoin(ac, b, e.filters(
+			e.f.ConstructEq(e.v(acols[0]), e.v(bcols[0])),
+		), &memo.JoinPrivate{})
+		want := e.f.ConstructProject(acb, memo.EmptyProjectionsExpr,
+			opt.MakeColSet(acols[0], bcols[0], ccols[0]))
+		e.expectRewriteUpToFreshColumns(rule, before, want)
+
+		badMiddle := e.f.ConstructInnerJoin(a, b, e.filters(e.f.ConstructEq(e.v(acols[0]), e.num(1))), &memo.JoinPrivate{})
+		noMatch := e.f.ConstructInnerJoin(badMiddle, c, e.filters(
+			e.f.ConstructEq(e.v(acols[0]), e.v(bcols[0])),
+			e.f.ConstructEq(e.v(acols[0]), e.v(ccols[0])),
+		), &memo.JoinPrivate{})
+		e.expectNoMatch(rule, noMatch)
+	})
 }

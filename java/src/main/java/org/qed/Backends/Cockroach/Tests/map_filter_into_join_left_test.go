@@ -8,18 +8,25 @@ import (
 
 func TestMapFilterIntoJoinLeft(t *testing.T) {
 	rule := loadRule(t, "MapFilterIntoJoinLeft")
-	e := newEnv(t)
-	l, lc := twoNonNullColumns(e)
-	r, rc := e.scan("u", 1)
-	equality := e.f.ConstructEq(e.v(lc[0]), e.v(rc[0]))
-	filter := e.f.ConstructEq(e.v(rc[0]), e.v(lc[1]))
-	before := e.f.ConstructInnerJoin(l, r, e.filters(equality, filter), &memo.JoinPrivate{})
-	want := e.f.ConstructInnerJoin(l, r, e.filters(equality, e.f.ConstructEq(e.v(lc[0]), e.v(lc[1]))), &memo.JoinPrivate{})
-	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(l, r, e.filters(filter, equality), &memo.JoinPrivate{}))
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(l, r, e.filters(equality, e.f.ConstructEq(e.v(lc[0]), e.v(lc[1]))), &memo.JoinPrivate{}))
-}
 
-func TestSQLMapFilterIntoJoinLeft(t *testing.T) {
-	expectSQLRewrites(t, "MapFilterIntoJoinLeft", "SELECT * FROM (VALUES (1, 2)) AS a(x,y) JOIN (VALUES (1)) AS b(z) ON a.x=b.z AND b.z=a.y")
+	t.Run("maps right key reference to left key", func(t *testing.T) {
+		e := newEnv(t)
+		left, lc := e.scan("nn", 2)
+		right, rc := e.scan("t", 1)
+		keyEq := e.f.ConstructEq(e.v(lc[0]), e.v(rc[0]))
+		filter := e.f.ConstructEq(e.v(rc[0]), e.v(lc[1]))
+		before := e.f.ConstructInnerJoin(left, right, e.filters(keyEq, filter), &memo.JoinPrivate{})
+		want := e.f.ConstructInnerJoin(left, right, e.filters(keyEq, e.f.ConstructEq(e.v(lc[0]), e.v(lc[1]))), &memo.JoinPrivate{})
+		e.expectRewrite(rule, before, want)
+	})
+
+	t.Run("rejects predicate using right non-key", func(t *testing.T) {
+		e := newEnv(t)
+		left, lc := e.scan("u", 2)
+		right, rc := e.scan("t", 2)
+		keyEq := e.f.ConstructEq(e.v(lc[0]), e.v(rc[0]))
+		filter := e.f.ConstructEq(e.v(rc[1]), e.v(lc[1]))
+		before := e.f.ConstructInnerJoin(left, right, e.filters(keyEq, filter), &memo.JoinPrivate{})
+		e.expectNoMatch(rule, before)
+	})
 }

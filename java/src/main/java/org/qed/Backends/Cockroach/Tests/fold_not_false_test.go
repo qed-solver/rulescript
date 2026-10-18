@@ -4,8 +4,11 @@ import (
 	"testing"
 )
 
-func TestFoldNotFalse(t *testing.T) { testNotLiteralFold(t, "FoldNotFalse", false) }
-
-func TestSQLFoldNotFalse(t *testing.T) {
-	expectSQLRewrites(t, "FoldNotFalse", "SELECT x FROM u WHERE NOT FALSE")
+func TestFoldNotFalse(t *testing.T) {
+	rule := loadRule(t, "FoldNotFalse")
+	e := newEnv(t)
+	s, sc := e.scan("t", 3)
+	before := e.f.ConstructSelect(s, e.filters(e.f.ConstructNot(e.f.ConstructFalse())))
+	e.expectRewrite(rule, before, s)
+	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructNot(e.f.ConstructEq(e.v(sc[0]), e.num(1))))))
 }

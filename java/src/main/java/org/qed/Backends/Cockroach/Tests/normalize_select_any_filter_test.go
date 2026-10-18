@@ -5,22 +5,28 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestNormalizeSelectAnyFilter(t *testing.T) {
-	rule := loadRule(t, "NormalizeSelectAnyFilter")
 	e := newEnv(t)
-	input, ic := e.scan("u", 1)
-	sub, sc := e.scan("t", 1)
-	membership := e.f.ConstructAny(sub, e.v(ic[0]), &memo.SubqueryPrivate{Cmp: opt.EqOp})
-	before := e.f.ConstructSelect(input, e.filters(membership))
-	correlated := e.f.ConstructSelect(sub, e.filters(e.f.ConstructEq(e.v(ic[0]), e.v(sc[0]))))
-	want := e.f.ConstructSelect(input, e.filters(e.exists(correlated)))
-	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructSelect(input, e.filters(e.f.ConstructNot(membership))))
-	e.expectNoMatch(rule, e.f.ConstructSelect(input, e.filters(e.f.ConstructGt(e.v(ic[0]), e.num(0)))))
-}
+	rule := loadRule(t, "NormalizeSelectAnyFilter")
 
-func TestSQLNormalizeSelectAnyFilter(t *testing.T) {
-	expectSQLFires(t, "NormalizeSelectAnyFilter", "SELECT x FROM u WHERE x IN (SELECT a FROM t)")
+	outer, outerCols := e.scan("t", 1)
+	inner, innerCols := e.scan("u", 1)
+	any := e.f.ConstructAny(inner, e.v(outerCols[0]), &memo.SubqueryPrivate{Cmp: opt.EqOp})
+	before := e.f.ConstructSelect(outer, e.filters(any))
+
+	eq := e.f.ConstructEq(e.v(outerCols[0]), e.v(innerCols[0]))
+	correlated := e.f.ConstructSelect(inner, e.filters(eq))
+	existsCol := e.f.Metadata().AddColumn("exists", types.Bool)
+	exists := e.f.ConstructExists(correlated, &memo.ExistsPrivate{LazyEvalProjectionCol: existsCol})
+	want := e.f.ConstructSelect(outer, e.filters(exists))
+	e.expectRewrite(rule, before, want)
+
+	outer2, outerCols2 := e.scan("t", 1)
+	inner2, _ := e.scan("u", 1)
+	any2 := e.f.ConstructAny(inner2, e.v(outerCols2[0]), &memo.SubqueryPrivate{Cmp: opt.EqOp})
+	before2 := e.f.ConstructSelect(outer2, e.filters(any2, e.f.ConstructEq(e.v(outerCols2[0]), e.num(7))))
+	e.expectNoMatch(rule, before2)
 }

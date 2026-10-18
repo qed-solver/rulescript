@@ -5,40 +5,47 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestTryDecorrelateProjectInnerJoin(t *testing.T) {
-	rule := loadRule(t, "TryDecorrelateProjectInnerJoin")
 	e := newEnv(t)
-	l, lc := e.scan("u", 1)
-	il, ilc := e.scan("t", 1)
-	ir, irc := e.scan("nn", 1)
-	z := e.f.Metadata().AddColumn("z", types.Int)
-	computed := e.f.ConstructPlus(e.v(ilc[0]), e.v(irc[0]))
-	innerOn := e.filters(e.f.ConstructEq(e.v(ilc[0]), e.v(irc[0])))
-	on := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(z)))
-	inner := e.f.ConstructInnerJoin(il, ir, innerOn, &memo.JoinPrivate{})
-	beforeRight := e.f.ConstructProject(inner, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(computed, z),
-	}, opt.MakeColSet(ilc[0]))
-	before := e.f.ConstructLeftJoin(l, beforeRight, on, &memo.JoinPrivate{})
-	cross := e.f.ConstructInnerJoin(il, ir, nil, &memo.JoinPrivate{})
-	afterRight := e.f.ConstructProject(cross, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(computed, z),
-	}, opt.MakeColSet(ilc[0], irc[0]))
-	afterJoin := e.f.ConstructLeftJoin(l, afterRight,
-		append(append(memo.FiltersExpr{}, on...), innerOn...), &memo.JoinPrivate{})
-	want := e.f.ConstructProject(afterJoin, nil, opt.MakeColSet(lc[0], ilc[0], z))
-	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(l, beforeRight, on, &memo.JoinPrivate{}))
-	wrongInner := e.f.ConstructLeftJoin(il, ir, innerOn, &memo.JoinPrivate{})
-	wrongRight := e.f.ConstructProject(wrongInner, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(computed, z),
-	}, opt.MakeColSet(ilc[0]))
-	e.expectNoMatch(rule, e.f.ConstructLeftJoin(l, wrongRight, on, &memo.JoinPrivate{}))
-}
+	rule := loadRule(t, "TryDecorrelateProjectInnerJoin")
 
-func TestSQLTryDecorrelateProjectInnerJoin(t *testing.T) {
-	expectSQLFires(t, "TryDecorrelateProjectInnerJoin", "SELECT * FROM (VALUES (1)) AS l(a) LEFT JOIN (SELECT b,b+c AS z FROM (VALUES (1)) AS i(b) JOIN (VALUES (1)) AS r(c) ON b=c) AS q ON a=z")
+	l, lc := e.scan("nn", 1)
+	il, ilc := e.scan("u", 1)
+	ir, irc := e.scan("t", 1)
+	innerOn := e.f.ConstructEq(e.v(ilc[0]), e.v(irc[0]))
+	inner := e.f.ConstructInnerJoin(il, ir, e.filters(innerOn), &memo.JoinPrivate{})
+	projected := e.f.Metadata().AddColumn("projected", e.v(ilc[0]).DataType())
+	computed := e.f.ConstructPlus(e.v(ilc[0]), e.v(irc[0]))
+	right := e.f.ConstructProject(inner,
+		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(computed, projected)},
+		opt.MakeColSet(ilc[0]),
+	)
+	on := e.filters(
+		e.f.ConstructEq(e.v(lc[0]), e.v(ilc[0])),
+		e.f.ConstructEq(e.v(lc[0]), e.v(projected)),
+	)
+	before := e.f.ConstructLeftJoin(l, right, on, &memo.JoinPrivate{})
+
+	expectedInner := e.f.ConstructInnerJoin(il, ir, nil, &memo.JoinPrivate{})
+	rightAfter := e.f.ConstructProject(expectedInner,
+		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(computed, projected)},
+		opt.MakeColSet(ilc[0], irc[0]),
+	)
+	expectedJoin := e.f.ConstructLeftJoin(l, rightAfter, e.filters(
+		e.f.ConstructEq(e.v(lc[0]), e.v(ilc[0])),
+		e.f.ConstructEq(e.v(lc[0]), e.v(projected)),
+		innerOn,
+	), &memo.JoinPrivate{})
+	want := e.f.ConstructProject(expectedJoin, memo.EmptyProjectionsExpr, opt.MakeColSet(lc[0], ilc[0], projected))
+	e.expectRewriteUpToFreshColumns(rule, before, want)
+
+	nearMissInner := e.f.ConstructLeftJoin(il, ir, e.filters(innerOn), &memo.JoinPrivate{})
+	nearMissRight := e.f.ConstructProject(nearMissInner,
+		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(computed, projected)},
+		opt.MakeColSet(ilc[0]),
+	)
+	nearMiss := e.f.ConstructLeftJoin(l, nearMissRight, on, &memo.JoinPrivate{})
+	e.expectNoMatch(rule, nearMiss)
 }

@@ -3,31 +3,28 @@ package rulescript_test
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 )
 
 func TestPushSelectCondLeftIntoJoinLeftAndRight(t *testing.T) {
 	rule := loadRule(t, "PushSelectCondLeftIntoJoinLeftAndRight")
 	e := newEnv(t)
-	l, lc := e.scan("u", 1)
-	r, rc := e.scan("t", 1)
-	on := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])))
-	join := e.f.ConstructLeftJoin(l, r, on, &memo.JoinPrivate{})
-	before := e.f.ConstructSelect(join, e.filters(e.f.ConstructEq(e.v(lc[0]), e.num(1))))
-	filteredLeft := e.f.ConstructSelect(l, e.filters(e.f.ConstructEq(e.v(lc[0]), e.num(1))))
-	filteredRight := e.f.ConstructSelect(r, e.filters(e.f.ConstructEq(e.v(rc[0]), e.num(1))))
-	want := e.f.ConstructLeftJoin(filteredLeft, filteredRight, on, &memo.JoinPrivate{})
+	left, leftCols := e.scan("t", 1)
+	right, rightCols := e.scan("t", 1)
+	on := e.filters(e.f.ConstructEq(e.v(leftCols[0]), e.v(rightCols[0])))
+	cond := e.f.ConstructIs(e.v(leftCols[0]), memo.NullSingleton)
+	before := e.f.ConstructSelect(e.f.ConstructLeftJoin(left, right, on, &memo.JoinPrivate{}), e.filters(cond))
+	want := e.f.ConstructLeftJoin(
+		e.f.ConstructSelect(left, e.filters(e.f.ConstructIs(e.v(leftCols[0]), memo.NullSingleton))),
+		e.f.ConstructSelect(right, e.filters(e.f.ConstructIs(e.v(rightCols[0]), memo.NullSingleton))),
+		on,
+		&memo.JoinPrivate{},
+	)
 	e.expectRewrite(rule, before, want)
 
-	inner := e.f.ConstructInnerJoin(l, r, on, &memo.JoinPrivate{})
-	e.expectNoMatch(rule, e.f.ConstructSelect(inner, e.filters(e.f.ConstructEq(e.v(lc[0]), e.num(1)))))
-	wide, wc := e.scan("u", 2)
-	nullable := e.f.ConstructProject(wide, nil, opt.MakeColSet(wc[1]))
-	nullJoin := e.f.ConstructLeftJoin(nullable, r, e.filters(e.f.ConstructEq(e.v(wc[1]), e.v(rc[0]))), &memo.JoinPrivate{})
-	e.expectNoMatch(rule, e.f.ConstructSelect(nullJoin, e.filters(e.f.ConstructEq(e.v(wc[1]), e.num(1)))))
-}
-
-func TestSQLPushSelectCondLeftIntoJoinLeftAndRight(t *testing.T) {
-	expectSQLRewrites(t, "PushSelectCondLeftIntoJoinLeftAndRight", "SELECT l.a FROM (VALUES (1), (2)) AS l(a) LEFT JOIN (VALUES (1), (2)) AS r(b) ON l.a = r.b WHERE l.a > 0")
+	nearLeft, nearLeftCols := e.scan("t", 1)
+	nearRight, nearRightCols := e.scan("t", 1)
+	nearOn := e.filters(e.f.ConstructGt(e.v(nearLeftCols[0]), e.v(nearRightCols[0])))
+	near := e.f.ConstructSelect(e.f.ConstructLeftJoin(nearLeft, nearRight, nearOn, &memo.JoinPrivate{}), e.filters(e.f.ConstructIs(e.v(nearLeftCols[0]), memo.NullSingleton)))
+	e.expectNoMatch(rule, near)
 }

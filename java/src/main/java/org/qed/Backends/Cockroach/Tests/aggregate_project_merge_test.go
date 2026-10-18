@@ -11,32 +11,51 @@ import (
 func TestAggregateProjectMerge(t *testing.T) {
 	rule := loadRule(t, "AggregateProjectMerge")
 	e := newEnv(t)
-	a, ac := e.scan("u", 1)
-	b, bc := e.scan("t", 1)
-	base := e.f.ConstructInnerJoin(a, b, nil, &memo.JoinPrivate{})
-	fcol := e.f.Metadata().AddColumn("f", types.Int)
-	passthrough := opt.MakeColSet(bc[0], ac[0])
-	project := e.f.ConstructProject(base, memo.ProjectionsExpr{}, passthrough)
-	before := e.f.ConstructGroupBy(project,
-		memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(bc[0])), fcol)},
-		&memo.GroupingPrivate{GroupingCols: opt.MakeColSet(bc[0])})
-	want := e.f.ConstructGroupBy(base,
-		memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(bc[0])), fcol)},
-		&memo.GroupingPrivate{GroupingCols: opt.MakeColSet(bc[0])})
-	e.expectRewrite(rule, before, want)
+	l, lc := e.scan("u", 1)
+	r, rc := e.scan("t", 1)
+	join := e.f.ConstructInnerJoin(l, r, nil, &memo.JoinPrivate{})
 
-	leftBase := e.f.ConstructLeftJoin(a, b, nil, &memo.JoinPrivate{})
-	leftProject := e.f.ConstructProject(leftBase, memo.ProjectionsExpr{}, passthrough)
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(leftProject,
-		memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(bc[0])), fcol)},
-		&memo.GroupingPrivate{GroupingCols: opt.MakeColSet(bc[0])}))
+	swapped := e.f.ConstructProject(join, memo.ProjectionsExpr{}, opt.MakeColSet(lc[0], rc[0]))
+	aggOut := e.f.Metadata().AddColumn("f", types.Int)
+	before := e.f.ConstructGroupBy(
+		swapped,
+		memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(rc[0])), aggOut)},
+		&memo.GroupingPrivate{GroupingCols: opt.MakeColSet(rc[0])},
+	)
 
-	partialProject := e.f.ConstructProject(base, memo.ProjectionsExpr{}, opt.MakeColSet(bc[0]))
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(partialProject,
-		memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(bc[0])), fcol)},
-		&memo.GroupingPrivate{GroupingCols: opt.MakeColSet(bc[0])}))
+	wantAgg := e.f.Metadata().AddColumn("f", types.Int)
+	want := e.f.ConstructGroupBy(
+		join,
+		memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(rc[0])), wantAgg)},
+		&memo.GroupingPrivate{GroupingCols: opt.MakeColSet(rc[0])},
+	)
+	e.expectRewriteUpToFreshColumns(rule, before, want)
 
-	e.expectNoMatch(rule, e.f.ConstructGroupBy(project,
-		memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructCount(e.v(ac[0])), fcol)},
-		&memo.GroupingPrivate{GroupingCols: opt.MakeColSet(bc[0])}))
+	got, ok := rule.Apply(&e.f, before)
+	if !ok {
+		t.Fatalf("AggregateProjectMerge did not apply")
+	}
+	grouped, isGroupBy := got.(*memo.GroupByExpr)
+	if !isGroupBy {
+		t.Fatalf("expected a GroupBy result, got %s", e.format(got))
+	}
+	if !grouped.Private().(*memo.GroupingPrivate).GroupingCols.Equals(opt.MakeColSet(rc[0])) {
+		t.Fatalf("expected grouping on the B column, got %s", e.format(got))
+	}
+
+	leftJoin := e.f.ConstructLeftJoin(l, r, nil, &memo.JoinPrivate{})
+	leftProject := e.f.ConstructProject(leftJoin, memo.ProjectionsExpr{}, opt.MakeColSet(lc[0], rc[0]))
+	leftAgg := e.f.Metadata().AddColumn("f", types.Int)
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(
+		leftProject,
+		memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(rc[0])), leftAgg)},
+		&memo.GroupingPrivate{GroupingCols: opt.MakeColSet(rc[0])},
+	))
+
+	otherArgAgg := e.f.Metadata().AddColumn("f", types.Int)
+	e.expectNoMatch(rule, e.f.ConstructGroupBy(
+		swapped,
+		memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(lc[0])), otherArgAgg)},
+		&memo.GroupingPrivate{GroupingCols: opt.MakeColSet(rc[0])},
+	))
 }

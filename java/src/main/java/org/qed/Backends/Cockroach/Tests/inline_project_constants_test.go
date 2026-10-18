@@ -11,27 +11,37 @@ import (
 func TestInlineProjectConstants(t *testing.T) {
 	rule := loadRule(t, "InlineProjectConstants")
 	e := newEnv(t)
-	l, lc := e.scan("t", 1)
-	r, rc := e.scan("u", 1)
-	join := e.f.ConstructInnerJoin(l, r, e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0]))), &memo.JoinPrivate{})
-	result := e.f.Metadata().AddColumn("result", types.Int)
+	src, sc := e.scan("t", 1)
+	cst, cc := e.scan("u", 1)
+	on := e.filters(e.f.ConstructEq(e.v(sc[0]), e.v(cc[0])))
+	join := e.f.ConstructInnerJoin(src, cst, on, &memo.JoinPrivate{})
+
+	out := e.f.Metadata().AddColumn("out", types.Int)
 	before := e.f.ConstructProject(join, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(lc[0]), e.num(1)), result),
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(sc[0]), e.num(1)), out),
 	}, opt.ColSet{})
+
+	inlined := e.f.Metadata().AddColumn("inlined", types.Int)
 	want := e.f.ConstructProject(join, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(rc[0]), e.num(1)), result),
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(cc[0]), e.num(1)), inlined),
 	}, opt.ColSet{})
-	e.expectRewrite(rule, before, want)
+	e.expectRewriteUpToFreshColumns(rule, before, want)
 
-	e.expectNoMatch(rule, e.f.ConstructProject(join, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(rc[0]), e.num(1)), result),
+	leftJoin := e.f.ConstructLeftJoin(src, cst, on, &memo.JoinPrivate{})
+	e.expectNoMatch(rule, e.f.ConstructProject(leftJoin, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(sc[0]), e.num(1)), out),
 	}, opt.ColSet{}))
-	wrongJoin := e.f.ConstructInnerJoin(l, r, e.filters(e.f.ConstructNe(e.v(lc[0]), e.v(rc[0]))), &memo.JoinPrivate{})
-	e.expectNoMatch(rule, e.f.ConstructProject(wrongJoin, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(lc[0]), e.num(1)), result),
-	}, opt.ColSet{}))
-}
 
-func TestSQLInlineProjectConstants(t *testing.T) {
-	expectSQLRewrites(t, "InlineProjectConstants", "SELECT l.a + 1 FROM (VALUES (1), (2)) AS l(a) JOIN (VALUES (1)) AS r(b) ON l.a = r.b")
+	ltOn := e.filters(e.f.ConstructLt(e.v(sc[0]), e.v(cc[0])))
+	ltJoin := e.f.ConstructInnerJoin(src, cst, ltOn, &memo.JoinPrivate{})
+	e.expectNoMatch(rule, e.f.ConstructProject(ltJoin, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(sc[0]), e.num(1)), out),
+	}, opt.ColSet{}))
+
+	wide, wc := e.scan("u", 2)
+	wideOn := e.filters(e.f.ConstructEq(e.v(sc[0]), e.v(wc[0])))
+	wideJoin := e.f.ConstructInnerJoin(src, wide, wideOn, &memo.JoinPrivate{})
+	e.expectNoMatch(rule, e.f.ConstructProject(wideJoin, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(sc[0]), e.num(1)), out),
+	}, opt.ColSet{}))
 }

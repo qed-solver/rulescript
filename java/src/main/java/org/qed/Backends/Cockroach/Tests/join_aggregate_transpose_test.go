@@ -5,38 +5,28 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestJoinAggregateTranspose(t *testing.T) {
 	rule := loadRule(t, "JoinAggregateTranspose")
 	e := newEnv(t)
-	left, lc := e.scan("t", 2)
-	right, rc := e.scan("u", 1)
-	sum := e.f.Metadata().AddColumn("sum", types.Int)
-	aggs := memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructSum(e.v(lc[1])), sum)}
+	left, lc := e.scan("u", 2)
+	right, rc := e.scan("t", 1)
+	aggCol := e.f.Metadata().AddColumn("sum", e.v(lc[1]).DataType())
+	group := e.f.ConstructGroupBy(left, memo.AggregationsExpr{
+		e.f.ConstructAggregationsItem(e.f.ConstructSumInt(e.v(lc[1])), aggCol),
+	}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(lc[0])})
 	on := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])))
-	groups := &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(lc[0])}
+	before := e.f.ConstructInnerJoin(group, right, on, &memo.JoinPrivate{})
+	e.expectRewrite(rule, before, expectedJoinAggregateTranspose(e, left, right, lc, rc, aggCol))
+	e.expectNoMatch(rule, e.f.ConstructLeftJoin(group, right, on, &memo.JoinPrivate{}))
+}
 
-	agg := e.f.ConstructGroupBy(left, aggs, groups)
-	before := e.f.ConstructInnerJoin(agg, right, on, &memo.JoinPrivate{})
+func expectedJoinAggregateTranspose(e *env, left, right memo.RelExpr, lc, rc []opt.ColumnID, aggCol opt.ColumnID) memo.RelExpr {
+	on := e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(rc[0])))
 	joined := e.f.ConstructInnerJoin(left, right, on, &memo.JoinPrivate{})
-	want := e.f.ConstructProject(
-		e.f.ConstructGroupBy(joined, aggs, &memo.GroupingPrivate{
-			GroupingCols: opt.MakeColSet(lc[0], rc[0]),
-		}),
-		nil,
-		opt.MakeColSet(lc[0], rc[0], sum),
-	)
-	e.expectRewrite(rule, before, want)
-
-	e.expectNoMatch(rule, e.f.ConstructLeftJoin(agg, right, on, &memo.JoinPrivate{}))
-
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(agg, right,
-		e.filters(e.f.ConstructEq(e.v(sum), e.v(rc[0]))), &memo.JoinPrivate{}))
-
-	nonKey, nkc := e.scan("t", 3)
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(agg,
-		e.f.ConstructProject(nonKey, nil, opt.MakeColSet(nkc[1])),
-		e.filters(e.f.ConstructEq(e.v(lc[0]), e.v(nkc[1]))), &memo.JoinPrivate{}))
+	aggregated := e.f.ConstructGroupBy(joined, memo.AggregationsExpr{
+		e.f.ConstructAggregationsItem(e.f.ConstructSumInt(e.v(lc[1])), aggCol),
+	}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(lc[0], rc[0])})
+	return e.f.ConstructProject(aggregated, nil, aggregated.Relational().OutputCols)
 }

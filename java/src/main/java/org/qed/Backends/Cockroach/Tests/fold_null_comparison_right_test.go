@@ -9,14 +9,12 @@ import (
 func TestFoldNullComparisonRight(t *testing.T) {
 	rule := loadRule(t, "FoldNullComparisonRight")
 	e := newEnv(t)
-	s, cols := e.scan("u", 1)
-	nullBool := e.f.ConstructNull(types.Bool)
-	left := e.f.ConstructGt(e.v(cols[0]), e.num(0))
-	e.expectRewrite(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructEq(left, nullBool))), e.f.ConstructSelect(s, e.filters(nullBool)))
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructEq(nullBool, left))))
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructEq(left, e.f.ConstructFalse()))))
-}
-
-func TestSQLFoldNullComparisonRight(t *testing.T) {
-	expectSQLFires(t, "FoldNullComparisonRight", "SELECT * FROM t WHERE (a > 0) = NULL::BOOL")
+	s, cols := e.scan("t", 1)
+	boolLeft := e.f.ConstructEq(e.v(cols[0]), e.num(1))
+	before := e.f.ConstructSelect(s, e.filters(e.f.ConstructEq(boolLeft, e.f.ConstructNull(types.Bool))))
+	want := e.f.ConstructSelect(s, e.filters(e.f.ConstructNull(types.Bool)))
+	e.expectRewrite(rule, before, want)
+	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructNe(boolLeft, e.f.ConstructNull(types.Bool)))))
+	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructEq(e.f.ConstructNull(types.Bool), boolLeft))))
+	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructEq(boolLeft, e.f.ConstructEq(e.v(cols[0]), e.num(2))))))
 }

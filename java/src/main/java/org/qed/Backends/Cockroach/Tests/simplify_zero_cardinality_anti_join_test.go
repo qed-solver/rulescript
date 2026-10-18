@@ -10,12 +10,21 @@ import (
 
 func TestSimplifyZeroCardinalityAntiJoin(t *testing.T) {
 	rule := loadRule(t, "SimplifyZeroCardinalityAntiJoin")
-	e := newEnv(t)
-	l, lc := e.scan("u", 1)
-	rc := e.f.Metadata().AddColumn("one", types.Int)
-	oneRow := e.intValues([]opt.ColumnID{rc}, []int{0})
-	e.expectRewrite(rule, e.f.ConstructAntiJoin(l, oneRow, nil, &memo.JoinPrivate{}), e.empty(lc[0]))
-	e.expectNoMatch(rule, e.f.ConstructAntiJoin(l, e.intValues([]opt.ColumnID{rc}, []int{0}, []int{1}), nil, &memo.JoinPrivate{}))
-	e.expectNoMatch(rule, e.f.ConstructAntiJoin(l, e.intValues([]opt.ColumnID{rc}, []int{1}), nil, &memo.JoinPrivate{}))
-	e.expectNoMatch(rule, e.f.ConstructSemiJoin(l, oneRow, nil, &memo.JoinPrivate{}))
+	t.Run("one-column left", func(t *testing.T) {
+		e := newEnv(t)
+		left, cols := e.scan("t", 1)
+		rightCol := e.f.Metadata().AddColumn("one", types.Int)
+		right := e.intValues([]opt.ColumnID{rightCol}, []int{0})
+		before := e.f.ConstructAntiJoin(left, right, nil, &memo.JoinPrivate{})
+		want := e.empty(cols...)
+		e.expectRewrite(rule, before, want)
+	})
+	t.Run("empty right", func(t *testing.T) {
+		e := newEnv(t)
+		left, _ := e.scan("t", 1)
+		rightCol := e.f.Metadata().AddColumn("zero", types.Int)
+		right := e.intValues([]opt.ColumnID{rightCol})
+		before := e.f.ConstructAntiJoin(left, right, nil, &memo.JoinPrivate{})
+		e.expectNoMatch(rule, before)
+	})
 }

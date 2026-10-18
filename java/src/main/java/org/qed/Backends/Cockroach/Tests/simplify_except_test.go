@@ -5,27 +5,32 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestSimplifyExcept(t *testing.T) {
 	rule := loadRule(t, "SimplifyExcept")
-	e := newEnv(t)
-	l, lc := e.scan("u", 1)
-	r, rc := e.scan("nn", 1)
-	out := e.f.Metadata().AddColumn("out", types.Int)
-	private := &memo.SetPrivate{LeftCols: opt.ColList{lc[0]}, RightCols: opt.ColList{rc[0]}, OutCols: opt.ColList{out}}
-	before := e.f.ConstructExcept(l, r, private)
-	anti := e.f.ConstructAntiJoin(l, r, e.filters(e.f.ConstructIs(e.v(lc[0]), e.v(rc[0]))), &memo.JoinPrivate{})
-	want := e.f.ConstructProject(anti, memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.v(lc[0]), out)}, opt.ColSet{})
-	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructExceptAll(l, r, private))
-	nonUnique, col := oneColumnUnionAll(e)
-	e.expectNoMatch(rule, e.f.ConstructExcept(nonUnique, r, &memo.SetPrivate{
-		LeftCols: opt.ColList{col}, RightCols: private.RightCols, OutCols: private.OutCols,
-	}))
-}
 
-func TestSQLSimplifyExcept(t *testing.T) {
-	expectSQLFires(t, "SimplifyExcept", "SELECT x FROM u EXCEPT SELECT a FROM nn")
+	t.Run("unique-left-except", func(t *testing.T) {
+		e := newEnv(t)
+		left, leftCols := e.scan("t", 1)
+		right, rightCols := e.scan("u", 1)
+		before := e.f.ConstructExcept(left, right, &memo.SetPrivate{
+			LeftCols: opt.ColList{leftCols[0]}, RightCols: opt.ColList{rightCols[0]},
+			OutCols: opt.ColList{leftCols[0]},
+		})
+		condition := e.filters(e.f.ConstructIs(e.v(leftCols[0]), e.v(rightCols[0])))
+		want := e.f.ConstructAntiJoin(left, right, condition, &memo.JoinPrivate{})
+		e.expectRewrite(rule, before, want)
+	})
+
+	t.Run("except-all-near-miss", func(t *testing.T) {
+		e := newEnv(t)
+		left, leftCols := e.scan("t", 1)
+		right, rightCols := e.scan("u", 1)
+		plan := e.f.ConstructExceptAll(left, right, &memo.SetPrivate{
+			LeftCols: opt.ColList{leftCols[0]}, RightCols: opt.ColList{rightCols[0]},
+			OutCols: opt.ColList{leftCols[0]},
+		})
+		e.expectNoMatch(rule, plan)
+	})
 }

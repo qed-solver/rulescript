@@ -9,30 +9,52 @@ import (
 )
 
 func TestProjectWindowTranspose(t *testing.T) {
-	rule := loadRule(t, "ProjectWindowTranspose")
 	e := newEnv(t)
-	input, ic := e.scan("t", 3)
-	partitions, pc := e.scan("t", 3)
-	needed := e.f.ConstructProject(partitions, nil, opt.MakeColSet(pc[0], pc[1]))
-	f := e.f.Metadata().AddColumn("f", types.Int)
-	g := e.f.Metadata().AddColumn("g", types.Int)
-	perPartition := e.f.ConstructGroupBy(needed, memo.AggregationsExpr{
-		e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(pc[1])), f),
-		e.f.ConstructAggregationsItem(e.f.ConstructMin(e.v(pc[1])), g),
-	}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(pc[0])})
-	z := e.f.Metadata().AddColumn("top", types.Int)
-	top := func(cols ...opt.ColumnID) memo.ProjectionsExpr {
-		sum := e.f.ConstructPlus(
-			e.f.ConstructPlus(e.v(cols[0]), e.v(cols[1])), e.f.ConstructPlus(e.v(cols[2]), e.v(cols[3])))
-		return memo.ProjectionsExpr{e.f.ConstructProjectionsItem(sum, z)}
+	rule := loadRule(t, "ProjectWindowTranspose")
+	build := func(usesUnused bool) (memo.RelExpr, memo.RelExpr) {
+		scan, cols := e.scan("t", 3)
+		key := e.f.Metadata().AddColumn("window_key", types.Int)
+		value := e.f.Metadata().AddColumn("window_value", types.Int)
+		needed := e.f.ConstructProject(scan, memo.ProjectionsExpr{
+			e.f.ConstructProjectionsItem(e.v(cols[0]), key),
+			e.f.ConstructProjectionsItem(e.v(cols[1]), value),
+		}, opt.ColSet{})
+		count := e.f.Metadata().AddColumn("window_sum", types.Decimal)
+		max := e.f.Metadata().AddColumn("window_max", types.Int)
+		grouped := e.f.ConstructGroupBy(needed, memo.AggregationsExpr{
+			e.f.ConstructAggregationsItem(e.f.ConstructSum(e.v(value)), count),
+			e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(value)), max),
+		}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(key)})
+		cond := e.f.ConstructEq(e.v(cols[0]), e.v(key))
+		joined := e.f.ConstructInnerJoin(scan, grouped, e.filters(cond), &memo.JoinPrivate{})
+		arg := e.v(cols[0])
+		if usesUnused {
+			arg = e.v(cols[2])
+		}
+		top := e.f.ConstructPlus(arg, e.v(cols[1]))
+		beforeCol := e.f.Metadata().AddColumn("top_before", types.Int)
+		before := e.f.ConstructProject(joined, memo.ProjectionsExpr{
+			e.f.ConstructProjectionsItem(top, beforeCol),
+		}, opt.ColSet{})
+		pruned := e.f.ConstructProject(scan, nil, opt.MakeColSet(cols[0], cols[1]))
+		prunedGroup := e.f.ConstructGroupBy(pruned, memo.AggregationsExpr{
+			e.f.ConstructAggregationsItem(e.f.ConstructSum(e.v(cols[1])), count),
+			e.f.ConstructAggregationsItem(e.f.ConstructMax(e.v(cols[1])), max),
+		}, &memo.GroupingPrivate{GroupingCols: opt.MakeColSet(cols[0])})
+		groupKey := e.f.Metadata().AddColumn("group_key_after", types.Int)
+		groupKeyProjection := e.f.ConstructProject(prunedGroup, memo.ProjectionsExpr{
+			e.f.ConstructProjectionsItem(e.v(cols[0]), groupKey),
+		}, opt.MakeColSet(count, max))
+		prunedJoin := e.f.ConstructInnerJoin(pruned, groupKeyProjection, e.filters(e.f.ConstructEq(e.v(cols[0]), e.v(groupKey))), &memo.JoinPrivate{})
+		topAfter := e.f.ConstructPlus(e.v(cols[0]), e.v(cols[1]))
+		afterCol := e.f.Metadata().AddColumn("top_after", types.Int)
+		after := e.f.ConstructProject(prunedJoin, memo.ProjectionsExpr{
+			e.f.ConstructProjectionsItem(topAfter, afterCol),
+		}, opt.ColSet{})
+		return before, after
 	}
-	full := e.f.ConstructInnerJoin(input, perPartition,
-		e.filters(e.f.ConstructEq(e.v(ic[0]), e.v(pc[0]))), &memo.JoinPrivate{})
-	before := e.f.ConstructProject(full, top(ic[0], ic[1], f, g), opt.ColSet{})
-	pruned := e.f.ConstructProject(input, nil, opt.MakeColSet(ic[0], ic[1]))
-	prunedJoin := e.f.ConstructInnerJoin(pruned, perPartition,
-		e.filters(e.f.ConstructEq(e.v(ic[0]), e.v(pc[0]))), &memo.JoinPrivate{})
-	want := e.f.ConstructProject(prunedJoin, top(ic[0], ic[1], f, g), opt.ColSet{})
-	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructProject(full, top(ic[0], ic[2], f, g), opt.ColSet{}))
+	before, want := build(false)
+	e.expectRewriteUpToFreshColumns(rule, before, want)
+	nearMiss, _ := build(true)
+	e.expectNoMatch(rule, nearMiss)
 }

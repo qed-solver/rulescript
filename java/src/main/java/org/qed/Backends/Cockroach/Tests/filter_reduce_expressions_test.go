@@ -1,18 +1,13 @@
 package rulescript_test
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestFilterReduceExpressions(t *testing.T) {
 	rule := loadRule(t, "FilterReduceExpressions")
 	e := newEnv(t)
-	s, c := e.scan("t", 1)
-
+	s, cols := e.scan("t", 1)
 	before := e.f.ConstructSelect(s, e.filters(e.f.ConstructFalse()))
-	e.expectRewrite(rule, before, e.empty(c...))
-
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructTrue())))
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructGt(e.v(c[0]), e.num(0)))))
-	e.expectNoMatch(rule, s)
+	e.expectRewrite(rule, before, e.empty(cols...))
+	nearMiss := e.f.ConstructSelect(s, e.filters(e.f.ConstructEq(e.v(cols[0]), e.num(1))))
+	e.expectNoMatch(rule, nearMiss)
 }

@@ -9,17 +9,26 @@ import (
 func TestMapEqualityIntoJoinLeftAndRight(t *testing.T) {
 	rule := loadRule(t, "MapEqualityIntoJoinLeftAndRight")
 	e := newEnv(t)
-	a, ac := twoNonNullColumns(e)
-	b, bc := e.scan("u", 1)
-	first := e.f.ConstructEq(e.v(ac[0]), e.v(bc[0]))
-	second := e.f.ConstructEq(e.v(bc[0]), e.v(ac[1]))
-	before := e.f.ConstructInnerJoin(a, b, e.filters(first, second), &memo.JoinPrivate{})
-	want := e.f.ConstructInnerJoin(a, b, e.filters(second, e.f.ConstructEq(e.v(ac[0]), e.v(ac[1]))), &memo.JoinPrivate{})
-	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(a, b, e.filters(second, first), &memo.JoinPrivate{}))
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(a, b, e.filters(first, e.f.ConstructNe(e.v(bc[0]), e.v(ac[1]))), &memo.JoinPrivate{}))
-}
 
-func TestSQLMapEqualityIntoJoinLeftAndRight(t *testing.T) {
-	expectSQLRewrites(t, "MapEqualityIntoJoinLeftAndRight", "SELECT * FROM (VALUES (1, 2)) AS a(x,y) JOIN (VALUES (1)) AS b(z) ON a.x=b.z AND b.z=a.y")
+	left, leftCols := e.scan("nn3", 2)
+	right, rightCols := e.scan("u", 1)
+	ax, ay, bx := e.v(leftCols[0]), e.v(leftCols[1]), e.v(rightCols[0])
+	before := e.f.ConstructInnerJoin(left, right, e.filters(
+		e.f.ConstructEq(ax, bx),
+		e.f.ConstructEq(bx, ay),
+	), &memo.JoinPrivate{})
+
+	want := e.f.ConstructInnerJoin(left, right, e.filters(
+		e.f.ConstructEq(bx, ay),
+		e.f.ConstructEq(ax, ay),
+	), &memo.JoinPrivate{})
+	e.expectRewrite(rule, before, want)
+
+	nearLeft, nearLeftCols := e.scan("nn3", 2)
+	nearRight, nearRightCols := e.scan("u", 1)
+	nearMiss := e.f.ConstructInnerJoin(nearLeft, nearRight, e.filters(
+		e.f.ConstructEq(e.v(nearLeftCols[0]), e.v(nearRightCols[0])),
+		e.f.ConstructEq(e.v(nearLeftCols[1]), e.v(nearRightCols[0])),
+	), &memo.JoinPrivate{})
+	e.expectNoMatch(rule, nearMiss)
 }

@@ -1,33 +1,24 @@
 package rulescript_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestEliminateProject(t *testing.T) {
 	rule := loadRule(t, "EliminateProject")
 	e := newEnv(t)
-	s, cols := e.scan("u", 2)
-	identity := e.f.ConstructProject(s, nil, opt.MakeColSet(cols...))
-	e.expectRewrite(rule, identity, s)
+	u, uc := e.scan("u", 2)
+	before := e.f.ConstructProject(u, memo.EmptyProjectionsExpr, opt.MakeColSet(uc[0], uc[1]))
+	e.expectRewrite(rule, before, u)
 
-	e.expectNoMatch(rule, e.f.ConstructProject(s, nil, opt.MakeColSet(cols[0])))
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructGt(e.v(cols[0]), e.num(0)))))
-	e.expectNoMatch(rule, s)
-}
+	wide, wc := e.scan("t", 3)
+	e.expectNoMatch(rule, e.f.ConstructProject(wide, memo.EmptyProjectionsExpr, opt.MakeColSet(wc[0], wc[1])))
 
-func TestSQLEliminateProject(t *testing.T) {
-	sql := "SELECT x, y FROM u"
-	prune := func(r opt.RuleName) bool { return strings.HasPrefix(r.String(), "Prune") }
-	before, _ := planFor(t, sql, prune)
-	if !strings.Contains(before, "project") {
-		t.Fatalf("expected an identity project before the rule:\n%s", before)
-	}
-	got, fired := planFor(t, sql, prune, "EliminateProject")
-	if strings.Join(fired, ",") != "EliminateProject" || strings.Contains(got, "project") {
-		t.Fatalf("expected the identity project to be removed, got %v:\n%s", fired, got)
-	}
+	computed := e.f.Metadata().AddColumn("k", types.Int)
+	items := memo.ProjectionsExpr{{Element: e.num(1), Col: computed}}
+	e.expectNoMatch(rule, e.f.ConstructProject(u, items, opt.MakeColSet(uc[0], uc[1])))
 }

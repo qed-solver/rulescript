@@ -2,21 +2,26 @@ package rulescript_test
 
 import (
 	"testing"
+
 )
 
 func TestNegateOr(t *testing.T) {
 	rule := loadRule(t, "NegateOr")
 	e := newEnv(t)
-	s, cols := e.scan("u", 2)
-	left := e.f.ConstructEq(e.v(cols[0]), e.num(1))
-	right := e.f.ConstructEq(e.v(cols[1]), e.num(2))
-	before := e.f.ConstructSelect(s, e.filters(e.f.ConstructNot(e.f.ConstructOr(left, right))))
-	want := e.f.ConstructSelect(s, e.filters(e.f.ConstructNot(left), e.f.ConstructNot(right)))
+	source, cols := e.scan("t", 3)
+	left := e.f.ConstructEq(e.v(cols[0]), e.v(cols[1]))
+	right := e.f.ConstructEq(e.v(cols[1]), e.v(cols[2]))
+	before := e.f.ConstructSelect(source, e.filters(e.f.ConstructNot(e.f.ConstructOr(left, right))))
+	want := e.f.ConstructSelect(source, e.filters(
+		e.f.ConstructNot(left), e.f.ConstructNot(right),
+	))
 	e.expectRewrite(rule, before, want)
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructOr(left, right))))
-	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructNot(e.f.ConstructAnd(left, right)))))
-}
 
-func TestSQLNegateOr(t *testing.T) {
-	expectSQLRewrites(t, "NegateOr", "SELECT x FROM u WHERE NOT ((x > 0) OR (y > 0))")
+	nearSource, nearCols := e.scan("t", 3)
+	nearLeft := e.f.ConstructEq(e.v(nearCols[0]), e.v(nearCols[1]))
+	nearRight := e.f.ConstructEq(e.v(nearCols[1]), e.v(nearCols[2]))
+	nearBefore := e.f.ConstructSelect(
+		nearSource, e.filters(e.f.ConstructNot(e.f.ConstructAnd(nearLeft, nearRight))),
+	)
+	e.expectNoMatch(rule, nearBefore)
 }

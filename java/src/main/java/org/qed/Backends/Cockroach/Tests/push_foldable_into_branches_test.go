@@ -9,25 +9,34 @@ import (
 )
 
 func TestPushFoldableIntoBranches(t *testing.T) {
-	rule := loadRule(t, "PushFoldableIntoBranches")
 	e := newEnv(t)
-	s, sc := e.scan("t", 2)
-	u := e.f.Metadata().AddColumn("u", types.Int)
-	cond := e.f.ConstructGt(e.v(sc[0]), e.v(sc[1]))
-	branch := func(a, b opt.ScalarExpr) opt.ScalarExpr {
-		return e.f.ConstructCase(memo.TrueSingleton, memo.ScalarListExpr{e.f.ConstructWhen(cond, a)}, b)
-	}
-	apply := func(x opt.ScalarExpr) opt.ScalarExpr { return e.f.ConstructPlus(x, e.num(1)) }
-	before := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(apply(branch(e.v(sc[0]), e.v(sc[1]))), u),
+	rule := loadRule(t, "PushFoldableIntoBranches")
+
+	input, cols := e.scan("t", 2)
+	cond := e.f.ConstructGt(e.v(cols[0]), e.num(0))
+	branch := e.f.ConstructCase(memo.TrueSingleton, memo.ScalarListExpr{
+		e.f.ConstructWhen(cond, e.v(cols[0])),
+	}, e.v(cols[1]))
+	out := e.f.Metadata().AddColumn("out", types.Int)
+	before := e.f.ConstructProject(input, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructUnaryMinus(branch), out),
 	}, opt.ColSet{})
-	want := e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(branch(apply(e.v(sc[0])), apply(e.v(sc[1]))), u),
+
+	want := e.f.ConstructProject(input, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructCase(memo.TrueSingleton, memo.ScalarListExpr{
+			e.f.ConstructWhen(cond, e.f.ConstructUnaryMinus(e.v(cols[0]))),
+		}, e.f.ConstructUnaryMinus(e.v(cols[1]))), out),
 	}, opt.ColSet{})
 	e.expectRewrite(rule, before, want)
 
-	e.expectNoMatch(rule, want)
-	e.expectNoMatch(rule, e.f.ConstructProject(s, memo.ProjectionsExpr{
-		e.f.ConstructProjectionsItem(apply(e.v(sc[0])), u),
-	}, opt.ColSet{}))
+	badInput, badCols := e.scan("t", 2)
+	badCond := e.f.ConstructGt(e.v(badCols[0]), e.num(0))
+	badBranch := e.f.ConstructCase(memo.TrueSingleton, memo.ScalarListExpr{
+		e.f.ConstructWhen(badCond, e.v(badCols[0])),
+	}, e.v(badCols[1]))
+	badOut := e.f.Metadata().AddColumn("out", types.Int)
+	nearMiss := e.f.ConstructProject(badInput, memo.ProjectionsExpr{
+		e.f.ConstructProjectionsItem(e.f.ConstructUnaryMinus(badBranch), badOut),
+	}, opt.MakeColSet(badCols[0]))
+	e.expectNoMatch(rule, nearMiss)
 }
