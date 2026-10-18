@@ -32,6 +32,21 @@ final class Support {
         return session;
     }
 
+    private static Boolean executable;
+
+    static synchronized boolean canExecute() {
+        if (executable == null) {
+            try {
+                session();
+                executable = true;
+            } catch (Exception | LinkageError e) {
+                System.out.println("results are not compared: no Spark session could start (" + e.getMessage() + ")");
+                executable = false;
+            }
+        }
+        return executable;
+    }
+
     static Path generated() {
         return Path.of(System.getProperty("rulescript.generated", "Generated"));
     }

@@ -1,0 +1,80 @@
+package org.qed.spark;
+
+import org.apache.spark.sql.catalyst.expressions.Add;
+import org.apache.spark.sql.catalyst.expressions.Attribute;
+import org.apache.spark.sql.catalyst.expressions.Expression;
+import org.apache.spark.sql.catalyst.expressions.LessThan;
+import org.apache.spark.sql.catalyst.expressions.Literal$;
+import org.apache.spark.sql.catalyst.expressions.Multiply;
+import org.apache.spark.sql.catalyst.plans.Inner$;
+import org.apache.spark.sql.catalyst.plans.LeftOuter$;
+import org.apache.spark.sql.catalyst.plans.logical.Join;
+import org.apache.spark.sql.catalyst.plans.logical.JoinHint$;
+import org.apache.spark.sql.catalyst.plans.logical.Project;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Test;
+import scala.Option;
+
+import java.util.List;
+import java.util.Random;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class ExtractJoinComparisonsTest {
+    private final RuleScriptRule rule = RuleScriptRule.load(Support.generated().resolve("ExtractJoinComparisons.json"));
+
+    @Test
+    void movesComparisonOperandsIntoProjectionsBelowTheJoin() {
+        var left = Support.relation("l", 1, List.of(), new Random(1));
+        var right = Support.relation("r", 1, List.of(), new Random(2));
+        var x = Catalyst.<Attribute>list(left.output()).get(0);
+        var y = Catalyst.<Attribute>list(right.output()).get(0);
+        var cond = new LessThan(new Add(x, Literal$.MODULE$.apply(1)), new Multiply(y, Literal$.MODULE$.apply(2)));
+        var plan = new Join(left, right, Inner$.MODULE$, Option.<Expression>apply(cond), JoinHint$.MODULE$.NONE());
+
+        var rewritten = rule.apply(plan);
+
+        assertNotEquals(plan, rewritten);
+        assertTrue(rewritten instanceof Project top && top.child() instanceof Join join
+                && join.left() instanceof Project && join.right() instanceof Project
+                && join.joinType().equals(Inner$.MODULE$) && join.condition().isDefined()
+                && join.condition().get() instanceof LessThan);
+        assertEquals(Catalyst.list(plan.output()), Catalyst.list(rewritten.output()));
+        Assumptions.assumeTrue(Support.canExecute());
+        assertEquals(Support.run(plan), Support.run(rewritten));
+    }
+
+    @Test
+    void leavesOuterJoinAlone() {
+        var left = Support.relation("l", 1, List.of(), new Random(5));
+        var right = Support.relation("r", 1, List.of(), new Random(6));
+        var x = Catalyst.<Attribute>list(left.output()).get(0);
+        var y = Catalyst.<Attribute>list(right.output()).get(0);
+        var cond = new LessThan(new Add(x, Literal$.MODULE$.apply(1)), new Multiply(y, Literal$.MODULE$.apply(2)));
+        var plan = new Join(left, right, LeftOuter$.MODULE$, Option.<Expression>apply(cond), JoinHint$.MODULE$.NONE());
+        assertEquals(plan, rule.apply(plan));
+    }
+
+    @Test
+    void leavesComparisonOfTwoLeftOperandsAlone() {
+        var left = Support.relation("l", 1, List.of(), new Random(7));
+        var right = Support.relation("r", 1, List.of(), new Random(8));
+        var x = Catalyst.<Attribute>list(left.output()).get(0);
+        var cond = new LessThan(new Add(x, Literal$.MODULE$.apply(1)), new Multiply(x, Literal$.MODULE$.apply(2)));
+        var plan = new Join(left, right, Inner$.MODULE$, Option.<Expression>apply(cond), JoinHint$.MODULE$.NONE());
+        assertEquals(plan, rule.apply(plan));
+    }
+
+    @Test
+    void leavesTwoColumnLeftInputAlone() {
+        var left = Support.relation("l", 2, List.of(), new Random(9));
+        var right = Support.relation("r", 1, List.of(), new Random(10));
+        var x = Catalyst.<Attribute>list(left.output()).get(0);
+        var y = Catalyst.<Attribute>list(right.output()).get(0);
+        var cond = new LessThan(new Add(x, Literal$.MODULE$.apply(1)), new Multiply(y, Literal$.MODULE$.apply(2)));
+        var plan = new Join(left, right, Inner$.MODULE$, Option.<Expression>apply(cond), JoinHint$.MODULE$.NONE());
+        assertEquals(plan, rule.apply(plan));
+    }
+}

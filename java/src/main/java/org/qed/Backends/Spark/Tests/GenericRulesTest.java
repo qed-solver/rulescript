@@ -65,6 +65,9 @@ class GenericRulesTest {
             assertEquals(Catalyst.list(before.output()).stream().map(a -> a.exprId()).toList(),
                     Catalyst.list(after.output()).stream().map(a -> a.exprId()).toList(),
                     rule.name() + " changed the output of the rewritten node");
+            if (!Support.canExecute()) {
+                continue;
+            }
             java.util.List<String> expected;
             try {
                 expected = Support.run(before);

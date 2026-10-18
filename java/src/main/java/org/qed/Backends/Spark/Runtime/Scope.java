@@ -1,6 +1,7 @@
 package org.qed.spark;
 
 import org.apache.spark.sql.catalyst.expressions.Attribute;
+import org.apache.spark.sql.catalyst.expressions.ExprId;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -46,6 +47,20 @@ final class Scope {
 
     void push(Map<String, List<Attribute>> inputs) {
         nested.add(inputs);
+    }
+
+    boolean visible(ExprId id) {
+        if (nested.isEmpty()) {
+            return false;
+        }
+        for (var columns : nested.get(nested.size() - 1).values()) {
+            for (var column : columns) {
+                if (column.exprId().equals(id)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     void pop() {

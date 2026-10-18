@@ -152,6 +152,24 @@ final class Match {
     }
 
     private static boolean isUnique(LogicalPlan plan, Attribute column) {
+        if (plan instanceof LocalRelation local) {
+            var output = Catalyst.list(local.output());
+            int ordinal = -1;
+            for (int i = 0; i < output.size(); i++) {
+                if (Catalyst.sameAttribute(output.get(i), column)) {
+                    ordinal = i;
+                }
+            }
+            if (ordinal >= 0 && column.dataType().equals(IntegerType$.MODULE$)) {
+                var seen = new HashSet<Object>();
+                for (var row : Catalyst.list(local.data())) {
+                    if (!seen.add(row.isNullAt(ordinal) ? "null" : (Object) row.getInt(ordinal))) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        }
         for (var key : Catalyst.list(plan.distinctKeys().toSeq())) {
             var attrs = Catalyst.<Expression>list(key.toSeq());
             if (attrs.stream().allMatch(a -> Catalyst.sameAttribute(a, column))) {
@@ -309,7 +327,7 @@ final class Match {
                 return true;
             }
             default -> {
-                return parts.size() == 1 && scalar(p, parts.get(0));
+                return !parts.isEmpty() && scalar(p, parts.size() == 1 ? parts.get(0) : Catalyst.conjunction(parts));
             }
         }
     }
@@ -544,8 +562,14 @@ final class Match {
                 case "outer" -> out.add(cols.outer().get(arg.path("ordinal").asInt()));
                 case "local" -> out.add(cols.local().get(arg.path("ordinal").asInt()));
                 case "row" -> {
-                    for (var rel : arg.path("rels")) {
-                        out.addAll(cols(rel.asText()));
+                    var rels = arg.path("rels");
+                    var inJoinOrder = rels.size() == 2 ? cols.get(Scope.pair(rels.get(1).asText(), rels.get(0).asText())) : null;
+                    if (inJoinOrder != null) {
+                        out.addAll(inJoinOrder);
+                    } else {
+                        for (var rel : rels) {
+                            out.addAll(cols(rel.asText()));
+                        }
                     }
                 }
                 default -> {
@@ -570,7 +594,7 @@ final class Match {
         var allowed = new HashSet<ExprId>();
         attrs.forEach(a -> allowed.add(a.exprId()));
         for (var reference : Catalyst.list(e.references().toSeq())) {
-            if (!allowed.contains(reference.exprId())) {
+            if (!allowed.contains(reference.exprId()) && !(nested.isEmpty() && !cols.visible(reference.exprId()))) {
                 return false;
             }
         }
@@ -963,7 +987,9 @@ final class Match {
     private LogicalPlan buildJoin(JsonNode t) {
         var left = build(t.path("left"));
         var leftColumns = cols(t.path("left").path("id").asText());
-        var right = build(t.path("right"));
+        var right = distinctFrom(build(t.path("right")), left);
+        plans.put(t.path("right").path("id").asText(), right);
+        cols.put(t.path("right").path("id").asText(), Catalyst.list(right.output()));
         var rightColumns = cols(t.path("right").path("id").asText());
         cols.remember(t.path("id").asText(), Scope.over(t.path("left").path("id").asText(), leftColumns,
                 t.path("right").path("id").asText(), rightColumns));
@@ -979,6 +1005,27 @@ final class Match {
         var join = new Join(left, right, joinType(t.path("type").asText()), condition, JoinHint$.MODULE$.NONE());
         cols.put(t.path("id").asText(), Catalyst.list(join.output()));
         return join;
+    }
+
+    private static LogicalPlan distinctFrom(LogicalPlan right, LogicalPlan left) {
+        if (!(right instanceof Aggregate aggregate)) {
+            return right;
+        }
+        var taken = new HashSet<ExprId>();
+        left.output().foreach(a -> taken.add(a.exprId()));
+        var changed = false;
+        var items = new ArrayList<NamedExpression>();
+        for (var item : Catalyst.<NamedExpression>list(aggregate.aggregateExpressions())) {
+            if (item instanceof Attribute attr && taken.contains(attr.exprId())) {
+                items.add(Alias$.MODULE$.apply(attr, attr.name(), NamedExpression$.MODULE$.newExprId(),
+                        Catalyst.<String>seq(List.of()), Option.empty(), Catalyst.<String>seq(List.of())));
+                changed = true;
+            } else {
+                items.add(item);
+            }
+        }
+        return changed ? new Aggregate(aggregate.groupingExpressions(), Catalyst.seq(items), aggregate.child(),
+                Option.<org.apache.spark.sql.catalyst.plans.logical.AggregateHint>empty()) : right;
     }
 
     private LogicalPlan buildAggregate(JsonNode t) {
