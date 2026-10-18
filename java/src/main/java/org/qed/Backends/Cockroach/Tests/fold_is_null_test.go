@@ -12,7 +12,7 @@ func TestFoldIsNull(t *testing.T) {
 	e := newEnv(t)
 	s, sc := e.scan("t", 3)
 	before := e.f.ConstructSelect(s, e.filters(e.f.ConstructIs(e.f.ConstructNull(types.Int), memo.NullSingleton)))
-	e.expectRewrite(rule, before, s)
+	e.expectRewrite(rule, before, e.f.ConstructSelect(s, e.filters(e.f.ConstructTrue())))
 	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructIs(e.v(sc[1]), memo.NullSingleton))))
 	e.expectNoMatch(rule, e.f.ConstructSelect(s, e.filters(e.f.ConstructIsNot(e.f.ConstructNull(types.Int), memo.NullSingleton))))
 }

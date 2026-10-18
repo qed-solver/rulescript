@@ -14,10 +14,8 @@ import java.util.Set;
 public class SparkTester {
     public static final String RULE_PACKAGE = "org.qed.RRuleInstances";
 
-    public static Path rulePath =
-            ProjectPaths.baseDir().resolve("src/main/java/org/qed/RRuleInstances");
-    public static Path generatedPath =
-            ProjectPaths.baseDir().resolve("src/main/java/org/qed/Backends/Spark/Generated");
+    public static Path rulePath = ProjectPaths.baseDir().resolve("src/main/java/org/qed/RRuleInstances");
+    public static Path generatedPath = ProjectPaths.baseDir().resolve("src/main/java/org/qed/Backends/Spark/Generated");
 
     public static java.util.List<RRule> ruleList() {
         var files = rulePath.toFile().listFiles((dir, name) -> name.endsWith(".java"));
@@ -42,9 +40,7 @@ public class SparkTester {
         var requested = 0;
         var generated = 0;
         for (var rule : ruleList()) {
-            if (!only.isEmpty() && !only.contains(rule.name())) {
-                continue;
-            }
+            if (!only.isEmpty() && !only.contains(rule.name())) continue;
             requested++;
             var file = generatedPath.resolve(rule.name() + ".json");
             try {

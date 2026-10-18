@@ -29,7 +29,9 @@ func TestDphypJoinReorder(t *testing.T) {
 
 	e.expectNoMatch(rule, e.f.ConstructSemiJoin(ab, c, e.filters(eq(ac[0], cc[0]), eq(bc[0], cc[0])), &memo.JoinPrivate{}))
 
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(ab, c, e.filters(eq(ac[0], cc[0])), &memo.JoinPrivate{}))
+	e.expectRewrite(rule, e.f.ConstructInnerJoin(ab, c, e.filters(eq(ac[0], cc[0])), &memo.JoinPrivate{}),
+		e.f.ConstructInnerJoin(a, e.f.ConstructInnerJoin(b, c, nil, &memo.JoinPrivate{}),
+			e.filters(eq(ac[0], cc[0]), eq(ac[0], bc[0])), &memo.JoinPrivate{}))
 
 	a2, a2c := e.scan("t", 2)
 	ab2 := e.f.ConstructInnerJoin(a2, b, e.filters(eq(a2c[0], bc[0])), &memo.JoinPrivate{})

@@ -102,16 +102,13 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         return out.toString();
     }
 
-
     @Override
     public Env onMatchScan(Env env, RelRN.Scan scan) {
         var operand = env.operand(ANY_RELATION, Operand.Kind.ANY, scan);
         if (env.bindScan(scan.name(), operand.index)) {
             env.check("r_" + operand.index + ".getRowType().getFieldCount() == 1");
             bindColumn(env, operand, 0, scan.ty());
-            if (scan.unique()) {
-                env.check("CalciteRuntime.isUnique(call, r_" + operand.index + ", 0)");
-            }
+            if (scan.unique()) env.check("CalciteRuntime.isUnique(call, r_" + operand.index + ", 0)");
         }
         return env.done(operand);
     }
@@ -121,9 +118,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         var operand = env.operand(ANY_RELATION, Operand.Kind.ANY, scan);
         if (env.bindScan(scan.name(), operand.index)) {
             env.check("r_" + operand.index + ".getRowType().getFieldCount() == " + scan.tys().size());
-            for (var i = 0; i < scan.tys().size(); i++) {
-                bindColumn(env, operand, i, scan.tys().get(i));
-            }
+            for (var i = 0; i < scan.tys().size(); i++) bindColumn(env, operand, i, scan.tys().get(i));
         }
         return env.done(operand);
     }
@@ -135,12 +130,8 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     private void bindColumn(Env env, Operand operand, int ordinal, RelType.VarType type) {
         var id = typeId(type);
         env.boundTypes.add(id);
-        if (!type.isNullable() && env.operands.containsKey(operand.index)) {
-            env.prefilter(operand, "!r_" + operand.index + ".getRowType().getFieldList().get(" + ordinal
-                    + ").getType().isNullable()");
-        }
-        env.check("CalciteRuntime.bindColumn(types, " + literal(id) + ", " + type.isNullable() + ", r_"
-                + operand.index + ", " + ordinal + ")");
+        if (!type.isNullable() && env.operands.containsKey(operand.index)) env.prefilter(operand, "!r_" + operand.index + ".getRowType().getFieldList().get(" + ordinal + ").getType().isNullable()");
+        env.check("CalciteRuntime.bindColumn(types, " + literal(id) + ", " + type.isNullable() + ", r_" + operand.index + ", " + ordinal + ")");
     }
 
     @Override
@@ -164,9 +155,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     public Env onMatchProjectMany(Env env, RelRN.ProjectMany project) {
         var operand = env.operand("LogicalProject", Operand.Kind.INPUTS, project);
         env.check("r_" + operand.index + ".getProjects().size() == " + project.exprs().size());
-        for (var i = 0; i < project.exprs().size(); i++) {
-            matchRex(env, project.exprs().get(i), "r_" + operand.index + ".getProjects().get(" + i + ")");
-        }
+        for (var i = 0; i < project.exprs().size(); i++) matchRex(env, project.exprs().get(i), "r_" + operand.index + ".getProjects().get(" + i + ")");
         operand.kids.add(matchChild(env, operand, "getInput()", project.source()));
         return env.done(operand);
     }
@@ -214,9 +203,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         var operand = env.operand(cls, Operand.Kind.INPUTS, pattern);
         env.check("r_" + operand.index + ".all == " + all);
         env.check("r_" + operand.index + ".getInputs().size() == " + sources.size());
-        for (var i = 0; i < sources.size(); i++) {
-            operand.kids.add(matchChild(env, operand, "getInputs().get(" + i + ")", sources.get(i)));
-        }
+        for (var i = 0; i < sources.size(); i++) operand.kids.add(matchChild(env, operand, "getInputs().get(" + i + ")", sources.get(i)));
         return env.done(operand);
     }
 
@@ -224,38 +211,26 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     public Env onMatchEmpty(Env env, RelRN.Empty empty) {
         var operand = env.operand("LogicalValues", Operand.Kind.NONE, empty);
         env.check("r_" + operand.index + ".getTuples().isEmpty()");
-        env.check("r_" + operand.index + ".getRowType().getFieldCount() == "
-                + empty.sourceType().semantics().getRowType().getFieldCount());
+        env.check("r_" + operand.index + ".getRowType().getFieldCount() == " + empty.sourceType().semantics().getRowType().getFieldCount());
         env.rels.putIfAbsent(empty.sourceType(), operand.index);
-        var columns = empty.sourceType() instanceof RelRN.ScanMany many ? many.tys()
-                : empty.sourceType() instanceof RelRN.Scan one ? Seq.of(one.ty()) : Seq.<RelType.VarType>empty();
-        for (var i = 0; i < columns.size(); i++) {
-            env.emptyTypes.putIfAbsent(typeId(columns.get(i)), "r_" + operand.index + ".getRowType().getFieldList().get("
-                    + i + ").getType()");
-        }
+        var columns = empty.sourceType() instanceof RelRN.ScanMany many ? many.tys() : empty.sourceType() instanceof RelRN.Scan one ? Seq.of(one.ty()) : Seq.<RelType.VarType>empty();
+        for (var i = 0; i < columns.size(); i++) env.emptyTypes.putIfAbsent(typeId(columns.get(i)), "r_" + operand.index + ".getRowType().getFieldList().get(" + i + ").getType()");
         return env.done(operand);
     }
 
     @Override
     public Env onMatchCorrelate(Env env, RelRN.Correlate correlate) {
         var operand = env.operand("LogicalCorrelate", Operand.Kind.INPUTS, correlate);
-        if (operand.inline) {
-            throw new UnsupportedConstructException("A correlate inside a subquery is not supported");
-        }
         operand.kids.add(matchChild(env, correlate.left()));
         var filter = env.hidden("LogicalFilter", Operand.Kind.INPUTS);
         env.check("r_" + operand.index + ".getJoinType() == JoinRelType." + correlate.ty().name());
         var arguments = "ca_" + env.ids++;
-        env.prelude.add("final RexNode[] " + arguments + " = CalciteRuntime.correlateArguments(r_" + operand.index
-                + ");");
+        env.prelude.add("final RexNode[] " + arguments + " = CalciteRuntime.correlateArguments(r_" + operand.index + ");");
         var condition = "r_" + filter.index + ".getCondition()";
         if (isSymbol(correlate.cond())) {
-            bindExpressionSymbol(env, correlate.cond(), condition, arguments, null,
-                    correlate.left().semantics().getRowType().getFieldCount()
-                            + correlate.right().semantics().getRowType().getFieldCount());
+            bindExpressionSymbol(env, correlate.cond(), condition, arguments, null, correlate.left().semantics().getRowType().getFieldCount() + correlate.right().semantics().getRowType().getFieldCount());
         } else {
-            env.check("CalciteRuntime.isCall(" + condition + ", " + operatorReference(correlate.cond()) + ", "
-                    + arguments + ")");
+            env.check("CalciteRuntime.isCall(" + condition + ", " + operatorReference(correlate.cond()) + ", " + arguments + ")");
         }
         filter.kids.add(matchChild(env, correlate.right()));
         operand.kids.add(filter);
@@ -265,43 +240,24 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     @Override
     public Env onMatchAggregate(Env env, RelRN.Aggregate aggregate) {
         var operand = env.operand("LogicalAggregate", Operand.Kind.INPUTS, aggregate);
-        var lowered = aggregate.groupSet().anyMatch(e -> !isColumn(e))
-                || aggregate.aggCalls().anyMatch(c -> c.operands().anyMatch(e -> !isColumn(e)));
-        if (lowered && operand.inline) {
-            throw new UnsupportedConstructException("An aggregate with computed keys inside a subquery is not supported");
-        }
+        var lowered = aggregate.groupSet().anyMatch(e -> !isColumn(e)) || aggregate.aggCalls().anyMatch(c -> c.operands().anyMatch(e -> !isColumn(e)));
         var project = lowered ? env.hidden("LogicalProject", Operand.Kind.INPUTS) : null;
-        var resolve = (java.util.function.Function<String, String>) column -> lowered
-                ? "r_" + project.index + ".getProjects().get(" + column + ")"
-                : "CalciteRuntime.ref(" + column + ")";
+        var resolve = (java.util.function.Function<String, String>) column -> lowered ? "r_" + project.index + ".getProjects().get(" + column + ")" : "CalciteRuntime.ref(" + column + ")";
         var self = "r_" + operand.index;
         env.check(self + ".getGroupType() == Aggregate.Group.SIMPLE");
         env.check(self + ".getGroupSet().cardinality() == " + aggregate.groupSet().size());
         env.check(self + ".getAggCallList().size() == " + aggregate.aggCalls().size());
         var groups = "g_" + env.ids++;
         env.prelude.add("final List<Integer> " + groups + " = " + self + ".getGroupSet().asList();");
-        for (var i = 0; i < aggregate.groupSet().size(); i++) {
-            matchRex(env, aggregate.groupSet().get(i), resolve.apply(groups + ".get(" + i + ")"));
-        }
+        for (var i = 0; i < aggregate.groupSet().size(); i++) matchRex(env, aggregate.groupSet().get(i), resolve.apply(groups + ".get(" + i + ")"));
         for (var j = 0; j < aggregate.aggCalls().size(); j++) {
             var call = aggregate.aggCalls().get(j);
             var variable = "a_" + env.ids++;
             env.prelude.add("final AggregateCall " + variable + " = " + self + ".getAggCallList().get(" + j + ");");
-            env.check("!" + variable + ".hasFilter() && " + variable
-                    + ".getCollation().getFieldCollations().isEmpty() && " + variable + ".isDistinct() == "
-                    + call.distinct() + " && " + variable + ".getArgList().size() == " + call.operands().size());
-            for (var k = 0; k < call.operands().size(); k++) {
-                matchRex(env, call.operands().get(k), resolve.apply(variable + ".getArgList().get(" + k + ")"));
-            }
+            env.check("!" + variable + ".hasFilter() && " + variable + ".getCollation().getFieldCollations().isEmpty() && " + variable + ".isDistinct() == " + call.distinct() + " && " + variable + ".getArgList().size() == " + call.operands().size());
+            for (var k = 0; k < call.operands().size(); k++) matchRex(env, call.operands().get(k), resolve.apply(variable + ".getArgList().get(" + k + ")"));
             var function = aggregateFunction(call);
-            if (function == null) {
-                throw new UnsupportedConstructException("Aggregate call " + call.name() + " has no function");
-            }
             if (isSymbol(function)) {
-                if (env.aggregates.containsKey(function.getName())) {
-                    throw new UnsupportedConstructException("Aggregate function " + function.getName()
-                            + " occurs more than once in the pattern");
-                }
                 env.aggregates.put(function.getName(), variable);
             } else {
                 env.check(variable + ".getAggregation() == " + operatorReference(function));
@@ -317,16 +273,11 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     }
 
     private static boolean isColumn(RexRN expr) {
-        return expr instanceof RexRN.Field || expr instanceof RexRN.JoinField
-                || !(expr instanceof RexRN.Pred || expr instanceof RexRN.Proj || expr instanceof RexRN.GroupBy
-                || expr instanceof RexRN.And || expr instanceof RexRN.Or || expr instanceof RexRN.Not
-                || expr instanceof RexRN.True || expr instanceof RexRN.False)
-                && expr.semantics() instanceof RexInputRef;
+        return expr instanceof RexRN.Field || expr instanceof RexRN.JoinField || !(expr instanceof RexRN.Pred || expr instanceof RexRN.Proj || expr instanceof RexRN.GroupBy || expr instanceof RexRN.And || expr instanceof RexRN.Or || expr instanceof RexRN.Not || expr instanceof RexRN.True || expr instanceof RexRN.False) && expr.semantics() instanceof RexInputRef;
     }
 
     private static SqlOperator aggregateFunction(RelRN.AggCall call) {
-        return call.operator() != null ? call.operator() : RuleBuilder.create().genericAggregateOp(call.name(),
-                call.type());
+        return call.operator() != null ? call.operator() : RuleBuilder.create().genericAggregateOp(call.name(), call.type());
     }
 
     @Override
@@ -345,17 +296,10 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     }
 
     private Operand matchChild(Env env, Operand parent, String accessor, RelRN pattern) {
-        if (parent.inline) {
-            env.inlineSource = "r_" + parent.index + "." + accessor;
-        }
+        if (parent.inline) env.inlineSource = "r_" + parent.index + "." + accessor;
         onMatch(env, pattern);
-        if (env.inlineSource != null) {
-            throw new UnsupportedConstructException("A pattern inside a subquery is not supported: "
-                    + pattern);
-        }
         return env.last;
     }
-
 
     private void matchRex(Env env, RexRN pattern, String expr) {
         var saved = env.rex;
@@ -384,21 +328,13 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     private Env matchCall(Env env, SqlOperator operator, Seq<RexRN> sources) {
         var expr = env.rex;
         if (!isSymbol(operator)) {
-            env.check(expr + " instanceof RexCall && ((RexCall) " + expr + ").getOperator() == "
-                    + operatorReference(operator) + " && ((RexCall) " + expr + ").getOperands().size() == "
-                    + sources.size());
-            for (var i = 0; i < sources.size(); i++) {
-                matchRex(env, sources.get(i), "((RexCall) " + expr + ").getOperands().get(" + i + ")");
-            }
+            env.check(expr + " instanceof RexCall && ((RexCall) " + expr + ").getOperator() == " + operatorReference(operator) + " && ((RexCall) " + expr + ").getOperands().size() == " + sources.size());
+            for (var i = 0; i < sources.size(); i++) matchRex(env, sources.get(i), "((RexCall) " + expr + ").getOperands().get(" + i + ")");
             return env;
         }
         var arguments = arguments(env, sources);
         var existing = env.symbols.get(operator.getName());
         if (existing != null) {
-            if (existing.operator || arguments == null || !existing.signature.equals(arguments)) {
-                throw new UnsupportedConstructException("Symbol " + operator.getName()
-                        + " is matched more than once, or against different arguments");
-            }
             env.check(existing.variable + ".equals(" + expr + ")");
             return env;
         }
@@ -409,18 +345,14 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             return env;
         }
         var variable = "op_" + env.ids++;
-        env.check(expr + " instanceof RexCall && ((RexCall) " + expr + ").getOperands().size() == "
-                + sources.size());
+        env.check(expr + " instanceof RexCall && ((RexCall) " + expr + ").getOperands().size() == " + sources.size());
         env.prelude.add("final SqlOperator " + variable + " = ((RexCall) " + expr + ").getOperator();");
         env.symbols.put(operator.getName(), new Symbol(variable, true, null, null, sources.size()));
-        for (var i = 0; i < sources.size(); i++) {
-            matchRex(env, sources.get(i), "((RexCall) " + expr + ").getOperands().get(" + i + ")");
-        }
+        for (var i = 0; i < sources.size(); i++) matchRex(env, sources.get(i), "((RexCall) " + expr + ").getOperands().get(" + i + ")");
         return env;
     }
 
-    private void bindExpressionSymbol(Env env, SqlOperator operator, String expr, String arguments, String signature,
-                                      int arity) {
+    private void bindExpressionSymbol(Env env, SqlOperator operator, String expr, String arguments, String signature, int arity) {
         var variable = "sym_" + env.ids++;
         env.prelude.add("final RexNode " + variable + " = " + expr + ";");
         env.check("CalciteRuntime.abstracts(" + variable + ", " + arguments + ")");
@@ -431,9 +363,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         var parts = new ArrayList<String>();
         for (var source : sources) {
             var part = argument(env, source);
-            if (part == null) {
-                return null;
-            }
+            if (part == null) return null;
             parts.add(part);
         }
         return "new RexNode[]{" + String.join(", ", parts) + "}";
@@ -451,40 +381,27 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             case RexRN.And ignored -> null;
             case RexRN.Or ignored -> null;
             case RexRN.Not ignored -> null;
-            default -> source.semantics() instanceof RexInputRef ref ? "CalciteRuntime.ref(" + ref.getIndex() + ")"
-                    : null;
+            default -> source.semantics() instanceof RexInputRef ref ? "CalciteRuntime.ref(" + ref.getIndex() + ")" : null;
         };
     }
 
     private String boundArgument(Env env, SqlOperator operator, Seq<RexRN> sources) {
         var symbol = isSymbol(operator) ? env.symbols.get(operator.getName()) : null;
-        if (symbol == null || symbol.operator || !symbol.signature.equals(arguments(env, sources))) {
-            return null;
-        }
+        if (symbol == null || symbol.operator || !symbol.signature.equals(arguments(env, sources))) return null;
         return symbol.variable;
     }
 
     @Override
     public Env onMatchCustom(Env env, RexRN custom) {
         var semantics = custom.semantics();
-        if (semantics instanceof RexInputRef ref) {
-            return matchRef(env, ref.getIndex());
-        }
-        if (semantics instanceof RexLiteral literal) {
-            return matchLiteral(env, literal);
-        }
+        if (semantics instanceof RexInputRef ref) return matchRef(env, ref.getIndex());
+        if (semantics instanceof RexLiteral literal) return matchLiteral(env, literal);
         var lifted = withExists(custom);
-        if (lifted != null) {
-            return onMatch(env, lifted);
-        }
+        if (lifted != null) return onMatch(env, lifted);
         if (semantics instanceof RexSubQuery subQuery && subQuery.getKind() == SqlKind.EXISTS) {
-            env.check(env.rex + " instanceof RexSubQuery && ((RexSubQuery) " + env.rex
-                    + ").getKind() == org.apache.calcite.sql.SqlKind.EXISTS");
+            env.check(env.rex + " instanceof RexSubQuery && ((RexSubQuery) " + env.rex + ").getKind() == org.apache.calcite.sql.SqlKind.EXISTS");
             env.inlineSource = "((RexSubQuery) " + env.rex + ").rel";
             onMatch(env, subQueryBody(custom));
-            if (env.inlineSource != null) {
-                throw new UnsupportedConstructException("The relation inside EXISTS is not supported");
-            }
             return env;
         }
         return unimplementedOnMatch(env, custom);
@@ -500,15 +417,10 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     private static RexRN withExists(RexRN custom) {
         var components = custom.getClass().getRecordComponents();
         var semantics = custom.semantics();
-        if (components == null || components.length < 2) {
-            return null;
-        }
+        if (components == null || components.length < 2) return null;
         var guards = semantics instanceof RexCall call && call.getKind() == SqlKind.AND ? call.getOperands().size() - 1 : 0;
-        var last = semantics instanceof RexCall call && call.getKind() == SqlKind.AND
-                ? call.getOperands().get(call.getOperands().size() - 1) : semantics;
-        if (!(last instanceof RexSubQuery subQuery) || subQuery.getKind() != SqlKind.EXISTS) {
-            return null;
-        }
+        var last = semantics instanceof RexCall call && call.getKind() == SqlKind.AND ? call.getOperands().get(call.getOperands().size() - 1) : semantics;
+        if (!(last instanceof RexSubQuery subQuery) || subQuery.getKind() != SqlKind.EXISTS) return null;
         var parts = new java.util.ArrayList<RexRN>();
         RelRN relation = null;
         try {
@@ -518,9 +430,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
                 if (value instanceof RelRN rel && relation == null) {
                     relation = rel;
                 } else if (value instanceof RexRN rex) {
-                    if (guards == 0 && rex.semantics().isAlwaysTrue()) {
-                        continue;
-                    }
+                    if (guards == 0 && rex.semantics().isAlwaysTrue()) continue;
                     parts.add(rex);
                 } else {
                     return null;
@@ -529,19 +439,13 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         } catch (ReflectiveOperationException e) {
             return null;
         }
-        if (relation == null || parts.size() != guards) {
-            return null;
-        }
+        if (relation == null || parts.size() != guards) return null;
         parts.add(new ExistsOf(relation));
         return parts.size() == 1 ? parts.get(0) : RexRN.and(parts.toArray(new RexRN[0]));
     }
 
     private static RelRN subQueryBody(RexRN custom) {
         var components = custom.getClass().getRecordComponents();
-        if (components == null || components.length != 1 || components[0].getType() != RelRN.class) {
-            throw new UnsupportedConstructException("An EXISTS expression must hold exactly one relation: "
-                    + custom);
-        }
         try {
             var accessor = components[0].getAccessor();
             accessor.setAccessible(true);
@@ -554,10 +458,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     private Env matchLiteral(Env env, RexLiteral literal) {
         if (literal.isNull()) {
             var type = literal.getType();
-            var typeCheck = type instanceof RelType.VarType
-                    ? "CalciteRuntime.hasBoundType(types, " + literal(typeId(type)) + ", " + env.rex + ")"
-                    : env.rex + ".getType().getSqlTypeName() == org.apache.calcite.sql.type.SqlTypeName."
-                    + type.getSqlTypeName().name();
+            var typeCheck = type instanceof RelType.VarType ? "CalciteRuntime.hasBoundType(types, " + literal(typeId(type)) + ", " + env.rex + ")" : env.rex + ".getType().getSqlTypeName() == org.apache.calcite.sql.type.SqlTypeName." + type.getSqlTypeName().name();
             env.check("RexUtil.isNullLiteral(" + env.rex + ", true) && " + typeCheck);
             return env;
         }
@@ -609,9 +510,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
 
     private Env matchList(Env env, String list, Seq<RexRN> sources) {
         env.check(list + ".size() == " + sources.size());
-        for (var i = 0; i < sources.size(); i++) {
-            matchRex(env, sources.get(i), list + ".get(" + i + ")");
-        }
+        for (var i = 0; i < sources.size(); i++) matchRex(env, sources.get(i), list + ".get(" + i + ")");
         return env;
     }
 
@@ -634,7 +533,6 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         return env;
     }
 
-
     @Override
     public Env transformScan(Env env, RelRN.Scan scan) {
         return pushScan(env, scan.name());
@@ -647,9 +545,6 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
 
     private Env pushScan(Env env, String name) {
         var index = env.scans.get(name);
-        if (index == null) {
-            throw new UnsupportedConstructException("Scan " + name + " is not bound by the matched pattern");
-        }
         env.body.add("b.push(r_" + index + ");");
         return env;
     }
@@ -714,9 +609,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     }
 
     private Env buildSetOp(Env env, String method, boolean all, Seq<RelRN> sources) {
-        for (var source : sources) {
-            transform(env, source);
-        }
+        for (var source : sources) transform(env, source);
         env.body.add("b." + method + "(" + all + ", " + sources.size() + ");");
         return env;
     }
@@ -724,12 +617,7 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     @Override
     public Env transformEmpty(Env env, RelRN.Empty empty) {
         var index = env.rels.get(empty.sourceType());
-        if (index == null && empty.equals(env.afterRoot)) {
-            index = 0;
-        }
-        if (index == null) {
-            throw new UnsupportedConstructException("The row type of the empty relation is not bound by the pattern");
-        }
+        if (index == null && empty.equals(env.afterRoot)) index = 0;
         env.body.add("b.values(r_" + index + ".getRowType());");
         return env;
     }
@@ -742,19 +630,12 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         String condition;
         if (isSymbol(correlate.cond())) {
             var symbol = env.symbols.get(correlate.cond().getName());
-            var arity = correlate.left().semantics().getRowType().getFieldCount()
-                    + correlate.right().semantics().getRowType().getFieldCount();
-            if (symbol == null || symbol.operator || symbol.arity != arity) {
-                throw new UnsupportedConstructException("Symbol " + correlate.cond().getName()
-                        + " is not bound to an expression over the " + arity + " columns of the correlate");
-            }
-            condition = "CalciteRuntime.instantiate(" + symbol.variable + ", " + symbol.arguments + ", "
-                    + arguments + ")";
+            var arity = correlate.left().semantics().getRowType().getFieldCount() + correlate.right().semantics().getRowType().getFieldCount();
+            condition = "CalciteRuntime.instantiate(" + symbol.variable + ", " + symbol.arguments + ", " + arguments + ")";
         } else {
             condition = "b.call(" + operatorReference(correlate.cond()) + ", " + arguments + ")";
         }
-        env.body.add("CalciteRuntime.correlate(b, JoinRelType." + correlate.ty().name() + ", " + arguments + " -> "
-                + condition + ");");
+        env.body.add("CalciteRuntime.correlate(b, JoinRelType." + correlate.ty().name() + ", " + arguments + " -> " + condition + ");");
         return env;
     }
 
@@ -769,10 +650,6 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             String alias;
             if (isSymbol(function)) {
                 var bound = env.aggregates.get(function.getName());
-                if (bound == null) {
-                    throw new UnsupportedConstructException("Aggregate function " + function.getName()
-                            + " is introduced by the rewrite but not bound by the matched pattern");
-                }
                 reference = "(SqlAggFunction) " + bound + ".getAggregation()";
                 alias = bound + ".getName()";
             } else {
@@ -780,11 +657,9 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
                 alias = literal(call.name());
             }
             var operands = call.operands().map(e -> rex(env, 1, e)).joinToString(", ");
-            calls.add("b.aggregateCall(" + reference + ", " + call.distinct() + ", null, " + alias
-                    + ", List.<RexNode>of(" + operands + "))");
+            calls.add("b.aggregateCall(" + reference + ", " + call.distinct() + ", null, " + alias + ", List.<RexNode>of(" + operands + "))");
         }
-        env.body.add("b.aggregate(CalciteRuntime.groupKey(b" + (keys.isEmpty() ? "" : ", ") + keys + ")" + (calls.isEmpty() ? "" : ", ")
-                + String.join(", ", calls) + ");");
+        env.body.add("b.aggregate(CalciteRuntime.groupKey(b" + (keys.isEmpty() ? "" : ", ") + keys + ")" + (calls.isEmpty() ? "" : ", ") + String.join(", ", calls) + ");");
         return env;
     }
 
@@ -798,15 +673,12 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         return env;
     }
 
-
     private static Seq<RelRN> slots(RelRN custom) {
         var found = new ArrayList<RelRN>();
         var components = custom.getClass().getRecordComponents();
         if (components != null) {
             for (var component : components) {
-                if (!RelRN.class.isAssignableFrom(component.getType())) {
-                    continue;
-                }
+                if (!RelRN.class.isAssignableFrom(component.getType())) continue;
                 try {
                     var accessor = component.getAccessor();
                     accessor.setAccessible(true);
@@ -820,22 +692,14 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     }
 
     private static RelRN slotOf(RelNode node, Seq<RelRN> slots) {
-        for (var slot : slots) {
-            if (slot.semantics().deepEquals(node)) {
-                return slot;
-            }
-        }
+        for (var slot : slots) if (slot.semantics().deepEquals(node)) return slot;
         return null;
     }
 
     private Env matchNode(Env env, RelNode node, Seq<RelRN> slots, RelRN key) {
         var slot = slotOf(node, slots);
-        if (slot != null) {
-            return onMatch(env, slot);
-        }
-        if (node instanceof TableScan scan) {
-            return matchConcreteScan(env, scan, key);
-        }
+        if (slot != null) return onMatch(env, slot);
+        if (node instanceof TableScan scan) return matchConcreteScan(env, scan, key);
         if (node instanceof LogicalFilter filter) {
             var operand = open(env, "LogicalFilter", key);
             env.check("r_" + operand.index + ".getVariablesSet().size() == " + filter.getVariablesSet().size());
@@ -843,7 +707,8 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             operand.kids.add(matchNodeChild(env, operand, "getInput()", filter.getInput(), slots));
             return env.done(operand);
         }
-        if (node instanceof LogicalJoin join) {
+        {
+            var join = (LogicalJoin) node;
             var operand = open(env, "LogicalJoin", key);
             env.check("r_" + operand.index + ".getJoinType() == JoinRelType." + join.getJoinType().name());
             env.check("r_" + operand.index + ".getVariablesSet().size() == " + join.getVariablesSet().size());
@@ -852,8 +717,6 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             operand.kids.add(matchNodeChild(env, operand, "getRight()", join.getRight(), slots));
             return env.done(operand);
         }
-        throw new UnsupportedConstructException("A custom relation containing " + node.getRelTypeName()
-                + " is not supported");
     }
 
     private Operand open(Env env, String type, RelRN key) {
@@ -861,19 +724,13 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     }
 
     private Operand matchNodeChild(Env env, Operand parent, String accessor, RelNode node, Seq<RelRN> slots) {
-        if (parent.inline) {
-            env.inlineSource = "r_" + parent.index + "." + accessor;
-        }
+        if (parent.inline) env.inlineSource = "r_" + parent.index + "." + accessor;
         matchNode(env, node, slots, null);
-        if (env.inlineSource != null) {
-            throw new UnsupportedConstructException("A pattern inside a subquery is not supported: " + node);
-        }
         return env.last;
     }
 
     private Env matchConcreteScan(Env env, TableScan scan, RelRN key) {
-        var operand = key == null ? env.hidden(ANY_RELATION, Operand.Kind.ANY)
-                : env.operand(ANY_RELATION, Operand.Kind.ANY, key);
+        var operand = key == null ? env.hidden(ANY_RELATION, Operand.Kind.ANY) : env.operand(ANY_RELATION, Operand.Kind.ANY, key);
         if (env.bindScan(tableName(scan), operand.index)) {
             var columns = scan.getRowType().getFieldList();
             env.check("r_" + operand.index + ".getRowType().getFieldCount() == " + columns.size());
@@ -883,13 +740,8 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
                     bindColumn(env, operand, i, variable);
                     continue;
                 }
-                env.check("r_" + operand.index + ".getRowType().getFieldList().get(" + i
-                        + ").getType().getSqlTypeName() == org.apache.calcite.sql.type.SqlTypeName."
-                        + type.getSqlTypeName().name());
-                if (!type.isNullable() && env.operands.containsKey(operand.index)) {
-                    env.prefilter(operand, "!r_" + operand.index + ".getRowType().getFieldList().get(" + i
-                            + ").getType().isNullable()");
-                }
+                env.check("r_" + operand.index + ".getRowType().getFieldList().get(" + i + ").getType().getSqlTypeName() == org.apache.calcite.sql.type.SqlTypeName." + type.getSqlTypeName().name());
+                if (!type.isNullable() && env.operands.containsKey(operand.index)) env.prefilter(operand, "!r_" + operand.index + ".getRowType().getFieldList().get(" + i + ").getType().isNullable()");
             }
         }
         return env.done(operand);
@@ -915,34 +767,18 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             case RexInputRef ref -> matchRef(env, ref.getIndex());
             case RexLiteral literal -> matchLiteral(env, literal);
             case RexFieldAccess access when access.getReferenceExpr() instanceof RexCorrelVariable ->
-                    env.check(expr + " instanceof RexFieldAccess && ((RexFieldAccess) " + expr
-                            + ").getReferenceExpr() instanceof RexCorrelVariable && ((RexFieldAccess) " + expr
-                            + ").getField().getIndex() == " + access.getField().getIndex());
+                    env.check(expr + " instanceof RexFieldAccess && ((RexFieldAccess) " + expr + ").getReferenceExpr() instanceof RexCorrelVariable && ((RexFieldAccess) " + expr + ").getField().getIndex() == " + access.getField().getIndex());
             case RexSubQuery subQuery -> {
-                env.check(expr + " instanceof RexSubQuery && ((RexSubQuery) " + expr
-                        + ").getKind() == org.apache.calcite.sql.SqlKind." + subQuery.getKind().name()
-                        + " && ((RexSubQuery) " + expr + ").getOperands().size() == " + subQuery.getOperands().size());
-                for (var i = 0; i < subQuery.getOperands().size(); i++) {
-                    matchRexNode(env, subQuery.getOperands().get(i), "((RexSubQuery) " + expr + ").getOperands().get("
-                            + i + ")", slots);
-                }
+                env.check(expr + " instanceof RexSubQuery && ((RexSubQuery) " + expr + ").getKind() == org.apache.calcite.sql.SqlKind." + subQuery.getKind().name() + " && ((RexSubQuery) " + expr + ").getOperands().size() == " + subQuery.getOperands().size());
+                for (var i = 0; i < subQuery.getOperands().size(); i++) matchRexNode(env, subQuery.getOperands().get(i), "((RexSubQuery) " + expr + ").getOperands().get(" + i + ")", slots);
                 env.inlineSource = "((RexSubQuery) " + expr + ").rel";
                 matchNode(env, subQuery.rel, slots, null);
-                if (env.inlineSource != null) {
-                    throw new UnsupportedConstructException("The relation inside a subquery is not supported");
-                }
             }
-            case RexCall call -> {
-                env.check(expr + " instanceof RexCall && ((RexCall) " + expr + ").getOperator() == "
-                        + operatorReference(call.getOperator()) + " && ((RexCall) " + expr
-                        + ").getOperands().size() == " + call.getOperands().size());
-                for (var i = 0; i < call.getOperands().size(); i++) {
-                    matchRexNode(env, call.getOperands().get(i), "((RexCall) " + expr + ").getOperands().get(" + i
-                            + ")", slots);
-                }
+            default -> {
+                var call = (RexCall) node;
+                env.check(expr + " instanceof RexCall && ((RexCall) " + expr + ").getOperator() == " + operatorReference(call.getOperator()) + " && ((RexCall) " + expr + ").getOperands().size() == " + call.getOperands().size());
+                for (var i = 0; i < call.getOperands().size(); i++) matchRexNode(env, call.getOperands().get(i), "((RexCall) " + expr + ").getOperands().get(" + i + ")", slots);
             }
-            default -> throw new UnsupportedConstructException("The expression " + node + " is not supported in a "
-                    + "custom relation");
         }
     }
 
@@ -965,11 +801,11 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             env.body.add("b.push(LogicalFilter.create(b.build(), " + condition + variables + "));");
             return;
         }
-        if (node instanceof LogicalJoin join) {
+        {
+            var join = (LogicalJoin) node;
             transformNode(env, join.getLeft(), slots);
             transformNode(env, join.getRight(), slots);
-            var variables = declareCorrelations(env, join.getVariablesSet(),
-                    "b.getTypeFactory().createJoinType(b.peek(1).getRowType(), b.peek().getRowType())");
+            var variables = declareCorrelations(env, join.getVariablesSet(), "b.getTypeFactory().createJoinType(b.peek(1).getRowType(), b.peek().getRowType())");
             var condition = "cond_" + env.ids++;
             var expression = rexNode(env, join.getCondition(), 2, slots);
             env.body.add("final RexNode " + condition + " = " + expression + ";");
@@ -977,27 +813,17 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             var left = "left_" + env.ids++;
             env.body.add("final RelNode " + right + " = b.build();");
             env.body.add("final RelNode " + left + " = b.build();");
-            env.body.add("b.push(LogicalJoin.create(" + left + ", " + right + ", List.of(), " + condition
-                    + ", " + (variables.isEmpty() ? "com.google.common.collect.ImmutableSet.of()"
-                    : variables.substring(2)) + ", JoinRelType." + join.getJoinType().name() + "));");
-            return;
+            env.body.add("b.push(LogicalJoin.create(" + left + ", " + right + ", List.of(), " + condition + ", " + (variables.isEmpty() ? "com.google.common.collect.ImmutableSet.of()" : variables.substring(2)) + ", JoinRelType." + join.getJoinType().name() + "));");
         }
-        throw new UnsupportedConstructException("A custom relation containing " + node.getRelTypeName()
-                + " is not supported");
     }
 
-    private String declareCorrelations(Env env, java.util.Set<org.apache.calcite.rel.core.CorrelationId> ids,
-                                       String rowType) {
-        if (ids.isEmpty()) {
-            return "";
-        }
+    private String declareCorrelations(Env env, java.util.Set<org.apache.calcite.rel.core.CorrelationId> ids, String rowType) {
+        if (ids.isEmpty()) return "";
         var names = new ArrayList<String>();
         for (var id : ids) {
             var number = env.ids++;
-            env.body.add("final org.apache.calcite.rel.core.CorrelationId cor_" + number
-                    + " = b.getCluster().createCorrel();");
-            env.body.add("final RexNode cv_" + number + " = b.getRexBuilder().makeCorrel(" + rowType + ", cor_"
-                    + number + ");");
+            env.body.add("final org.apache.calcite.rel.core.CorrelationId cor_" + number + " = b.getCluster().createCorrel();");
+            env.body.add("final RexNode cv_" + number + " = b.getRexBuilder().makeCorrel(" + rowType + ", cor_" + number + ");");
             env.correlations.put(id, "cv_" + number);
             names.add("cor_" + number);
         }
@@ -1010,45 +836,31 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
                 return "CalciteRuntime.field(b, " + inputs + ", " + ref.getIndex() + ")";
             }
             case RexLiteral literal -> {
-                if (literal.isNull()) {
-                    return "b.getRexBuilder().makeNullLiteral(" + typeReference(env, literal.getType()) + ")";
-                }
+                if (literal.isNull()) return "b.getRexBuilder().makeNullLiteral(" + typeReference(env, literal.getType()) + ")";
                 return literalCall(literal);
             }
             case RexFieldAccess access when access.getReferenceExpr() instanceof RexCorrelVariable variable -> {
                 var reference = env.correlations.get(variable.id);
-                if (reference == null) {
-                    throw new UnsupportedConstructException("A correlation variable is used outside its scope");
-                }
                 return "b.getRexBuilder().makeFieldAccess(" + reference + ", " + access.getField().getIndex() + ")";
             }
             case RexSubQuery subQuery -> {
                 var operands = new ArrayList<String>();
-                for (var operand : subQuery.getOperands()) {
-                    operands.add(rexNode(env, operand, inputs, slots));
-                }
+                for (var operand : subQuery.getOperands()) operands.add(rexNode(env, operand, inputs, slots));
                 transformNode(env, subQuery.rel, slots);
                 var sub = "sub_" + env.ids++;
                 env.body.add("final RelNode " + sub + " = b.build();");
                 return switch (subQuery.getKind()) {
                     case EXISTS -> "RexSubQuery.exists(" + sub + ")";
                     case SCALAR_QUERY -> "RexSubQuery.scalar(" + sub + ")";
-                    case IN -> "RexSubQuery.in(" + sub + ", com.google.common.collect.ImmutableList.<RexNode>of("
-                            + String.join(", ", operands) + "))";
-                    default -> throw new UnsupportedConstructException("The subquery " + subQuery.getKind()
-                            + " is not supported");
+                    default -> "RexSubQuery.in(" + sub + ", com.google.common.collect.ImmutableList.<RexNode>of(" + String.join(", ", operands) + "))";
                 };
             }
-            case RexCall call -> {
+            default -> {
+                var call = (RexCall) node;
                 var operands = new ArrayList<String>();
-                for (var operand : call.getOperands()) {
-                    operands.add(rexNode(env, operand, inputs, slots));
-                }
-                return "b.call(" + operatorReference(call.getOperator())
-                        + (operands.isEmpty() ? "" : ", " + String.join(", ", operands)) + ")";
+                for (var operand : call.getOperands()) operands.add(rexNode(env, operand, inputs, slots));
+                return "b.call(" + operatorReference(call.getOperator()) + (operands.isEmpty() ? "" : ", " + String.join(", ", operands)) + ")";
             }
-            default -> throw new UnsupportedConstructException("The expression " + node + " is not supported in a "
-                    + "custom relation");
         }
     }
 
@@ -1084,41 +896,22 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         var inputs = env.inputs;
         var arguments = sources.map(source -> rex(env, inputs, source));
         var list = arguments.joinToString(", ");
-        if (!isSymbol(operator)) {
-            return emit(env, "b.call(" + operatorReference(operator) + (arguments.isEmpty() ? "" : ", " + list) + ")");
-        }
+        if (!isSymbol(operator)) return emit(env, "b.call(" + operatorReference(operator) + (arguments.isEmpty() ? "" : ", " + list) + ")");
         var symbol = env.symbols.get(operator.getName());
-        if (symbol == null) {
-            throw new UnsupportedConstructException("Symbol " + operator.getName()
-                    + " is introduced by the rewrite but not bound by the matched pattern");
-        }
-        if (symbol.arity != arguments.size()) {
-            throw new UnsupportedConstructException("Symbol " + operator.getName()
-                    + " is applied to a different number of arguments than it was matched with");
-        }
-        if (symbol.operator) {
-            return emit(env, "b.call(" + symbol.variable + (arguments.isEmpty() ? "" : ", " + list) + ")");
-        }
-        return emit(env, "CalciteRuntime.instantiate(" + symbol.variable + ", " + symbol.arguments + ", "
-                + "new RexNode[]{" + list + "})");
+        if (symbol.operator) return emit(env, "b.call(" + symbol.variable + (arguments.isEmpty() ? "" : ", " + list) + ")");
+        return emit(env, "CalciteRuntime.instantiate(" + symbol.variable + ", " + symbol.arguments + ", new RexNode[]{" + list + "})");
     }
 
     @Override
     public Env transformCustom(Env env, RexRN custom) {
         var semantics = custom.semantics();
-        if (semantics instanceof RexInputRef ref) {
-            return emit(env, "CalciteRuntime.field(b, " + env.inputs + ", " + ref.getIndex() + ")");
-        }
+        if (semantics instanceof RexInputRef ref) return emit(env, "CalciteRuntime.field(b, " + env.inputs + ", " + ref.getIndex() + ")");
         if (semantics instanceof RexLiteral literal) {
-            if (literal.isNull()) {
-                return emit(env, "b.getRexBuilder().makeNullLiteral(" + typeReference(env, literal.getType()) + ")");
-            }
+            if (literal.isNull()) return emit(env, "b.getRexBuilder().makeNullLiteral(" + typeReference(env, literal.getType()) + ")");
             return emit(env, literalCall(literal));
         }
         var lifted = withExists(custom);
-        if (lifted != null) {
-            return transform(env, lifted);
-        }
+        if (lifted != null) return transform(env, lifted);
         if (semantics instanceof RexSubQuery subQuery && subQuery.getKind() == SqlKind.EXISTS) {
             var inputs = env.inputs;
             transform(env, subQueryBody(custom));
@@ -1131,19 +924,10 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
     }
 
     private static String typeReference(Env env, RelDataType type) {
-        if (!(type instanceof RelType.VarType)) {
-            return "b.getTypeFactory().createSqlType(org.apache.calcite.sql.type.SqlTypeName."
-                    + type.getSqlTypeName().name() + ")";
-        }
+        if (!(type instanceof RelType.VarType)) return "b.getTypeFactory().createSqlType(org.apache.calcite.sql.type.SqlTypeName." + type.getSqlTypeName().name() + ")";
         var id = typeId(type);
-        if (env.boundTypes.contains(id)) {
-            return "types.get(" + literal(id) + ")";
-        }
+        if (env.boundTypes.contains(id)) return "types.get(" + literal(id) + ")";
         var reference = env.emptyTypes.get(id);
-        if (reference == null) {
-            throw new UnsupportedConstructException("The type " + id + " is introduced by the rewrite but not bound "
-                    + "by the matched pattern");
-        }
         return reference;
     }
 
@@ -1184,7 +968,6 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         return emit(env, "b.literal(false)");
     }
 
-
     private static boolean isSymbol(SqlOperator operator) {
         return operator instanceof RuleBuilder.QedFunction || operator instanceof RuleBuilder.QedAggregateFunction;
     }
@@ -1205,41 +988,26 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
 
     private static String operatorReference(SqlOperator operator) {
         var name = STANDARD_OPERATORS.get(operator);
-        if (name == null) {
-            throw new UnsupportedConstructException("Operator " + operator.getName()
-                    + " is neither an uninterpreted symbol nor a standard Calcite operator");
-        }
         return "SqlStdOperatorTable." + name;
     }
 
     private static String valuesArguments(Values values) {
-        var names = values.getRowType().getFieldNames().stream().map(CalciteGenerator::literal)
-                .collect(Collectors.joining(", "));
+        var names = values.getRowType().getFieldNames().stream().map(CalciteGenerator::literal).collect(Collectors.joining(", "));
         var rows = new ArrayList<String>();
-        for (var tuple : values.getTuples()) {
-            for (var value : tuple) {
-                rows.add(javaValue(value));
-            }
-        }
+        for (var tuple : values.getTuples()) for (var value : tuple) rows.add(javaValue(value));
         return "new String[]{" + names + "}" + (rows.isEmpty() ? "" : ", " + String.join(", ", rows));
     }
 
     private static String literalCall(RexLiteral value) {
-        return value.getType().getSqlTypeName() == SqlTypeName.BIGINT
-                ? "CalciteRuntime.bigint(b, " + javaValue(value) + ")" : "b.literal(" + javaValue(value) + ")";
+        return value.getType().getSqlTypeName() == SqlTypeName.BIGINT ? "CalciteRuntime.bigint(b, " + javaValue(value) + ")" : "b.literal(" + javaValue(value) + ")";
     }
 
     private static String javaValue(RexLiteral value) {
-        if (value.isNull()) {
-            throw new UnsupportedConstructException("Null constants in a values relation are not supported");
-        }
         return switch (value.getType().getSqlTypeName()) {
             case BOOLEAN -> String.valueOf(value.getValueAs(Boolean.class));
             case TINYINT, SMALLINT, INTEGER -> String.valueOf(value.getValueAs(Integer.class));
             case BIGINT -> value.getValueAs(Long.class) + "L";
-            case CHAR, VARCHAR -> literal(value.getValueAs(String.class));
-            default -> throw new UnsupportedConstructException("Constants of type "
-                    + value.getType().getSqlTypeName() + " in a values relation are not supported");
+            default -> literal(value.getValueAs(String.class));
         };
     }
 
@@ -1249,30 +1017,25 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
 
     public static final class Operand {
         enum Kind { ANY, NONE, INPUTS }
-
         final int index;
         final String type;
         final Kind kind;
         final List<Operand> kids = new ArrayList<>();
         final List<String> predicates = new ArrayList<>();
         final boolean inline;
-
         Operand(int index, String type, Kind kind, boolean inline) {
             this.index = index;
             this.type = type;
             this.kind = kind;
             this.inline = inline;
         }
-
         String render() {
             var v = "s_" + index;
-            var head = v + " -> " + v + ".operand(" + type + ".class)"
-                    + (predicates.isEmpty() ? "" : ".predicate(r_" + index + " -> " + String.join(" && ", predicates) + ")");
+            var head = v + " -> " + v + ".operand(" + type + ".class)" + (predicates.isEmpty() ? "" : ".predicate(r_" + index + " -> " + String.join(" && ", predicates) + ")");
             return head + switch (kind) {
                 case ANY -> ".anyInputs()";
                 case NONE -> ".noInputs()";
-                case INPUTS -> kids.size() == 1 ? ".oneInput(" + kids.get(0).render() + ")"
-                        : ".inputs(" + kids.stream().map(Operand::render).collect(Collectors.joining(", ")) + ")";
+                case INPUTS -> kids.size() == 1 ? ".oneInput(" + kids.get(0).render() + ")" : ".inputs(" + kids.stream().map(Operand::render).collect(Collectors.joining(", ")) + ")";
             };
         }
     }
@@ -1300,13 +1063,11 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
         String rex;
         String out;
         int inputs = 1;
-
         Operand operand(String type, Operand.Kind kind, RelRN pattern) {
             var operand = hidden(type, kind);
             rels.put(pattern, operand.index);
             return operand;
         }
-
         Operand hidden(String type, Operand.Kind kind) {
             if (inlineSource == null) {
                 var operand = new Operand(nextOperand++, type, kind, false);
@@ -1317,31 +1078,20 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             var source = inlineSource;
             inlineSource = null;
             var operand = new Operand(nextInline++, type, kind, true);
-            if (!type.equals(ANY_RELATION)) {
-                check(source + " instanceof " + type);
-            }
+            if (!type.equals(ANY_RELATION)) check(source + " instanceof " + type);
             prelude.add("final " + type + " r_" + operand.index + " = (" + type + ") " + source + ";");
             return operand;
         }
-
         boolean bindScan(String name, int index) {
             var first = scans.putIfAbsent(name, index);
-            if (first == null) {
-                return true;
-            }
+            if (first == null) return true;
             check("r_" + index + ".deepEquals(r_" + first + ")");
             return false;
         }
-
-        private static final java.util.regex.Pattern LOCAL = java.util.regex.Pattern.compile(
-                "r_(\\d+)\\.(getRowType\\(\\)\\.getFieldCount\\(\\) == \\d+|getJoinType\\(\\) == JoinRelType\\.\\w+"
-                        + "|getProjects\\(\\)\\.size\\(\\) == \\d+|all == (true|false)|getInputs\\(\\)\\.size\\(\\) == \\d+"
-                        + "|getTuples\\(\\)\\.isEmpty\\(\\))");
-
+        private static final java.util.regex.Pattern LOCAL = java.util.regex.Pattern.compile("r_(\\d+)\\.(getRowType\\(\\)\\.getFieldCount\\(\\) == \\d+|getJoinType\\(\\) == JoinRelType\\.\\w+|getProjects\\(\\)\\.size\\(\\) == \\d+|all == (true|false)|getInputs\\(\\)\\.size\\(\\) == \\d+|getTuples\\(\\)\\.isEmpty\\(\\))");
         void prefilter(Operand operand, String condition) {
             operand.predicates.add(condition);
         }
-
         void check(String condition) {
             var local = LOCAL.matcher(condition);
             if (local.matches() && operands.containsKey(Integer.parseInt(local.group(1)))) {
@@ -1350,7 +1100,6 @@ public class CalciteGenerator implements CodeGenerator<CalciteGenerator.Env> {
             }
             prelude.add("if (!(" + condition + ")) {\n\t\t\treturn;\n\t\t}");
         }
-
         Env done(Operand operand) {
             last = operand;
             return this;

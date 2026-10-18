@@ -72,55 +72,28 @@ public final class RuleScriptRule extends Rule<LogicalPlan> {
 
     private LogicalPlan rewrite(LogicalPlan node) {
         var match = new Match();
-        try {
-            if (!match.rel(from, node) || !match.resolve()) {
-                return null;
-            }
-            return restoreOutput(node, match.build(to), match);
-        } catch (Match.Abort abort) {
-            if (System.getenv("RULESCRIPT_DEBUG") != null) {
-                abort.printStackTrace();
-            }
-            return null;
-        }
+        if (!match.rel(from, node) || !match.resolve()) return null;
+        return restoreOutput(node, match.build(to), match);
     }
 
     private LogicalPlan restoreOutput(LogicalPlan old, LogicalPlan neu, Match match) {
         var oldCols = match.cols(from.path("id").asText());
         var newCols = match.cols(to.path("id").asText());
-        if (oldCols.size() != newCols.size()) {
-            return null;
-        }
+        if (oldCols.size() != newCols.size()) return null;
         var oldOutput = Catalyst.<Attribute>list(old.output());
-        if (neu instanceof LocalRelation lr && lr.data().isEmpty() && oldOutput.size() == newCols.size()) {
-            return new LocalRelation(Catalyst.seq(oldOutput), Catalyst.<org.apache.spark.sql.catalyst.InternalRow>seq(List.of()), false, Match.noStream());
-        }
+        if (neu instanceof LocalRelation lr && lr.data().isEmpty() && oldOutput.size() == newCols.size()) return new LocalRelation(Catalyst.seq(oldOutput), Catalyst.<org.apache.spark.sql.catalyst.InternalRow>seq(List.of()), false, Match.noStream());
         var newOutput = Catalyst.<Attribute>list(neu.output());
         var same = oldOutput.size() == newOutput.size();
-        for (int i = 0; same && i < oldOutput.size(); i++) {
-            same = oldOutput.get(i).exprId().equals(newOutput.get(i).exprId());
-        }
-        if (same) {
-            return neu;
-        }
+        for (int i = 0; same && i < oldOutput.size(); i++) same = oldOutput.get(i).exprId().equals(newOutput.get(i).exprId());
+        if (same) return neu;
         var items = new ArrayList<NamedExpression>();
         for (var attr : oldOutput) {
             var position = -1;
-            for (int i = 0; i < oldCols.size(); i++) {
-                if (oldCols.get(i).exprId().equals(attr.exprId())) {
-                    position = i;
-                }
-            }
-            if (position < 0) {
-                return null;
-            }
+            for (int i = 0; i < oldCols.size(); i++) if (oldCols.get(i).exprId().equals(attr.exprId())) position = i;
+            if (position < 0) return null;
             var source = newCols.get(position);
-            if (!source.dataType().equals(attr.dataType()) || !newOutput.stream().anyMatch(o -> o.exprId().equals(source.exprId()))) {
-                return null;
-            }
-            items.add(source.exprId().equals(attr.exprId()) ? source
-                    : Alias$.MODULE$.apply((Expression) source, attr.name(), attr.exprId(), attr.qualifier(),
-                    scala.Option.empty(), Catalyst.<String>seq(List.of())));
+            if (!source.dataType().equals(attr.dataType()) || !newOutput.stream().anyMatch(o -> o.exprId().equals(source.exprId()))) return null;
+            items.add(source.exprId().equals(attr.exprId()) ? source : Alias$.MODULE$.apply((Expression) source, attr.name(), attr.exprId(), attr.qualifier(), scala.Option.empty(), Catalyst.<String>seq(List.of())));
         }
         return new Project(Catalyst.seq(items), neu);
     }

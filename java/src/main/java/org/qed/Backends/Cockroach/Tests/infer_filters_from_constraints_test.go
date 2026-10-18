@@ -45,7 +45,12 @@ func TestInferFiltersFromConstraints(t *testing.T) {
 	gt2 := func() opt.ScalarExpr { return e.f.ConstructGt(e.v(lc2[0]), e.num(5)) }
 	e.expectNoMatch(rule, e.f.ConstructLeftJoin(l2, r2, e.filters(eq2(), gt2()), &memo.JoinPrivate{}))
 	e.expectNoMatch(rule, e.f.ConstructInnerJoin(l2, r2, e.filters(e.f.ConstructLt(e.v(lc2[0]), e.v(rc2[0])), gt2()), &memo.JoinPrivate{}))
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(l2, r2, e.filters(eq2()), &memo.JoinPrivate{}))
+	e.expectRewrite(rule, e.f.ConstructInnerJoin(l2, r2, e.filters(eq2()), &memo.JoinPrivate{}), e.f.ConstructInnerJoin(
+		e.f.ConstructSelect(l2, e.filters(inferIsNotNull(e, lc2[0]))),
+		e.f.ConstructSelect(r2, e.filters(inferIsNotNull(e, rc2[0]))),
+		e.filters(eq2()),
+		&memo.JoinPrivate{},
+	))
 	wide, wc := inferScan(e, "t", 0, 1)
 	e.expectNoMatch(rule, e.f.ConstructInnerJoin(wide, r2, e.filters(e.f.ConstructEq(e.v(wc[1]), e.v(rc2[0])), e.f.ConstructGt(e.v(wc[1]), e.num(5))), &memo.JoinPrivate{}))
 }

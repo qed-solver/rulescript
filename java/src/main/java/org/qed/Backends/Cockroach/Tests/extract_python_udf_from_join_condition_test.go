@@ -21,6 +21,10 @@ func TestExtractPythonUDFFromJoinCondition(t *testing.T) {
 	)
 	e.expectRewrite(rule, before, want)
 	e.expectRewrite(rule, e.f.ConstructInnerJoin(l, r, e.filters(udf, rest), &memo.JoinPrivate{}), want)
+	e.expectRewrite(rule, e.f.ConstructInnerJoin(l, r, e.filters(udf), &memo.JoinPrivate{}), e.f.ConstructSelect(
+		e.f.ConstructInnerJoin(l, r, nil, &memo.JoinPrivate{}),
+		e.filters(udf),
+	))
 	e.expectNoMatch(rule, e.f.ConstructLeftJoin(l, r, on, &memo.JoinPrivate{}))
 	e.expectNoMatch(rule, e.f.ConstructSelect(before, e.filters(udf)))
 }

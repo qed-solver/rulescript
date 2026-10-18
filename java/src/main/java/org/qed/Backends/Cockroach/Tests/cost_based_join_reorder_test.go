@@ -31,7 +31,7 @@ func TestCostBasedJoinReorder(t *testing.T) {
 
 	abOnlyAC := e.f.ConstructInnerJoin(ab, c, e.filters(e.f.ConstructEq(va, vc)), &memo.JoinPrivate{})
 	missingConjunct := e.f.ConstructInnerJoin(abOnlyAC, d, e.filters(e.f.ConstructEq(vc, vd)), &memo.JoinPrivate{})
-	e.expectNoMatch(rule, missingConjunct)
+	e.expectRewrite(rule, missingConjunct, e.f.ConstructInnerJoin(ab, cd, e.filters(e.f.ConstructEq(va, vc)), &memo.JoinPrivate{}))
 
 	wrongColumn := e.f.ConstructInnerJoin(abc, d, e.filters(e.f.ConstructEq(vb, vd)), &memo.JoinPrivate{})
 	e.expectNoMatch(rule, wrongColumn)

@@ -13,7 +13,7 @@ func TestFoldNonNullTupleIsTupleNotNull(t *testing.T) {
 	notNullA := e.f.ConstructIsNot(e.v(c[0]), memo.NullSingleton)
 	notNullB := e.f.ConstructIsNot(e.v(c[1]), memo.NullSingleton)
 	before := e.f.ConstructSelect(s, e.filters(e.f.ConstructAnd(notNullA, notNullB)))
-	e.expectRewrite(rule, before, s)
+	e.expectRewrite(rule, before, e.f.ConstructSelect(s, e.filters(e.f.ConstructTrue())))
 
 	nullable, nc := e.scan("t", 2)
 	nullableA := e.f.ConstructIsNot(e.v(nc[0]), memo.NullSingleton)

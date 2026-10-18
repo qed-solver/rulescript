@@ -1,7 +1,6 @@
 package org.qed.Backends.Calcite;
 
 import org.apache.calcite.plan.RelOptRuleCall;
-import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexCall;
@@ -39,13 +38,9 @@ public final class CalciteRuntime {
     }
 
     private static java.util.List<RexNode> flatten(RexNode node, org.apache.calcite.sql.SqlKind kind) {
-        if (node.getKind() != kind) {
-            return java.util.List.of(node);
-        }
+        if (node.getKind() != kind) return java.util.List.of(node);
         final java.util.List<RexNode> out = new java.util.ArrayList<>();
-        for (RexNode operand : ((RexCall) node).getOperands()) {
-            out.addAll(flatten(operand, kind));
-        }
+        for (RexNode operand : ((RexCall) node).getOperands()) out.addAll(flatten(operand, kind));
         return out;
     }
 
@@ -55,16 +50,11 @@ public final class CalciteRuntime {
         var actual = result.getRowType();
         if (!actual.equals(original) && actual.getFieldCount() == original.getFieldCount()) {
             var sameSansNullability = true;
-            for (var i = 0; i < actual.getFieldCount(); i++) {
-                sameSansNullability &= SqlTypeUtil.equalSansNullability(b.getTypeFactory(),
-                        actual.getFieldList().get(i).getType(), original.getFieldList().get(i).getType());
-            }
+            for (var i = 0; i < actual.getFieldCount(); i++) sameSansNullability &= SqlTypeUtil.equalSansNullability(b.getTypeFactory(), actual.getFieldList().get(i).getType(), original.getFieldList().get(i).getType());
             if (sameSansNullability) {
                 b.push(result);
                 var fields = new java.util.ArrayList<RexNode>();
-                for (var i = 0; i < original.getFieldCount(); i++) {
-                    fields.add(b.getRexBuilder().makeCast(original.getFieldList().get(i).getType(), b.field(i), true));
-                }
+                for (var i = 0; i < original.getFieldCount(); i++) fields.add(b.getRexBuilder().makeCast(original.getFieldList().get(i).getType(), b.field(i), true));
                 result = b.project(fields, original.getFieldNames()).build();
             }
         }
@@ -91,16 +81,12 @@ public final class CalciteRuntime {
             ascending &= ordinal > previous;
             previous = ordinal;
         }
-        if (ascending) {
-            return b.groupKey(keys);
-        }
+        if (ascending) return b.groupKey(keys);
         var projects = new java.util.ArrayList<RexNode>(b.fields());
         projects.addAll(java.util.Arrays.asList(keys));
         b.project(projects, java.util.List.of(), true);
         var ordinals = new int[keys.length];
-        for (var i = 0; i < keys.length; i++) {
-            ordinals[i] = width + i;
-        }
+        for (var i = 0; i < keys.length; i++) ordinals[i] = width + i;
         return b.groupKey(ordinals);
     }
 
@@ -109,22 +95,17 @@ public final class CalciteRuntime {
     }
 
     public static RexNode field(RelBuilder builder, int inputs, int ordinal) {
-        if (inputs == 1) {
-            return builder.field(ordinal);
-        }
+        if (inputs == 1) return builder.field(ordinal);
         var remaining = ordinal;
         for (var input = 0; input < inputs; input++) {
             var count = builder.peek(inputs, input).getRowType().getFieldCount();
-            if (remaining < count) {
-                return builder.field(inputs, input, remaining);
-            }
+            if (remaining < count) return builder.field(inputs, input, remaining);
             remaining -= count;
         }
         throw new IllegalArgumentException("Field ordinal out of range: " + ordinal);
     }
 
-    private static final RelDataType ANY =
-            new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT).createSqlType(SqlTypeName.ANY);
+    private static final RelDataType ANY = new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT).createSqlType(SqlTypeName.ANY);
 
     public static RexNode ref(int index) {
         return new RexInputRef(index, ANY);
@@ -142,50 +123,35 @@ public final class CalciteRuntime {
     public static RexNode instantiate(RexNode expr, RexNode[] arguments, RexNode... replacements) {
         return expr.accept(new RexShuttle() {
             private RexNode replacement(RexNode node) {
-                for (var i = 0; i < arguments.length; i++) {
-                    if (arguments[i].equals(node)) {
-                        return replacements[i];
-                    }
-                }
+                for (var i = 0; i < arguments.length; i++) if (arguments[i].equals(node)) return replacements[i];
                 return null;
             }
-
             @Override
             public RexNode visitCall(RexCall call) {
                 var replaced = replacement(call);
                 return replaced != null ? replaced : super.visitCall(call);
             }
-
             @Override
             public RexNode visitFieldAccess(RexFieldAccess access) {
                 var replaced = replacement(access);
                 return replaced != null ? replaced : super.visitFieldAccess(access);
             }
-
             @Override
             public RexNode visitCorrelVariable(org.apache.calcite.rex.RexCorrelVariable variable) {
-                if (arguments.length == 0) {
-                    return variable;
-                }
-                throw new IllegalStateException("Expression reads correlation variable " + variable
-                        + " which is not an argument");
+                if (arguments.length == 0) return variable;
+                throw new IllegalStateException("Expression reads correlation variable " + variable + " which is not an argument");
             }
-
             @Override
             public RexNode visitInputRef(RexInputRef inputRef) {
                 var replaced = replacement(inputRef);
-                if (replaced == null) {
-                    throw new IllegalStateException("Expression reads column " + inputRef.getIndex()
-                            + " which is not an argument");
-                }
+                if (replaced == null) throw new IllegalStateException("Expression reads column " + inputRef.getIndex() + " which is not an argument");
                 return replaced;
             }
         });
     }
 
     public static boolean isCall(RexNode expr, SqlOperator operator, RexNode... arguments) {
-        return expr instanceof RexCall call && call.getOperator() == operator
-                && call.getOperands().equals(java.util.Arrays.asList(arguments));
+        return expr instanceof RexCall call && call.getOperator() == operator && call.getOperands().equals(java.util.Arrays.asList(arguments));
     }
 
     public static RexNode[] correlateArguments(LogicalCorrelate correlate) {
@@ -194,17 +160,12 @@ public final class CalciteRuntime {
         var corrVar = rexBuilder.makeCorrel(leftType, correlate.getCorrelationId());
         var rightCount = correlate.getRight().getRowType().getFieldCount();
         var arguments = new RexNode[leftType.getFieldCount() + rightCount];
-        for (var i = 0; i < leftType.getFieldCount(); i++) {
-            arguments[i] = rexBuilder.makeFieldAccess(corrVar, i);
-        }
-        for (var j = 0; j < rightCount; j++) {
-            arguments[leftType.getFieldCount() + j] = ref(j);
-        }
+        for (var i = 0; i < leftType.getFieldCount(); i++) arguments[i] = rexBuilder.makeFieldAccess(corrVar, i);
+        for (var j = 0; j < rightCount; j++) arguments[leftType.getFieldCount() + j] = ref(j);
         return arguments;
     }
 
-    public static void correlate(RelBuilder builder, JoinRelType type,
-                                 java.util.function.Function<RexNode[], RexNode> condition) {
+    public static void correlate(RelBuilder builder, JoinRelType type, java.util.function.Function<RexNode[], RexNode> condition) {
         var right = builder.build();
         var left = builder.build();
         var rexBuilder = builder.getRexBuilder();
@@ -212,16 +173,11 @@ public final class CalciteRuntime {
         var corrVar = rexBuilder.makeCorrel(left.getRowType(), id);
         var leftCount = left.getRowType().getFieldCount();
         var arguments = new RexNode[leftCount + right.getRowType().getFieldCount()];
-        for (var i = 0; i < leftCount; i++) {
-            arguments[i] = rexBuilder.makeFieldAccess(corrVar, i);
-        }
+        for (var i = 0; i < leftCount; i++) arguments[i] = rexBuilder.makeFieldAccess(corrVar, i);
         var rightFields = right.getRowType().getFieldList();
-        for (var j = 0; j < rightFields.size(); j++) {
-            arguments[leftCount + j] = rexBuilder.makeInputRef(rightFields.get(j).getType(), j);
-        }
+        for (var j = 0; j < rightFields.size(); j++) arguments[leftCount + j] = rexBuilder.makeInputRef(rightFields.get(j).getType(), j);
         var filtered = LogicalFilter.create(right, condition.apply(arguments));
-        builder.push(LogicalCorrelate.create(left, filtered, java.util.List.of(), id, ImmutableBitSet.range(leftCount),
-                type));
+        builder.push(LogicalCorrelate.create(left, filtered, java.util.List.of(), id, ImmutableBitSet.range(leftCount), type));
     }
 
     public static boolean sameValues(RelOptRuleCall call, Values values, String[] names, Object... rows) {
@@ -229,20 +185,15 @@ public final class CalciteRuntime {
         return expected instanceof Values v && v.getTuples().equals(values.getTuples());
     }
 
-    public static boolean bindColumn(Map<String, RelDataType> types, String typeId, boolean nullable, RelNode rel,
-                                     int ordinal) {
+    public static boolean bindColumn(Map<String, RelDataType> types, String typeId, boolean nullable, RelNode rel, int ordinal) {
         var actual = rel.getRowType().getFieldList().get(ordinal).getType();
-        if (!nullable && actual.isNullable()) {
-            return false;
-        }
+        if (!nullable && actual.isNullable()) return false;
         var previous = types.putIfAbsent(typeId, actual);
         return previous == null || sameType(previous, actual);
     }
 
     private static boolean sameType(RelDataType left, RelDataType right) {
-        if (left instanceof org.qed.RelType.VarType || right instanceof org.qed.RelType.VarType) {
-            return left.toString().equals(right.toString());
-        }
+        if (left instanceof org.qed.RelType.VarType || right instanceof org.qed.RelType.VarType) return left.toString().equals(right.toString());
         return SqlTypeUtil.equalSansNullability(left, right);
     }
 
@@ -252,13 +203,11 @@ public final class CalciteRuntime {
     }
 
     public static RexNode bigint(RelBuilder b, long value) {
-        return b.getRexBuilder().makeExactLiteral(java.math.BigDecimal.valueOf(value),
-                b.getTypeFactory().createSqlType(org.apache.calcite.sql.type.SqlTypeName.BIGINT));
+        return b.getRexBuilder().makeExactLiteral(java.math.BigDecimal.valueOf(value), b.getTypeFactory().createSqlType(org.apache.calcite.sql.type.SqlTypeName.BIGINT));
     }
 
     public static boolean isLiteral(RexNode expr, Object value) {
-        return expr instanceof org.apache.calcite.rex.RexLiteral literal && !literal.isNull()
-                && value.equals(literal.getValueAs(value.getClass()));
+        return expr instanceof org.apache.calcite.rex.RexLiteral literal && !literal.isNull() && value.equals(literal.getValueAs(value.getClass()));
     }
 
     public static boolean isUnique(RelOptRuleCall call, RelNode rel, int ordinal) {

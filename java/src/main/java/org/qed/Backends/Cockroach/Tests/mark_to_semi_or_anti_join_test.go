@@ -62,7 +62,7 @@ func TestMarkToSemiOrAntiJoin(t *testing.T) {
 	nearUnion := e.f.ConstructUnionAll(nearLeft, nearRight, &memo.SetPrivate{
 		LeftCols: opt.ColList{nearSemiLeftCol, nearSemiMarker}, RightCols: opt.ColList{nearAntiLeftCol, nearAntiMarker}, OutCols: opt.ColList{nearUnionCol, nearMarker},
 	})
-	nearInput := e.f.ConstructSelect(nearUnion, e.filters(e.v(nearMarker)))
+	nearInput := e.f.ConstructSelect(nearUnion, e.filters(e.f.ConstructNot(e.v(nearUnionCol))))
 	nearProjectCol := e.f.Metadata().AddColumn("projected", e.f.Metadata().ColumnMeta(nearLC[0]).Type)
 	nearBefore := e.f.ConstructProject(nearInput, memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.v(nearUnionCol), nearProjectCol)}, opt.ColSet{})
 	e.expectNoMatch(rule, nearBefore)

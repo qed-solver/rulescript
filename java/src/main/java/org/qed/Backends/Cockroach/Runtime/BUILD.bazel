@@ -4,7 +4,7 @@ go_library(
     name = "rulescript",
     srcs = [
         "interp.go",
-        "install.go",
+        "guard.go",
         "register.go",
         "rule.go",
     ],
@@ -33,14 +33,11 @@ go_test(
         "//pkg/sql/opt",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",
-        "//pkg/sql/opt/optbuilder",
         "//pkg/sql/opt/testutils/testcat",
-        "//pkg/sql/parser",
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/testutils/datapathutils",
-        "//pkg/util/buildutil",
     ],
 )

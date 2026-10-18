@@ -42,5 +42,11 @@ func TestPushPredicateThroughNonJoin(t *testing.T) {
 		e.f.ConstructEq(e.v(nearFirst), e.num(1)),
 		e.f.ConstructEq(e.v(nearFirst), e.num(2)),
 	))
-	e.expectNoMatch(rule, near)
+	e.expectRewrite(rule, near, e.f.ConstructProject(
+		e.f.ConstructSelect(nearScan, e.filters(e.f.ConstructEq(e.v(nearCols[0]), e.num(1)), e.f.ConstructEq(e.v(nearCols[0]), e.num(2)))),
+		memo.ProjectionsExpr{
+			e.f.ConstructProjectionsItem(e.v(nearCols[0]), nearFirst),
+			e.f.ConstructProjectionsItem(e.v(nearCols[0]), nearSecond),
+		}, opt.ColSet{}))
+	e.expectNoMatch(rule, e.f.ConstructSelect(nearScan, e.filters(e.f.ConstructEq(e.v(nearCols[0]), e.num(1)))))
 }

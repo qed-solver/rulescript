@@ -16,7 +16,7 @@ func TestFoldComparisonWithAny(t *testing.T) {
 	src, _ := e.scan("t", 3)
 	cond := e.f.ConstructOr(eq(trueLit(), falseLit()), eq(trueLit(), trueLit()))
 	before := e.f.ConstructSelect(src, e.filters(cond))
-	want := src
+	want := e.f.ConstructSelect(src, e.filters(e.f.ConstructTrue()))
 	e.expectRewrite(rule, before, want)
 	nearMiss := e.f.ConstructOr(eq(trueLit(), falseLit()), eq(trueLit(), falseLit()))
 	e.expectNoMatch(rule, e.f.ConstructSelect(src, e.filters(nearMiss)))

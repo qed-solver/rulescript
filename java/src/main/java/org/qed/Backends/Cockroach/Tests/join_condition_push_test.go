@@ -25,5 +25,7 @@ func TestJoinConditionPush(t *testing.T) {
 	e.expectRewrite(rule, before, want)
 
 	nearMiss := e.f.ConstructInnerJoin(l, r, e.filters(leftCond, crossCond), &memo.JoinPrivate{})
-	e.expectNoMatch(rule, nearMiss)
+	e.expectRewrite(rule, nearMiss, e.f.ConstructInnerJoin(
+		e.f.ConstructSelect(l, e.filters(leftCond)), r, e.filters(crossCond), &memo.JoinPrivate{}))
+	e.expectNoMatch(rule, e.f.ConstructLeftJoin(l, r, on, &memo.JoinPrivate{}))
 }

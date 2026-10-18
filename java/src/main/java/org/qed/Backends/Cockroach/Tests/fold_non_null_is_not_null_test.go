@@ -17,7 +17,7 @@ func TestFoldNonNullIsNotNull(t *testing.T) {
 	nn, nnCols := e.scan("nn", 1)
 	isNotNull := e.f.ConstructIsNot(e.v(nnCols[0]), e.f.ConstructNull(types.Int))
 	before := e.f.ConstructSelect(nn, e.filters(isNotNull))
-	e.expectRewrite(rule, before, nn)
+	e.expectRewrite(rule, before, e.f.ConstructSelect(nn, e.filters(e.f.ConstructTrue())))
 
 	isNull := e.f.ConstructIs(e.v(nnCols[0]), e.f.ConstructNull(types.Int))
 	e.expectNoMatch(rule, e.f.ConstructSelect(nn, e.filters(isNull)))

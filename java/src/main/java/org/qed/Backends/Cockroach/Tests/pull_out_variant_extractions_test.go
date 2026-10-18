@@ -24,6 +24,16 @@ func TestPullOutVariantExtractions(t *testing.T) {
 	)
 	e.expectAbsorbed(rule, before)
 
+	wide := e.f.ConstructProject(input,
+		memo.ProjectionsExpr{e.f.ConstructProjectionsItem(e.f.ConstructPlus(e.v(cols[1]), e.num(1)), extracted)},
+		opt.MakeColSet(cols[0], cols[1]),
+	)
+	withVariant := e.f.ConstructGroupBy(wide,
+		memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructSum(e.v(extracted)), total)},
+		&memo.GroupingPrivate{GroupingCols: opt.MakeColSet(cols[0])},
+	)
+	e.expectRewrite(rule, withVariant, before)
+
 	other, otherCols := e.scan("t", 2)
 	bad := e.f.ConstructGroupBy(other,
 		memo.AggregationsExpr{e.f.ConstructAggregationsItem(e.f.ConstructSum(e.v(otherCols[1])), total)},

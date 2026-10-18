@@ -20,5 +20,7 @@ func TestPullupCorrelatedPredicates(t *testing.T) {
 
 	nearMissInput := e.f.ConstructSelect(inner, e.filters(pulled))
 	nearMiss := e.f.ConstructSelect(outer, e.filters(outerCond, e.exists(nearMissInput)))
-	e.expectNoMatch(rule, nearMiss)
+	e.expectRewrite(rule, nearMiss, e.f.ConstructSelect(outer, e.filters(
+		e.f.ConstructAnd(outerCond, e.f.ConstructAnd(pulled, e.exists(inner))))))
+	e.expectNoMatch(rule, e.f.ConstructSelect(outer, e.filters(outerCond, e.exists(inner))))
 }

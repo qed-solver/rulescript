@@ -27,5 +27,7 @@ func TestJoinAssociate(t *testing.T) {
     e.expectRewrite(rule, before, want)
 
     near := e.f.ConstructInnerJoin(ab, c, e.filters(pabc, pbc), &memo.JoinPrivate{})
-    e.expectNoMatch(rule, near)
+    bcOnly := e.f.ConstructInnerJoin(b, c, e.filters(pb, pbc), &memo.JoinPrivate{})
+    e.expectRewrite(rule, near, e.f.ConstructInnerJoin(a, bcOnly, e.filters(pab, pabc), &memo.JoinPrivate{}))
+    e.expectNoMatch(rule, e.f.ConstructLeftJoin(ab, c, e.filters(pabc, pbc, pc), &memo.JoinPrivate{}))
 }

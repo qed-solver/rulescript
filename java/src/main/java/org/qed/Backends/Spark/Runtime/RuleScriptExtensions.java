@@ -17,9 +17,7 @@ public final class RuleScriptExtensions extends AbstractFunction1<SparkSessionEx
     @Override
     public BoxedUnit apply(SparkSessionExtensions extensions) {
         var dir = System.getProperty("rulescript.dir", System.getenv("RULESCRIPT_DIR"));
-        if (dir != null) {
-            install(extensions, load(Path.of(dir)));
-        }
+        if (dir != null) install(extensions, load(Path.of(dir)));
         return BoxedUnit.UNIT;
     }
 
@@ -34,14 +32,10 @@ public final class RuleScriptExtensions extends AbstractFunction1<SparkSessionEx
     }
 
     public static void installAfterAnalysis(SparkSessionExtensions extensions, List<RuleScriptRule> rules) {
-        for (var rule : rules) {
-            extensions.injectPostHocResolutionRule(session -> rule);
-        }
+        for (var rule : rules) extensions.injectPostHocResolutionRule(session -> rule);
     }
 
     public static void install(SparkSessionExtensions extensions, List<RuleScriptRule> rules) {
-        for (var rule : rules) {
-            extensions.injectOptimizerRule(session -> rule);
-        }
+        for (var rule : rules) extensions.injectOptimizerRule(session -> rule);
     }
 }

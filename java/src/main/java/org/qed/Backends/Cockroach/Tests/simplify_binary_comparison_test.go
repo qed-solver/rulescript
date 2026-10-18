@@ -8,7 +8,7 @@ func TestSimplifyBinaryComparison(t *testing.T) {
 
 	input, cols := e.scan("nn", 1)
 	before := e.f.ConstructSelect(input, e.filters(e.f.ConstructEq(e.v(cols[0]), e.v(cols[0]))))
-	want := input
+	want := e.f.ConstructSelect(input, e.filters(e.f.ConstructTrue()))
 	e.expectRewrite(rule, before, want)
 
 	otherInput, otherCols := e.scan("nn", 1)

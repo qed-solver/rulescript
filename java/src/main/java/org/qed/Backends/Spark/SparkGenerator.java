@@ -51,13 +51,9 @@ public final class SparkGenerator {
 
     private void collectTypeRefs(RelRN rel) {
         switch (rel) {
-            case RelRN.Scan scan -> typeRefs.computeIfAbsent(scan.ty().toString(), k -> new ArrayList<>())
-                    .add(new TypeRef(id(scan), 0));
+            case RelRN.Scan scan -> typeRefs.computeIfAbsent(scan.ty().toString(), k -> new ArrayList<>()).add(new TypeRef(id(scan), 0));
             case RelRN.ScanMany scan -> {
-                for (int i = 0; i < scan.tys().size(); i++) {
-                    typeRefs.computeIfAbsent(scan.tys().get(i).toString(), k -> new ArrayList<>())
-                            .add(new TypeRef(id(scan), i));
-                }
+                for (int i = 0; i < scan.tys().size(); i++) typeRefs.computeIfAbsent(scan.tys().get(i).toString(), k -> new ArrayList<>()).add(new TypeRef(id(scan), i));
             }
             case RelRN.Filter filter -> collectTypeRefs(filter.source());
             case RelRN.Project project -> collectTypeRefs(project.source());
@@ -80,9 +76,7 @@ public final class SparkGenerator {
 
     private ObjectNode rel(RelRN rel) {
         var cached = built.get(rel);
-        if (cached != null) {
-            return cached;
-        }
+        if (cached != null) return cached;
         var node = build(rel);
         node.put("id", ids.computeIfAbsent(node.toString(), key -> "r" + ids.size()));
         built.put(rel, node);
@@ -96,26 +90,16 @@ public final class SparkGenerator {
                 node.put("op", "scan");
                 node.put("name", scan.name());
                 node.put("arity", 1);
-                if (!scan.ty().isNullable()) {
-                    node.putArray("nonnull").add(0);
-                }
-                if (scan.unique()) {
-                    node.put("unique", true);
-                }
+                if (!scan.ty().isNullable()) node.putArray("nonnull").add(0);
+                if (scan.unique()) node.put("unique", true);
             }
             case RelRN.ScanMany scan -> {
                 node.put("op", "scan");
                 node.put("name", scan.name());
                 node.put("arity", scan.tys().size());
                 var nonNull = MAPPER.createArrayNode();
-                for (int i = 0; i < scan.tys().size(); i++) {
-                    if (!scan.tys().get(i).isNullable()) {
-                        nonNull.add(i);
-                    }
-                }
-                if (!nonNull.isEmpty()) {
-                    node.set("nonnull", nonNull);
-                }
+                for (int i = 0; i < scan.tys().size(); i++) if (!scan.tys().get(i).isNullable()) nonNull.add(i);
+                if (!nonNull.isEmpty()) node.set("nonnull", nonNull);
             }
             case RelRN.Filter filter -> {
                 node.put("op", "filter");
@@ -140,12 +124,8 @@ public final class SparkGenerator {
                 node.set("left", rel(correlate.left()));
                 node.set("right", rel(correlate.right()));
                 var args = MAPPER.createArrayNode();
-                for (int i = 0; i < correlate.left().semantics().getRowType().getFieldCount(); i++) {
-                    args.addObject().put("op", "outer").put("ordinal", i);
-                }
-                for (int i = 0; i < correlate.right().semantics().getRowType().getFieldCount(); i++) {
-                    args.addObject().put("op", "local").put("ordinal", i);
-                }
+                for (int i = 0; i < correlate.left().semantics().getRowType().getFieldCount(); i++) args.addObject().put("op", "outer").put("ordinal", i);
+                for (int i = 0; i < correlate.right().semantics().getRowType().getFieldCount(); i++) args.addObject().put("op", "local").put("ordinal", i);
                 var cond = MAPPER.createObjectNode();
                 if (correlate.cond() instanceof RuleBuilder.QedFunction) {
                     cond.put("op", "pred");
@@ -190,12 +170,7 @@ public final class SparkGenerator {
             var rows = node.putArray("rows");
             for (var tuple : values.getTuples()) {
                 var row = rows.addArray();
-                for (var literal : tuple) {
-                    row.add(literal(literal));
-                }
-            }
-            if (rows.isEmpty()) {
-                throw new UnsupportedOperationException("Unsupported empty concrete Values");
+                for (var literal : tuple) row.add(literal(literal));
             }
         } else if (semantics instanceof org.apache.calcite.rel.core.TableScan scan) {
             node.put("op", "scan");
@@ -205,17 +180,10 @@ public final class SparkGenerator {
             var types = node.putArray("types");
             var nonNull = node.putArray("nonnull");
             for (int i = 0; i < fields.size(); i++) {
-                if (fields.get(i).getType().getSqlTypeName() != SqlTypeName.INTEGER) {
-                    throw new UnsupportedOperationException("Unsupported column type: " + fields.get(i).getType());
-                }
                 types.add("int");
-                if (!fields.get(i).getType().isNullable()) {
-                    nonNull.add(i);
-                }
+                if (!fields.get(i).getType().isNullable()) nonNull.add(i);
             }
-            if (nonNull.isEmpty()) {
-                node.remove("nonnull");
-            }
+            if (nonNull.isEmpty()) node.remove("nonnull");
         } else if (semantics instanceof org.apache.calcite.rel.RelNode lifted) {
             var previous = owner;
             owner = rel;
@@ -224,8 +192,6 @@ public final class SparkGenerator {
             } finally {
                 owner = previous;
             }
-        } else {
-            throw new UnsupportedOperationException("Unsupported relational operator: " + constructName(rel.getClass()));
         }
     }
 
@@ -235,10 +201,7 @@ public final class SparkGenerator {
         try {
             for (var component : owner.getClass().getRecordComponents()) {
                 component.getAccessor().setAccessible(true);
-                if (component.getAccessor().invoke(owner) instanceof RelRN rel
-                        && rel.semantics().explain().equals(node.explain())) {
-                    return rel(rel);
-                }
+                if (component.getAccessor().invoke(owner) instanceof RelRN rel && rel.semantics().explain().equals(node.explain())) return rel(rel);
             }
         } catch (ReflectiveOperationException e) {
             throw new UnsupportedOperationException("Unsupported relational operator: " + constructName(owner.getClass()));
@@ -254,8 +217,6 @@ public final class SparkGenerator {
             out.set("left", lift(join.getLeft()));
             out.set("right", lift(join.getRight()));
             out.set("cond", lift(join.getCondition()));
-        } else {
-            throw new UnsupportedOperationException("Unsupported relational operator: " + node.getRelTypeName());
         }
         out.put("id", ids.computeIfAbsent(out.toString(), key -> "r" + ids.size()));
         return out;
@@ -268,8 +229,7 @@ public final class SparkGenerator {
             node.put("ordinal", ref.getIndex());
         } else if (rex instanceof RexLiteral literal) {
             node.setAll(literal(literal));
-        } else if (rex instanceof org.apache.calcite.rex.RexFieldAccess access
-                && access.getReferenceExpr() instanceof org.apache.calcite.rex.RexCorrelVariable) {
+        } else if (rex instanceof org.apache.calcite.rex.RexFieldAccess access && access.getReferenceExpr() instanceof org.apache.calcite.rex.RexCorrelVariable) {
             node.put("op", "outer");
             node.put("ordinal", access.getField().getIndex());
         } else if (rex instanceof org.apache.calcite.rex.RexSubQuery sub) {
@@ -280,7 +240,6 @@ public final class SparkGenerator {
                     var values = node.putArray("values");
                     sub.getOperands().forEach(o -> values.add(lift(o)));
                 }
-                default -> throw new UnsupportedOperationException("Unsupported subquery: " + sub.getKind());
             }
             node.set("input", lift(sub.rel));
         } else if (rex instanceof org.apache.calcite.rex.RexCall call) {
@@ -296,16 +255,12 @@ public final class SparkGenerator {
                     node.set("args", args);
                 }
             }
-        } else {
-            throw new UnsupportedOperationException("Unsupported expression construct: " + rex.getKind());
         }
         return node;
     }
 
     private void join(ObjectNode node, RelRN.Join.JoinType type, RexRN cond, RelRN left, RelRN right) {
-        if (!(type instanceof RelRN.Join.JoinType.ConcreteJoinType concrete)) {
-            throw new UnsupportedOperationException("Unsupported join type family: " + type);
-        }
+        var concrete = (RelRN.Join.JoinType.ConcreteJoinType) type;
         node.put("op", "join");
         node.put("type", joinKind(concrete.type()));
         node.set("left", rel(left));
@@ -320,18 +275,11 @@ public final class SparkGenerator {
             case RIGHT -> "right";
             case FULL -> "full";
             case SEMI -> "semi";
-            case ANTI -> "anti";
-            default -> throw new UnsupportedOperationException("Unsupported join type: " + type);
+            default -> "anti";
         };
     }
 
     private void set(ObjectNode node, String kind, boolean all, Seq<RelRN> sources) {
-        if (sources.isEmpty()) {
-            throw new UnsupportedOperationException("Unsupported set operation arity: 0");
-        }
-        if (sources.size() == 1 && !kind.equals("union")) {
-            throw new UnsupportedOperationException("Unsupported single-input set operation");
-        }
         node.put("op", "set");
         node.put("kind", kind);
         node.put("all", all);
@@ -341,8 +289,7 @@ public final class SparkGenerator {
         } else {
             RelRN left = sources.get(0);
             for (int i = 1; i < sources.size() - 1; i++) {
-                var nested = kind.equals("intersect") ? new RelRN.Intersect(all, Seq.of(left, sources.get(i)))
-                        : new RelRN.Minus(all, Seq.of(left, sources.get(i)));
+                var nested = kind.equals("intersect") ? new RelRN.Intersect(all, Seq.of(left, sources.get(i))) : new RelRN.Minus(all, Seq.of(left, sources.get(i)));
                 left = nested;
             }
             inputs.add(rel(left));
@@ -352,10 +299,6 @@ public final class SparkGenerator {
     }
 
     private ObjectNode aggCall(RelRN.AggCall agg) {
-        if (agg.operator() != null && !(agg.operator() instanceof RuleBuilder.QedAggregateFunction)) {
-            throw new UnsupportedOperationException("Unsupported concrete aggregate operator: "
-                    + agg.operator().getName());
-        }
         var node = MAPPER.createObjectNode();
         node.put("op", "agg");
         node.put("name", agg.name());
@@ -375,8 +318,7 @@ public final class SparkGenerator {
                 }
             }
             case RexRN.Proj proj -> {
-                if (proj.operator() instanceof RuleBuilder.QedFunction && proj.operator().getName().equals(CASE_OPERATOR)
-                        && proj.sources().size() == 3) {
+                if (proj.operator() instanceof RuleBuilder.QedFunction && proj.operator().getName().equals(CASE_OPERATOR) && proj.sources().size() == 3) {
                     node.put("op", "scalar");
                     node.put("operator", "if");
                     node.set("args", listOf(proj.sources()));
@@ -387,10 +329,6 @@ public final class SparkGenerator {
                 }
             }
             case RexRN.GroupBy group -> {
-                if (!(group.operator() instanceof RuleBuilder.QedFunction)) {
-                    throw new UnsupportedOperationException("Unsupported concrete grouping operator: "
-                            + group.operator().getName());
-                }
                 symbol(node, "group_key", group.operator().getName(), group.sources());
             }
             case RexRN.And and -> list(node, "and", and.sources());
@@ -422,9 +360,6 @@ public final class SparkGenerator {
                 } else if (semantics instanceof RexInputRef ref) {
                     node.put("op", "input");
                     node.put("ordinal", ref.getIndex());
-                } else {
-                    throw new UnsupportedOperationException("Unsupported expression construct: "
-                            + constructName(rex.getClass()));
                 }
             }
         }
@@ -433,12 +368,8 @@ public final class SparkGenerator {
 
     private ObjectNode subquery(RexRN rex, org.apache.calcite.rex.RexNode semantics) {
         var and = semantics instanceof org.apache.calcite.rex.RexCall call && call.getKind() == SqlKind.AND;
-        var last = and ? ((org.apache.calcite.rex.RexCall) semantics).getOperands()
-                .get(((org.apache.calcite.rex.RexCall) semantics).getOperands().size() - 1) : semantics;
-        if (!(last instanceof org.apache.calcite.rex.RexSubQuery sub) || sub.getKind() != SqlKind.EXISTS
-                || rex.getClass().getRecordComponents() == null) {
-            return null;
-        }
+        var last = and ? ((org.apache.calcite.rex.RexCall) semantics).getOperands().get(((org.apache.calcite.rex.RexCall) semantics).getOperands().size() - 1) : semantics;
+        if (!(last instanceof org.apache.calcite.rex.RexSubQuery sub) || sub.getKind() != SqlKind.EXISTS || rex.getClass().getRecordComponents() == null) return null;
         RelRN body = null;
         var guards = new ArrayList<RexRN>();
         try {
@@ -456,24 +387,14 @@ public final class SparkGenerator {
         } catch (ReflectiveOperationException e) {
             return null;
         }
-        if (body == null) {
-            return null;
-        }
+        if (body == null) return null;
         var exists = MAPPER.createObjectNode();
         exists.put("op", "exists");
         exists.set("input", rel(body));
         var conjuncts = new ArrayList<ObjectNode>();
-        for (var guard : guards) {
-            if (!guard.semantics().isAlwaysTrue()) {
-                conjuncts.add(rex(guard));
-            }
-        }
-        if (conjuncts.size() != (and ? ((org.apache.calcite.rex.RexCall) semantics).getOperands().size() - 1 : 0)) {
-            return null;
-        }
-        if (conjuncts.isEmpty()) {
-            return exists;
-        }
+        for (var guard : guards) if (!guard.semantics().isAlwaysTrue()) conjuncts.add(rex(guard));
+        if (conjuncts.size() != (and ? ((org.apache.calcite.rex.RexCall) semantics).getOperands().size() - 1 : 0)) return null;
+        if (conjuncts.isEmpty()) return exists;
         var all = MAPPER.createObjectNode();
         all.put("op", "and");
         var args = all.putArray("args");
@@ -493,16 +414,9 @@ public final class SparkGenerator {
                 node.put("type", "int");
             } else if (type instanceof RelType.VarType) {
                 var refs = typeRefs.get(type.toString());
-                if (refs == null || refs.isEmpty()) {
-                    throw new UnsupportedOperationException("Unsupported unbound NULL type variable: " + type);
-                }
                 node.put("type", "same_as");
                 var out = node.putArray("refs");
-                for (var ref : refs) {
-                    out.addObject().put("of", ref.of()).put("ordinal", ref.ordinal());
-                }
-            } else {
-                throw new UnsupportedOperationException("Unsupported NULL literal type: " + type);
+                for (var ref : refs) out.addObject().put("of", ref.of()).put("ordinal", ref.ordinal());
             }
         } else if (type.getSqlTypeName() == SqlTypeName.INTEGER) {
             node.put("op", "int");
@@ -513,8 +427,6 @@ public final class SparkGenerator {
             node.put("type", "long");
         } else if (type.getSqlTypeName() == SqlTypeName.BOOLEAN) {
             node.put("op", Boolean.TRUE.equals(literal.getValueAs(Boolean.class)) ? "true" : "false");
-        } else {
-            throw new UnsupportedOperationException("Unsupported literal: " + literal);
         }
         return node;
     }
@@ -543,8 +455,7 @@ public final class SparkGenerator {
             case PLUS -> "+";
             case MINUS -> "-";
             case MINUS_PREFIX -> "neg";
-            case TIMES -> "*";
-            default -> throw new UnsupportedOperationException("Unsupported concrete operator: " + name);
+            default -> "*";
         };
     }
 
@@ -579,9 +490,6 @@ public final class SparkGenerator {
         for (var arg : args) {
             if (Set.of("proj", "pred", "group_key").contains(arg.path("op").asText())) {
                 for (var inner : arg.path("args")) {
-                    if (Set.of("proj", "pred", "group_key").contains(inner.path("op").asText())) {
-                        throw new UnsupportedOperationException("Unsupported symbol applied to symbols two levels deep");
-                    }
                 }
             }
         }
@@ -589,30 +497,22 @@ public final class SparkGenerator {
     }
 
     private static List<RelRN> wholeRows(Seq<RexRN> sources) {
-        if (sources.isEmpty()) {
-            return null;
-        }
+        if (sources.isEmpty()) return null;
         if (sources.allMatch(s -> s instanceof RexRN.Field)) {
             var source = ((RexRN.Field) sources.get(0)).source();
             var count = source.semantics().getRowType().getFieldCount();
             for (var i = 0; i < sources.size(); i++) {
                 var field = (RexRN.Field) sources.get(i);
-                if (!field.source().equals(source) || field.ordinal() != i) {
-                    return null;
-                }
+                if (!field.source().equals(source) || field.ordinal() != i) return null;
             }
             return sources.size() == count ? List.of(source) : null;
         }
         if (sources.allMatch(s -> s instanceof RexRN.JoinField)) {
             var first = (RexRN.JoinField) sources.get(0);
-            var total = first.left().semantics().getRowType().getFieldCount()
-                    + first.right().semantics().getRowType().getFieldCount();
+            var total = first.left().semantics().getRowType().getFieldCount() + first.right().semantics().getRowType().getFieldCount();
             for (var i = 0; i < sources.size(); i++) {
                 var field = (RexRN.JoinField) sources.get(i);
-                if (!field.left().equals(first.left()) || !field.right().equals(first.right())
-                        || field.ordinal() != i) {
-                    return null;
-                }
+                if (!field.left().equals(first.left()) || !field.right().equals(first.right()) || field.ordinal() != i) return null;
             }
             return sources.size() == total ? List.of(first.left(), first.right()) : null;
         }
@@ -620,12 +520,8 @@ public final class SparkGenerator {
     }
 
     private static String constructName(Class<?> type) {
-        if (type.isSynthetic()) {
-            return "Java lambda";
-        }
-        if (type.isAnonymousClass()) {
-            return "anonymous " + type.getInterfaces()[0].getSimpleName();
-        }
+        if (type.isSynthetic()) return "Java lambda";
+        if (type.isAnonymousClass()) return "anonymous " + type.getInterfaces()[0].getSimpleName();
         return type.getSimpleName();
     }
 }

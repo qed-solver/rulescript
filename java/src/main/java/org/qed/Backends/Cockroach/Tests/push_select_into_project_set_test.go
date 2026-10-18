@@ -24,6 +24,10 @@ func TestPushSelectIntoProjectSet(t *testing.T) {
 	badOn := e.filters(e.f.ConstructEq(e.v(badLeftCols[0]), e.v(badRightCols[0])))
 	badJoin := e.f.ConstructInnerJoin(badLeft, badRight, badOn, &memo.JoinPrivate{})
 	bad := e.f.ConstructSelect(badJoin, e.filters(e.f.ConstructEq(e.v(badLeftCols[0]), e.num(1)), e.f.ConstructEq(e.v(badLeftCols[0]), e.num(2))))
-	e.expectNoMatch(rule, bad)
+	e.expectRewrite(rule, bad, e.f.ConstructInnerJoin(
+		e.f.ConstructSelect(badLeft, e.filters(e.f.ConstructEq(e.v(badLeftCols[0]), e.num(1)), e.f.ConstructEq(e.v(badLeftCols[0]), e.num(2)))),
+		badRight, badOn, &memo.JoinPrivate{}))
+	leftJoin := e.f.ConstructLeftJoin(badLeft, badRight, badOn, &memo.JoinPrivate{})
+	e.expectNoMatch(rule, e.f.ConstructSelect(leftJoin, e.filters(e.f.ConstructEq(e.v(badLeftCols[0]), e.num(1)), e.f.ConstructEq(e.v(badLeftCols[0]), e.num(2)))))
 }
 

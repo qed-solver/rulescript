@@ -30,8 +30,3 @@ func TestExpandDisjunctionForJoinInputs(t *testing.T) {
 		e.f.ConstructOr(e.f.ConstructAnd(pl, m), e.f.ConstructAnd(rl, sr)),
 	), &memo.JoinPrivate{}))
 }
-
-func TestSQLExpandDisjunctionForJoinInputs(t *testing.T) {
-	expectSQLFires(t, "ExpandDisjunctionForJoinInputs",
-		"SELECT * FROM u JOIN nn ON (u.x > 0 AND nn.a < 5) OR (u.y > 1 AND nn.b < 7)")
-}

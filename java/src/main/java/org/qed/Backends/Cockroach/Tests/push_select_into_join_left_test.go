@@ -25,5 +25,7 @@ func TestPushSelectIntoJoinLeft(t *testing.T) {
 
 	nearMissJoin := e.f.ConstructLeftJoin(l, r, e.filters(e.f.ConstructEq(e.v(lc[0]), e.num(29))), &memo.JoinPrivate{})
 	nearMiss := e.f.ConstructSelect(nearMissJoin, e.filters(e.f.ConstructEq(e.v(lc[0]), e.num(11))))
-	e.expectNoMatch(rule, nearMiss)
+	e.expectRewrite(rule, nearMiss, e.f.ConstructLeftJoin(leftInput, r, e.filters(on), &memo.JoinPrivate{}))
+	innerJoin := e.f.ConstructInnerJoin(l, r, e.filters(on), &memo.JoinPrivate{})
+	e.expectNoMatch(rule, e.f.ConstructSelect(innerJoin, e.filters(leftFilter, unboundFilter)))
 }

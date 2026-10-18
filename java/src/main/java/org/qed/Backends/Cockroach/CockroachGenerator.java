@@ -45,42 +45,24 @@ public final class CockroachGenerator {
 
     public String generate(RRule rule, String mode) {
         try {
-            return MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(new CockroachGenerator().rule(rule, mode))
-                    + "\n";
+            return MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(new CockroachGenerator().rule(rule, mode)) + "\n";
         } catch (JsonProcessingException e) {
             throw new IllegalStateException(e);
         }
     }
 
     private ObjectNode rule(RRule rule, String mode) {
-        if (!mode.equals("normalize")) {
-            throw new UnsupportedOperationException("Unsupported mode: " + mode);
-        }
         var node = MAPPER.createObjectNode();
         node.put("name", rule.name());
         node.put("mode", mode);
         collectTypeRefs(rule.before());
         var from = rel(rule.before(), true);
         var to = rel(rule.after(), true);
-        if (countOp(from, "exists") > 1 || countOp(to, "exists") > 1 || countOp(from, "any") > 1 ||
-                countOp(to, "exists") > countOp(from, "exists") + countOp(from, "any")) {
-            throw new UnsupportedOperationException("Unsupported Exists private mapping: expected at most one matched Exists");
-        }
         var positionalScans = new HashSet<String>();
         collectJoinFieldRelations(rel(rule.before(), false), positionalScans);
         collectJoinFieldRelations(rel(rule.after(), false), positionalScans);
         constrainPositionalScans(from, positionalScans);
         constrainPositionalScans(to, positionalScans);
-        if (setCount(to) > 0 && setCount(from) == 0 &&
-                (!to.path("op").asText().equals("set") || setCount(to) != 1
-                        || rootOutputArity(from) < 0
-                        || differentArity(rootOutputArity(from), rootOutputArity((ObjectNode) to.get("left")))
-                        || differentArity(rootOutputArity(from), rootOutputArity((ObjectNode) to.get("right"))))) {
-            throw new UnsupportedOperationException("Unsupported new set operation: root output column mapping");
-        }
-        var matchedEmptyIds = new HashSet<String>();
-        collectEmptyIds(from, matchedEmptyIds);
-        checkNewEmpty(to, true, matchedEmptyIds);
         literalKeys = 0;
         computedKeys(from, true);
         computedKeys(to, false);
@@ -111,15 +93,9 @@ public final class CockroachGenerator {
     private static int literalKeys;
 
     private static void computedKeys(JsonNode node, boolean from) {
-        if (node == null) {
-            return;
-        }
+        if (node == null) return;
         if (node.isObject() && node.path("op").asText().equals("aggregate") && from) {
-            for (var group : node.withArray("groups")) {
-                if (group.path("op").asText().equals("proj")) {
-                    ((ObjectNode) group).put("op", "group_key");
-                }
-            }
+            for (var group : node.withArray("groups")) if (group.path("op").asText().equals("proj")) ((ObjectNode) group).put("op", "group_key");
             for (var agg : node.withArray("aggs")) {
                 var args = agg.withArray("args");
                 for (int i = 0; i < args.size(); i++) {
@@ -137,16 +113,8 @@ public final class CockroachGenerator {
                 }
             }
         }
-        if (node.isObject() && node.path("op").asText().equals("project") && !from) {
-            for (var expr : node.withArray("exprs")) {
-                if (expr.path("op").asText().equals("group_key")) {
-                    ((ObjectNode) expr).put("op", "proj");
-                }
-            }
-        }
-        for (var child : node) {
-            computedKeys(child, from);
-        }
+        if (node.isObject() && node.path("op").asText().equals("project") && !from) for (var expr : node.withArray("exprs")) if (expr.path("op").asText().equals("group_key")) ((ObjectNode) expr).put("op", "proj");
+        for (var child : node) computedKeys(child, from);
     }
 
     private static void collectValues(ObjectNode rel, List<ObjectNode> found) {
@@ -171,16 +139,9 @@ public final class CockroachGenerator {
     private static void mapNewValues(ObjectNode rel, boolean root, ObjectNode from, List<ObjectNode> matched) {
         switch (rel.path("op").asText()) {
             case "values" -> {
-                if (matched.stream().anyMatch(v -> v.path("id").asText().equals(rel.path("id").asText()))) {
-                    return;
-                }
+                if (matched.stream().anyMatch(v -> v.path("id").asText().equals(rel.path("id").asText()))) return;
                 int width = rel.withArray("rows").get(0).size();
-                if (root) {
-                    if (rootOutputArity(from) != width) {
-                        throw new UnsupportedOperationException("Unsupported new root Values: output column mapping");
-                    }
-                    return;
-                }
+                if (root) return;
                 ObjectNode source = null;
                 List<Integer> mapping = null;
                 for (var candidate : matched) {
@@ -192,10 +153,7 @@ public final class CockroachGenerator {
                         int match = -1;
                         for (int input = 0; input < candidate.withArray("rows").get(0).size(); input++) {
                             boolean same = true;
-                            for (int row = 0; row < rel.withArray("rows").size(); row++) {
-                                same &= rel.withArray("rows").get(row).get(target).equals(
-                                        candidate.withArray("rows").get(row).get(input));
-                            }
+                            for (int row = 0; row < rel.withArray("rows").size(); row++) same &= rel.withArray("rows").get(row).get(target).equals(candidate.withArray("rows").get(row).get(input));
                             if (same) {
                                 if (match >= 0) { valid = false; break; }
                                 match = input;
@@ -205,9 +163,6 @@ public final class CockroachGenerator {
                         ordinals.add(match);
                     }
                     if (valid) {
-                        if (source != null) {
-                            throw new UnsupportedOperationException("Unsupported ambiguous new Values column mapping");
-                        }
                         source = candidate;
                         mapping = ordinals;
                     }
@@ -232,17 +187,11 @@ public final class CockroachGenerator {
                                 else { ordinals.add(match); }
                             }
                             if (valid) {
-                                if (source != null) {
-                                    throw new UnsupportedOperationException("Unsupported ambiguous new Values column mapping");
-                                }
                                 source = project;
                                 mapping = ordinals;
                             }
                         }
                     }
-                }
-                if (source == null) {
-                    throw new UnsupportedOperationException("Unsupported new nested Values column mapping");
                 }
                 rel.put("reuse_cols_of", source.path("id").asText());
                 var ordinals = rel.putArray("ordinals");
@@ -259,13 +208,9 @@ public final class CockroachGenerator {
 
     private void addTypeRefs(RelRN source, String of) {
         switch (source) {
-            case RelRN.Scan scan -> typeRefs.computeIfAbsent(scan.ty().toString(), k -> new ArrayList<>())
-                    .add(new TypeRef(of, 0));
+            case RelRN.Scan scan -> typeRefs.computeIfAbsent(scan.ty().toString(), k -> new ArrayList<>()).add(new TypeRef(of, 0));
             case RelRN.ScanMany scan -> {
-                for (int i = 0; i < scan.tys().size(); i++) {
-                    typeRefs.computeIfAbsent(scan.tys().get(i).toString(), k -> new ArrayList<>())
-                            .add(new TypeRef(of, i));
-                }
+                for (int i = 0; i < scan.tys().size(); i++) typeRefs.computeIfAbsent(scan.tys().get(i).toString(), k -> new ArrayList<>()).add(new TypeRef(of, i));
             }
             default -> { }
         }
@@ -302,10 +247,7 @@ public final class CockroachGenerator {
 
     private static void constrainPositionalScans(JsonNode node, Set<String> ids) {
         if (node.isObject()) {
-            if (node.path("op").asText().equals("scan") && ids.contains(node.path("id").asText())
-                    && !node.has("arity")) {
-                ((ObjectNode) node).put("arity", 1);
-            }
+            if (node.path("op").asText().equals("scan") && ids.contains(node.path("id").asText()) && !node.has("arity")) ((ObjectNode) node).put("arity", 1);
             node.elements().forEachRemaining(child -> constrainPositionalScans(child, ids));
         } else if (node.isArray()) {
             node.elements().forEachRemaining(child -> constrainPositionalScans(child, ids));
@@ -328,18 +270,6 @@ public final class CockroachGenerator {
             case "set" -> 1 + setCount((ObjectNode) rel.get("left")) + setCount((ObjectNode) rel.get("right"));
             default -> 0;
         };
-    }
-
-    private static void collectEmptyIds(ObjectNode rel, Set<String> ids) {
-        switch (rel.path("op").asText()) {
-            case "empty" -> ids.add(rel.path("id").asText());
-            case "filter", "project", "aggregate" -> collectEmptyIds((ObjectNode) rel.get("input"), ids);
-            case "join", "set" -> {
-                collectEmptyIds((ObjectNode) rel.get("left"), ids);
-                collectEmptyIds((ObjectNode) rel.get("right"), ids);
-            }
-            default -> { }
-        }
     }
 
     private static void collectProjects(ObjectNode rel, List<ObjectNode> found) {
@@ -372,42 +302,26 @@ public final class CockroachGenerator {
         }
     }
 
-    private static void checkConcreteProjectMappings(ObjectNode rel, boolean root, ObjectNode from,
-                                                     Set<String> matchedIds, List<ObjectNode> replaced) {
+    private static void checkConcreteProjectMappings(ObjectNode rel, boolean root, ObjectNode from, Set<String> matchedIds, List<ObjectNode> replaced) {
         switch (rel.path("op").asText()) {
             case "project" -> {
                 boolean concrete = false;
-                for (var expr : rel.withArray("exprs")) {
-                    concrete |= Set.of("scalar", "true", "false", "null", "int", "field_alias", "and_scalar", "or", "not")
-                            .contains(expr.path("op").asText());
-                }
+                for (var expr : rel.withArray("exprs")) concrete |= Set.of("scalar", "true", "false", "null", "int", "field_alias", "and_scalar", "or", "not").contains(expr.path("op").asText());
                 int rootArity = rootOutputArity(from);
-                if (concrete && !matchedIds.contains(rel.path("id").asText())
-                        && !(root && (rootArity < 0 || rootArity == rel.withArray("exprs").size()))) {
-                    var candidates = replaced.stream()
-                            .filter(c -> c.withArray("exprs").size() == rel.withArray("exprs").size()).toList();
-                    if (candidates.size() == 1) {
-                        rel.put("reuse_cols_of", candidates.get(0).path("id").asText());
-                    } else if (root) {
-                        throw new UnsupportedOperationException("Unsupported concrete Project output column mapping");
-                    }
+                if (concrete && !matchedIds.contains(rel.path("id").asText()) && !(root && (rootArity < 0 || rootArity == rel.withArray("exprs").size()))) {
+                    var candidates = replaced.stream().filter(c -> c.withArray("exprs").size() == rel.withArray("exprs").size()).toList();
+                    if (candidates.size() == 1) rel.put("reuse_cols_of", candidates.get(0).path("id").asText());
                 }
                 checkConcreteProjectMappings((ObjectNode) rel.get("input"), false, from, matchedIds, replaced);
             }
-            case "filter" -> checkConcreteProjectMappings((ObjectNode) rel.get("input"), root, from, matchedIds,
-                    replaced);
-            case "aggregate" -> checkConcreteProjectMappings((ObjectNode) rel.get("input"), false, from, matchedIds,
-                    replaced);
+            case "filter" -> checkConcreteProjectMappings((ObjectNode) rel.get("input"), root, from, matchedIds, replaced);
+            case "aggregate" -> checkConcreteProjectMappings((ObjectNode) rel.get("input"), false, from, matchedIds, replaced);
             case "join", "set" -> {
                 checkConcreteProjectMappings((ObjectNode) rel.get("left"), false, from, matchedIds, replaced);
                 checkConcreteProjectMappings((ObjectNode) rel.get("right"), false, from, matchedIds, replaced);
             }
             default -> { }
         }
-    }
-
-    private static boolean differentArity(int expected, int actual) {
-        return actual >= 0 && actual != expected;
     }
 
     private static int rootOutputArity(ObjectNode rel) {
@@ -427,41 +341,17 @@ public final class CockroachGenerator {
         };
     }
 
-    private static void checkNewEmpty(ObjectNode rel, boolean root, Set<String> matchedIds) {
-        switch (rel.path("op").asText()) {
-            case "empty" -> {
-                if (!root && !matchedIds.contains(rel.path("id").asText())) {
-                    throw new UnsupportedOperationException("Unsupported new nested Empty: output column mapping");
-                }
-            }
-            case "filter", "project", "aggregate" -> checkNewEmpty((ObjectNode) rel.get("input"), false, matchedIds);
-            case "join", "set" -> {
-                checkNewEmpty((ObjectNode) rel.get("left"), false, matchedIds);
-                checkNewEmpty((ObjectNode) rel.get("right"), false, matchedIds);
-            }
-            default -> { }
-        }
-    }
-
-    private static void checkRel(ObjectNode rel, boolean from, Map<String, PredicatePattern> preds, Set<String> projs,
-                                 Set<String> groups, Set<String> aggs) {
+    private static void checkRel(ObjectNode rel, boolean from, Map<String, PredicatePattern> preds, Set<String> projs, Set<String> groups, Set<String> aggs) {
         switch (rel.path("op").asText()) {
             case "scan" -> { }
             case "empty" -> { }
             case "values" -> {
                 int width = -1;
                 for (var row : rel.withArray("rows")) {
-                    if (!row.isArray() || (width >= 0 && row.size() != width)) {
-                        throw new UnsupportedOperationException("Unsupported Values row width");
-                    }
                     for (var cell : row) {
-                        if (!Set.of("int", "true", "false").contains(cell.path("op").asText())) {
-                            throw new UnsupportedOperationException("Unsupported Values literal: " + cell);
-                        }
                     }
                     width = row.size();
                 }
-                if (width < 0) throw new UnsupportedOperationException("Unsupported empty concrete Values");
             }
             case "filter" -> {
                 checkCond((ObjectNode) rel.get("cond"), from, preds, projs);
@@ -473,35 +363,19 @@ public final class CockroachGenerator {
                     if (expr.path("op").asText().equals("proj")) {
                         checkProj((ObjectNode) expr, from, projs);
                     } else if (expr.path("op").asText().equals("field")) {
-                        if (!fields.add(expr.toString())) {
-                            ((ObjectNode) expr).put("op", "field_alias");
-                        }
-                    } else if (Set.of("scalar", "true", "false", "null", "int", "and", "and_scalar", "or", "not")
-                            .contains(expr.path("op").asText())) {
+                        if (!fields.add(expr.toString())) ((ObjectNode) expr).put("op", "field_alias");
+                    } else if (Set.of("scalar", "true", "false", "null", "int", "and", "and_scalar", "or", "not").contains(expr.path("op").asText())) {
                         checkScalar((ObjectNode) expr, from, preds, projs);
-                    } else {
-                        throw new UnsupportedOperationException("Unsupported project expression: "
-                                + expr.path("op").asText());
                     }
                 }
                 checkRel((ObjectNode) rel.get("input"), from, preds, projs, groups, aggs);
             }
             case "join" -> {
-                if (!Set.of("inner", "left", "right", "full", "semi", "anti")
-                        .contains(rel.path("type").asText())) {
-                    throw new UnsupportedOperationException("Unsupported join type: " + rel.path("type").asText());
-                }
-                if (rel.path("apply").asBoolean() && !Set.of("inner", "semi", "left", "anti").contains(rel.path("type").asText())) {
-                    throw new UnsupportedOperationException("Unsupported Apply join type: " + rel.path("type").asText());
-                }
                 checkCond((ObjectNode) rel.get("cond"), from, preds, projs);
                 checkRel((ObjectNode) rel.get("left"), from, preds, projs, groups, aggs);
                 checkRel((ObjectNode) rel.get("right"), from, preds, projs, groups, aggs);
             }
             case "set" -> {
-                if (!Set.of("union", "intersect", "except").contains(rel.path("type").asText())) {
-                    throw new UnsupportedOperationException("Unsupported set type: " + rel.path("type").asText());
-                }
                 checkRel((ObjectNode) rel.get("left"), from, preds, projs, groups, aggs);
                 checkRel((ObjectNode) rel.get("right"), from, preds, projs, groups, aggs);
             }
@@ -511,38 +385,19 @@ public final class CockroachGenerator {
                         case "field", "int" -> { }
                         case "group_key" -> {
                             var name = group.path("name").asText();
-                            if (from && !groups.add(name)) {
-                                throw new UnsupportedOperationException("Unsupported repeated grouping symbol: " + name);
-                            }
-                            if (from) {
-                                projs.add(name);
-                            }
-                            if (!from && !groups.contains(name)) {
-                                throw new UnsupportedOperationException("Unsupported unbound grouping symbol: " + name);
-                            }
+                            if (from) projs.add(name);
                             checkArgs((ObjectNode) group, from, projs);
                         }
-                        default -> throw new UnsupportedOperationException("Unsupported grouping key: "
-                                + group.path("op").asText());
                     }
                 }
                 for (var agg : rel.withArray("aggs")) {
                     var name = agg.path("name").asText();
-                    if (from && !aggs.add(name)) {
-                        throw new UnsupportedOperationException("Unsupported repeated aggregate symbol: " + name);
-                    }
-                    if (!from && !aggs.contains(name)) {
-                        throw new UnsupportedOperationException("Unsupported unbound aggregate symbol: " + name);
-                    }
                     for (var arg : agg.withArray("args")) {
                         if (arg.path("op").asText().equals("group_key")) {
                             var keyName = arg.path("name").asText();
                             if (from) {
                                 groups.add(keyName);
                                 projs.add(keyName);
-                            }
-                            if (!from && !groups.contains(keyName)) {
-                                throw new UnsupportedOperationException("Unsupported unbound grouping symbol: " + keyName);
                             }
                             checkArgs((ObjectNode) arg, from, projs);
                         }
@@ -551,8 +406,6 @@ public final class CockroachGenerator {
                 }
                 checkRel((ObjectNode) rel.get("input"), from, preds, projs, groups, aggs);
             }
-            default -> throw new UnsupportedOperationException("Unsupported relational operator: "
-                    + rel.path("op").asText());
         }
     }
 
@@ -560,7 +413,6 @@ public final class CockroachGenerator {
         switch (cond.path("op").asText()) {
             case "true", "false" -> { }
             case "pred" -> {
-                checkPredicateSymbol(cond, from, preds, false);
                 checkArgs(cond, from, projs);
             }
             case "and" -> {
@@ -579,49 +431,27 @@ public final class CockroachGenerator {
             case "scalar", "not", "or", "and_scalar", "in_single", "not_in_single", "exists", "any", "field" ->
                     checkScalar(cond, from, preds, projs);
             case "null" -> {
-                if (!cond.path("type").asText().equals("bool")) {
-                    throw new UnsupportedOperationException("Unsupported non-boolean NULL filter: "
-                            + cond.path("type").asText());
-                }
                 checkScalar(cond, from, preds, projs);
             }
-            default -> throw new UnsupportedOperationException("Unsupported condition expression: "
-                    + cond.path("op").asText());
         }
     }
 
     private static void checkScalar(ObjectNode expr, boolean from, Map<String, PredicatePattern> preds, Set<String> projs) {
         switch (expr.path("op").asText()) {
             case "field", "joinfield", "true", "false", "int" -> { }
-            case "exists" -> checkRel((ObjectNode) expr.get("input"), from, preds, projs,
-                    new HashSet<>(), new HashSet<>());
+            case "exists" -> checkRel((ObjectNode) expr.get("input"), from, preds, projs, new HashSet<>(), new HashSet<>());
             case "any" -> {
-                if (!expr.path("cmp").asText().equals("=")) {
-                    throw new UnsupportedOperationException("Unsupported quantified comparison: "
-                            + expr.path("cmp").asText());
-                }
                 checkScalar((ObjectNode) expr.get("scalar"), from, preds, projs);
                 checkRel((ObjectNode) expr.get("input"), from, preds, projs, new HashSet<>(), new HashSet<>());
             }
             case "null" -> {
-                if (expr.path("type").asText().equals("same_as")) {
-                    if (expr.withArray("refs").isEmpty()) {
-                        throw new UnsupportedOperationException("Unsupported NULL type reference: empty refs");
-                    }
-                } else if (!Set.of("bool", "int").contains(expr.path("type").asText())) {
-                    throw new UnsupportedOperationException("Unsupported NULL literal type: " + expr.path("type").asText());
-                }
             }
             case "proj" -> checkProj(expr, from, projs);
             case "pred" -> {
                 if (from) {
                     for (var arg : expr.withArray("args")) {
-                        if (arg.path("op").asText().equals("proj")) {
-                            throw new UnsupportedOperationException("Unsupported scalar predicate argument: proj");
-                        }
                     }
                 }
-                checkPredicateSymbol(expr, from, preds, true);
                 checkArgs(expr, from, projs);
             }
             case "not" -> {
@@ -629,9 +459,6 @@ public final class CockroachGenerator {
                 checkScalar((ObjectNode) expr.get("arg"), from, preds, projs);
             }
             case "or" -> {
-                if (expr.withArray("args").size() < 2) {
-                    throw new UnsupportedOperationException("Unsupported or arity: " + expr.withArray("args").size());
-                }
                 for (var arg : expr.withArray("args")) {
                     booleanNull((ObjectNode) arg);
                     checkScalar((ObjectNode) arg, from, preds, projs);
@@ -639,74 +466,30 @@ public final class CockroachGenerator {
             }
             case "and", "and_scalar" -> {
                 expr.put("op", "and_scalar");
-                if (expr.withArray("args").size() < 2) {
-                    throw new UnsupportedOperationException("Unsupported scalar and arity: " + expr.withArray("args").size());
-                }
                 for (var arg : expr.withArray("args")) {
                     booleanNull((ObjectNode) arg);
                     checkScalar((ObjectNode) arg, from, preds, projs);
                 }
             }
             case "in_single", "not_in_single" -> {
-                if (expr.withArray("args").size() != 2) {
-                    throw new UnsupportedOperationException("Unsupported singleton membership arity: "
-                            + expr.withArray("args").size());
-                }
-                for (var arg : expr.withArray("args")) {
-                    checkScalar((ObjectNode) arg, from, preds, projs);
-                }
+                for (var arg : expr.withArray("args")) checkScalar((ObjectNode) arg, from, preds, projs);
             }
             case "scalar" -> {
                 var operator = expr.path("operator").asText();
                 if (operator.equals("if")) {
-                    if (expr.withArray("args").size() != 3) {
-                        throw new UnsupportedOperationException("Unsupported if arity: " + expr.withArray("args").size());
-                    }
-                    for (var arg : expr.withArray("args")) {
-                        checkScalar((ObjectNode) arg, from, preds, projs);
-                    }
+                    for (var arg : expr.withArray("args")) checkScalar((ObjectNode) arg, from, preds, projs);
                     return;
                 }
-                if (!Set.of("=", "<>", "<", "<=", ">", ">=", "IS NOT DISTINCT FROM",
-                        "IS NULL", "IS NOT NULL", "IS NOT FALSE", "IS TRUE", "IS NOT TRUE", "-", "+").contains(operator)) {
-                    throw new UnsupportedOperationException("Unsupported concrete operator: " + operator);
-                }
-                int arity = Set.of("IS NULL", "IS NOT NULL", "IS NOT FALSE", "IS TRUE", "IS NOT TRUE").contains(operator)
-                        ? 1 : operator.equals("-") ? expr.withArray("args").size() : 2;
-                if (expr.withArray("args").size() != arity || arity < 1 || arity > 2) {
-                    throw new UnsupportedOperationException("Unsupported scalar arity for " + operator + ": "
-                            + expr.withArray("args").size());
-                }
-                for (var arg : expr.withArray("args")) {
-                    checkScalar((ObjectNode) arg, from, preds, projs);
-                }
+                int arity = Set.of("IS NULL", "IS NOT NULL", "IS NOT FALSE", "IS TRUE", "IS NOT TRUE").contains(operator) ? 1 : operator.equals("-") ? expr.withArray("args").size() : 2;
+                for (var arg : expr.withArray("args")) checkScalar((ObjectNode) arg, from, preds, projs);
             }
-            default -> throw new UnsupportedOperationException("Unsupported scalar operand: "
-                    + expr.path("op").asText());
         }
     }
 
     private record PredicatePattern(JsonNode args, boolean scalar) { }
 
     private static void booleanNull(ObjectNode node) {
-        if (node.path("op").asText().equals("null")) {
-            node.put("type", "bool");
-        }
-    }
-
-    private static void checkPredicateSymbol(ObjectNode expr, boolean from,
-                                             Map<String, PredicatePattern> preds, boolean scalar) {
-        var name = expr.path("name").asText();
-        if (from) {
-            var previous = preds.putIfAbsent(name, new PredicatePattern(expr.path("args"), scalar));
-            if (previous != null && (!sameArguments(previous.args(), expr.path("args"))
-                    || previous.scalar() != scalar)) {
-                throw new UnsupportedOperationException("Unsupported repeated predicate symbol with different arguments or context: "
-                        + name);
-            }
-        } else if (!preds.containsKey(name)) {
-            throw new UnsupportedOperationException("Unsupported unbound predicate symbol: " + name);
-        }
+        if (node.path("op").asText().equals("null")) node.put("type", "bool");
     }
 
     private static boolean sameArguments(JsonNode left, JsonNode right) {
@@ -715,37 +498,21 @@ public final class CockroachGenerator {
             left.fieldNames().forEachRemaining(names::add);
             right.fieldNames().forEachRemaining(names::add);
             for (var name : names) {
-                if (Set.of("of", "left", "right", "rels", "id").contains(name)) {
-                    continue;
-                }
-                if (!sameArguments(left.path(name), right.path(name))) {
-                    return false;
-                }
+                if (Set.of("of", "left", "right", "rels", "id").contains(name)) continue;
+                if (!sameArguments(left.path(name), right.path(name))) return false;
             }
             return true;
         }
         if (left.isArray() && right.isArray()) {
-            if (left.size() != right.size()) {
-                return false;
-            }
-            for (int i = 0; i < left.size(); i++) {
-                if (!sameArguments(left.get(i), right.get(i))) {
-                    return false;
-                }
-            }
+            if (left.size() != right.size()) return false;
+            for (int i = 0; i < left.size(); i++) if (!sameArguments(left.get(i), right.get(i))) return false;
             return true;
         }
         return left.equals(right);
     }
 
     private static void checkProj(ObjectNode proj, boolean from, Set<String> projs) {
-        if (from) {
-            projs.add(proj.path("name").asText());
-        }
-        if (!from && !projs.contains(proj.path("name").asText())) {
-            throw new UnsupportedOperationException("Unsupported unbound projection symbol: "
-                    + proj.path("name").asText());
-        }
+        if (from) projs.add(proj.path("name").asText());
         checkArgs(proj, from, projs);
     }
 
@@ -754,29 +521,15 @@ public final class CockroachGenerator {
             switch (arg.path("op").asText()) {
                 case "field", "joinfield", "row" -> { }
                 case "group_key" -> {
-                    if (!symbol.path("op").asText().equals("agg")) {
-                        throw new UnsupportedOperationException("Unsupported symbol argument: group_key");
-                    }
                 }
                 case "scalar" -> {
-                    if (!symbol.path("op").asText().equals("proj")) {
-                        throw new UnsupportedOperationException("Unsupported symbol argument: scalar");
-                    }
                     checkScalar((ObjectNode) arg, from, activePreds, projs);
                 }
                 case "proj" -> {
-                    if (from && !symbol.path("op").asText().equals("pred") && !symbol.path("op").asText().equals("proj")) {
-                        throw new UnsupportedOperationException("Unsupported bound symbol argument: proj");
-                    }
                     checkProj((ObjectNode) arg, from, projs);
                 }
                 case "true", "false", "int" -> {
-                    if (from) {
-                        throw new UnsupportedOperationException("Unsupported symbol argument: " + arg.path("op").asText());
-                    }
                 }
-                default -> throw new UnsupportedOperationException("Unsupported symbol argument: "
-                        + arg.path("op").asText());
             }
         }
     }
@@ -792,29 +545,17 @@ public final class CockroachGenerator {
             case RelRN.Scan scan -> {
                 node.put("op", "scan");
                 node.put("name", scan.name());
-                if (scan.unique()) {
-                    node.put("unique", true);
-                }
-                if (scan.unique() || !scan.ty().isNullable()) {
-                    node.put("arity", 1);
-                }
-                if (!scan.ty().isNullable()) {
-                    node.putArray("non_null").add(0);
-                }
+                if (scan.unique()) node.put("unique", true);
+                if (scan.unique() || !scan.ty().isNullable()) node.put("arity", 1);
+                if (!scan.ty().isNullable()) node.putArray("non_null").add(0);
             }
             case RelRN.ScanMany scan -> {
                 node.put("op", "scan");
                 node.put("name", scan.name());
                 node.put("arity", scan.tys().size());
                 var nonNull = node.putArray("non_null");
-                for (int i = 0; i < scan.tys().size(); i++) {
-                    if (!scan.tys().get(i).isNullable()) {
-                        nonNull.add(i);
-                    }
-                }
-                if (nonNull.isEmpty()) {
-                    node.remove("non_null");
-                }
+                for (int i = 0; i < scan.tys().size(); i++) if (!scan.tys().get(i).isNullable()) nonNull.add(i);
+                if (nonNull.isEmpty()) node.remove("non_null");
             }
             case RelRN.Empty empty -> {
                 node.put("op", "empty");
@@ -838,9 +579,7 @@ public final class CockroachGenerator {
                 node.set("input", rel(project.source(), tagged));
             }
             case RelRN.Join join -> {
-                if (!(join.ty() instanceof RelRN.Join.JoinType.ConcreteJoinType concrete)) {
-                    throw unsupported(rel);
-                }
+                if (!(join.ty() instanceof RelRN.Join.JoinType.ConcreteJoinType concrete)) throw unsupported(rel);
                 node.put("op", "join");
                 node.put("type", concrete.type().name().toLowerCase());
                 node.set("cond", rex(join.cond(), tagged, join));
@@ -849,9 +588,6 @@ public final class CockroachGenerator {
             }
             case RelRN.Correlate corr -> {
                 var type = corr.ty().name().toLowerCase();
-                if (!Set.of("inner", "semi", "left", "anti").contains(type)) {
-                    throw new UnsupportedOperationException("Unsupported Correlate join type: " + type);
-                }
                 node.put("op", "join");
                 node.put("type", type);
                 node.put("apply", true);
@@ -859,12 +595,9 @@ public final class CockroachGenerator {
                 node.set("left", rel(corr.left(), tagged));
                 node.set("right", rel(corr.right(), tagged));
             }
-            case RelRN.Union union -> set(node, "union", union.all(), union.sources(), tagged,
-                    sources -> new RelRN.Union(union.all(), sources));
-            case RelRN.Intersect intersect -> set(node, "intersect", intersect.all(), intersect.sources(), tagged,
-                    sources -> new RelRN.Intersect(intersect.all(), sources));
-            case RelRN.Minus minus -> set(node, "except", minus.all(), minus.sources(), tagged,
-                    sources -> new RelRN.Minus(minus.all(), sources));
+            case RelRN.Union union -> set(node, "union", union.all(), union.sources(), tagged, sources -> new RelRN.Union(union.all(), sources));
+            case RelRN.Intersect intersect -> set(node, "intersect", intersect.all(), intersect.sources(), tagged, sources -> new RelRN.Intersect(intersect.all(), sources));
+            case RelRN.Minus minus -> set(node, "except", minus.all(), minus.sources(), tagged, sources -> new RelRN.Minus(minus.all(), sources));
             case RelRN.Aggregate aggregate -> {
                 node.put("op", "aggregate");
                 var groups = MAPPER.createArrayNode();
@@ -876,38 +609,28 @@ public final class CockroachGenerator {
                 node.set("input", rel(aggregate.source(), tagged));
             }
             default -> {
-                if (!(rel.semantics() instanceof org.apache.calcite.rel.core.Values values)) {
-                    return lifted(rel, tagged);
-                }
+                if (!(rel.semantics() instanceof org.apache.calcite.rel.core.Values values)) return lifted(rel, tagged);
                 node.put("op", "values");
                 var rows = node.putArray("rows");
                 for (var tuple : values.getTuples()) {
                     var row = rows.addArray();
                     for (var literal : tuple) {
-                        if (literal.isNull()) {
-                            throw new UnsupportedOperationException("Unsupported Values literal: " + literal);
-                        }
                         var cell = row.addObject();
                         if (literal.getType().getSqlTypeName() == org.apache.calcite.sql.type.SqlTypeName.INTEGER) {
                             cell.put("op", "int");
                             cell.put("value", literal.getValueAs(Integer.class));
                         } else if (literal.getType().getSqlTypeName() == org.apache.calcite.sql.type.SqlTypeName.BOOLEAN) {
                             cell.put("op", Boolean.TRUE.equals(literal.getValueAs(Boolean.class)) ? "true" : "false");
-                        } else {
-                            throw new UnsupportedOperationException("Unsupported Values literal: " + literal);
                         }
                     }
                 }
             }
         }
-        if (tagged) {
-            node.put("id", id(rel));
-        }
+        if (tagged) node.put("id", id(rel));
         return node;
     }
 
-    private void set(ObjectNode node, String type, boolean all, Seq<RelRN> sources, boolean tagged,
-                     java.util.function.Function<Seq<RelRN>, RelRN> make) {
+    private void set(ObjectNode node, String type, boolean all, Seq<RelRN> sources, boolean tagged, java.util.function.Function<Seq<RelRN>, RelRN> make) {
         if (sources.size() == 1) {
             node.setAll(rel(sources.get(0), tagged));
             return;
@@ -917,9 +640,6 @@ public final class CockroachGenerator {
             node.setAll(rel(make.apply(Seq.of(left, sources.get(sources.size() - 1))), tagged));
             return;
         }
-        if (sources.isEmpty()) {
-            throw new UnsupportedOperationException("Unsupported set operation arity: 0");
-        }
         node.put("op", "set");
         node.put("type", type);
         node.put("all", all);
@@ -928,10 +648,6 @@ public final class CockroachGenerator {
     }
 
     private ObjectNode aggCall(RelRN.AggCall agg, boolean tagged, RelRN context) {
-        if (agg.operator() != null && !(agg.operator() instanceof org.qed.RuleBuilder.QedAggregateFunction)) {
-            throw new UnsupportedOperationException("Unsupported concrete aggregate operator: "
-                    + agg.operator().getName());
-        }
         var node = MAPPER.createObjectNode();
         node.put("op", "agg");
         node.put("name", agg.name());
@@ -954,14 +670,12 @@ public final class CockroachGenerator {
                 }
             }
             case RexRN.Proj proj -> {
-                if (proj.operator().getKind() == org.apache.calcite.sql.SqlKind.MINUS_PREFIX
-                        || proj.operator().getKind() == org.apache.calcite.sql.SqlKind.MINUS) {
+                if (proj.operator().getKind() == org.apache.calcite.sql.SqlKind.MINUS_PREFIX || proj.operator().getKind() == org.apache.calcite.sql.SqlKind.MINUS) {
                     node.put("op", "scalar");
                     node.put("operator", "-");
                     var args = node.putArray("args");
                     proj.sources().forEach(s -> args.add(rex(s, tagged, context)));
-                } else if (proj.operator() instanceof org.qed.RuleBuilder.QedFunction
-                        && proj.operator().getName().equals(CASE_OPERATOR) && proj.sources().size() == 3) {
+                } else if (proj.operator() instanceof org.qed.RuleBuilder.QedFunction && proj.operator().getName().equals(CASE_OPERATOR) && proj.sources().size() == 3) {
                     node.put("op", "scalar");
                     node.put("operator", "if");
                     var args = node.putArray("args");
@@ -976,10 +690,6 @@ public final class CockroachGenerator {
                 }
             }
             case RexRN.GroupBy group -> {
-                if (!(group.operator() instanceof org.qed.RuleBuilder.QedFunction)) {
-                    throw new UnsupportedOperationException("Unsupported concrete grouping operator: "
-                            + group.operator().getName());
-                }
                 symbol(node, "group_key", group.operator().getName(), group.sources(), tagged, context);
             }
             case RexRN.And and -> list(node, "and", and.sources(), tagged, context);
@@ -1040,12 +750,7 @@ public final class CockroachGenerator {
                             }
                         }
                     } catch (ReflectiveOperationException e) {
-                        throw new UnsupportedOperationException("Unsupported Exists relation access: "
-                                + constructName(rex.getClass()), e);
-                    }
-                    if (body == null) {
-                        throw new UnsupportedOperationException("Unsupported Exists relation component: "
-                                + constructName(rex.getClass()));
+                        throw new UnsupportedOperationException("Unsupported Exists relation access: " + constructName(rex.getClass()), e);
                     }
                     var exists = MAPPER.createObjectNode();
                     exists.put("op", "exists");
@@ -1067,27 +772,13 @@ public final class CockroachGenerator {
                         node.put("type", "int");
                     } else if (literal.getType() instanceof org.qed.RelType.VarType) {
                         var refs = typeRefs.get(literal.getType().toString());
-                        if (refs == null || refs.isEmpty()) {
-                            throw new UnsupportedOperationException("Unsupported unbound NULL type variable: "
-                                    + literal.getType());
-                        }
                         node.put("type", "same_as");
                         var out = node.putArray("refs");
-                        for (var ref : refs) {
-                            out.addObject().put("of", ref.of()).put("ordinal", ref.ordinal());
-                        }
-                    } else {
-                        throw new UnsupportedOperationException("Unsupported NULL literal type: "
-                                + literal.getType());
+                        for (var ref : refs) out.addObject().put("of", ref.of()).put("ordinal", ref.ordinal());
                     }
-                } else if (rex.semantics() instanceof org.apache.calcite.rex.RexLiteral literal
-                        && (literal.getType().getSqlTypeName() == org.apache.calcite.sql.type.SqlTypeName.INTEGER
-                        || literal.getType().getSqlTypeName() == org.apache.calcite.sql.type.SqlTypeName.BIGINT)) {
+                } else if (rex.semantics() instanceof org.apache.calcite.rex.RexLiteral literal && (literal.getType().getSqlTypeName() == org.apache.calcite.sql.type.SqlTypeName.INTEGER || literal.getType().getSqlTypeName() == org.apache.calcite.sql.type.SqlTypeName.BIGINT)) {
                     node.put("op", "int");
                     node.put("value", literal.getValueAs(Integer.class));
-                } else {
-                    throw new UnsupportedOperationException("Unsupported expression construct: "
-                            + constructName(rex.getClass()));
                 }
             }
         }
@@ -1095,11 +786,8 @@ public final class CockroachGenerator {
     }
 
     private static boolean endsInExists(org.apache.calcite.rex.RexNode node) {
-        if (node instanceof org.apache.calcite.rex.RexCall call && call.getKind() == org.apache.calcite.sql.SqlKind.AND) {
-            node = call.getOperands().get(call.getOperands().size() - 1);
-        }
-        return node instanceof org.apache.calcite.rex.RexSubQuery subquery
-                && subquery.getKind() == org.apache.calcite.sql.SqlKind.EXISTS;
+        if (node instanceof org.apache.calcite.rex.RexCall call && call.getKind() == org.apache.calcite.sql.SqlKind.AND) node = call.getOperands().get(call.getOperands().size() - 1);
+        return node instanceof org.apache.calcite.rex.RexSubQuery subquery && subquery.getKind() == org.apache.calcite.sql.SqlKind.EXISTS;
     }
 
     private record Lift(List<RelRN> rels) { }
@@ -1111,16 +799,13 @@ public final class CockroachGenerator {
         var components = custom.getClass().getRecordComponents();
         if (components != null) {
             for (var component : components) {
-                if (!RelRN.class.isAssignableFrom(component.getType())) {
-                    continue;
-                }
+                if (!RelRN.class.isAssignableFrom(component.getType())) continue;
                 try {
                     var accessor = component.getAccessor();
                     accessor.setAccessible(true);
                     rels.add((RelRN) accessor.invoke(custom));
                 } catch (ReflectiveOperationException e) {
-                    throw new UnsupportedOperationException("Unsupported relation component: "
-                            + constructName(custom.getClass()), e);
+                    throw new UnsupportedOperationException("Unsupported relation component: " + constructName(custom.getClass()), e);
                 }
             }
         }
@@ -1132,11 +817,7 @@ public final class CockroachGenerator {
     }
 
     private ObjectNode liftRel(RelNode node, Lift lift, boolean tagged) {
-        for (var slot : lift.rels()) {
-            if (slot.semantics().deepEquals(node)) {
-                return rel(slot, tagged);
-            }
-        }
+        for (var slot : lift.rels()) if (slot.semantics().deepEquals(node)) return rel(slot, tagged);
         var out = MAPPER.createObjectNode();
         switch (node) {
             case TableScan scan -> {
@@ -1146,14 +827,8 @@ public final class CockroachGenerator {
                 var columns = scan.getRowType().getFieldList();
                 out.put("arity", columns.size());
                 var nonNull = MAPPER.createArrayNode();
-                for (int i = 0; i < columns.size(); i++) {
-                    if (!columns.get(i).getType().isNullable()) {
-                        nonNull.add(i);
-                    }
-                }
-                if (!nonNull.isEmpty()) {
-                    out.set("non_null", nonNull);
-                }
+                for (int i = 0; i < columns.size(); i++) if (!columns.get(i).getType().isNullable()) nonNull.add(i);
+                if (!nonNull.isEmpty()) out.set("non_null", nonNull);
             }
             case LogicalFilter filter -> {
                 filter.getVariablesSet().forEach(id -> correlations.put(id, filter.getInput()));
@@ -1161,7 +836,8 @@ public final class CockroachGenerator {
                 out.set("cond", liftRex(filter.getCondition(), filter.getInput(), lift, tagged));
                 out.set("input", liftRel(filter.getInput(), lift, tagged));
             }
-            case LogicalJoin join -> {
+            default -> {
+                var join = (LogicalJoin) node;
                 join.getVariablesSet().forEach(id -> correlations.put(id, join));
                 out.put("op", "join");
                 out.put("type", join.getJoinType().name().toLowerCase());
@@ -1169,12 +845,8 @@ public final class CockroachGenerator {
                 out.set("left", liftRel(join.getLeft(), lift, tagged));
                 out.set("right", liftRel(join.getRight(), lift, tagged));
             }
-            default -> throw new UnsupportedOperationException("Unsupported relational operator: "
-                    + node.getRelTypeName());
         }
-        if (tagged) {
-            out.put("id", liftId(node, lift));
-        }
+        if (tagged) out.put("id", liftId(node, lift));
         return out;
     }
 
@@ -1201,9 +873,6 @@ public final class CockroachGenerator {
             }
             case RexFieldAccess access when access.getReferenceExpr() instanceof RexCorrelVariable variable -> {
                 var owner = correlations.get(variable.id);
-                if (owner == null) {
-                    throw new UnsupportedOperationException("Unsupported correlation variable outside its scope");
-                }
                 return liftField(owner, access.getField().getIndex(), lift, tagged);
             }
             case RexLiteral literal -> literal(out, literal);
@@ -1214,23 +883,17 @@ public final class CockroachGenerator {
                         out.set("input", liftRel(subQuery.rel, lift, tagged));
                     }
                     case IN -> {
-                        if (subQuery.getOperands().size() != 1) {
-                            throw new UnsupportedOperationException("Unsupported multi-column IN subquery");
-                        }
                         out.put("op", "any");
                         out.put("cmp", "=");
                         out.set("scalar", liftRex(subQuery.getOperands().get(0), context, lift, tagged));
                         out.set("input", liftRel(subQuery.rel, lift, tagged));
                     }
-                    default -> throw new UnsupportedOperationException("Unsupported subquery: "
-                            + subQuery.getKind());
                 }
             }
-            case RexCall call -> {
+            default -> {
+                var call = (RexCall) rex;
                 var args = MAPPER.createArrayNode();
-                for (var operand : call.getOperands()) {
-                    args.add(liftRex(operand, context, lift, tagged));
-                }
+                for (var operand : call.getOperands()) args.add(liftRex(operand, context, lift, tagged));
                 switch (call.getKind()) {
                     case NOT -> {
                         out.put("op", "not");
@@ -1251,7 +914,6 @@ public final class CockroachGenerator {
                     }
                 }
             }
-            default -> throw new UnsupportedOperationException("Unsupported expression construct: " + rex);
         }
         return out;
     }
@@ -1266,34 +928,20 @@ public final class CockroachGenerator {
                 node.put("type", "int");
             } else if (literal.getType() instanceof org.qed.RelType.VarType) {
                 var refs = typeRefs.get(literal.getType().toString());
-                if (refs == null || refs.isEmpty()) {
-                    throw new UnsupportedOperationException("Unsupported unbound NULL type variable: "
-                            + literal.getType());
-                }
                 node.put("type", "same_as");
                 var out = node.putArray("refs");
-                for (var ref : refs) {
-                    out.addObject().put("of", ref.of()).put("ordinal", ref.ordinal());
-                }
-            } else {
-                throw new UnsupportedOperationException("Unsupported NULL literal type: " + literal.getType());
+                for (var ref : refs) out.addObject().put("of", ref.of()).put("ordinal", ref.ordinal());
             }
         } else if (sqlType == org.apache.calcite.sql.type.SqlTypeName.INTEGER) {
             node.put("op", "int");
             node.put("value", literal.getValueAs(Integer.class));
         } else if (sqlType == org.apache.calcite.sql.type.SqlTypeName.BOOLEAN) {
             node.put("op", Boolean.TRUE.equals(literal.getValueAs(Boolean.class)) ? "true" : "false");
-        } else {
-            throw new UnsupportedOperationException("Unsupported literal: " + literal);
         }
     }
 
-    private void singletonMembership(ObjectNode node, String op, RexRN.Or or,
-                                     boolean tagged, RelRN context) {
-        if (!(or.sources().get(0) instanceof RexRN.Pred pred)
-                || !pred.operator().getName().equals("=") || pred.sources().size() != 2) {
-            throw new UnsupportedOperationException("Unsupported unary or operand: expected binary equality");
-        }
+    private void singletonMembership(ObjectNode node, String op, RexRN.Or or, boolean tagged, RelRN context) {
+        var pred = (RexRN.Pred) or.sources().get(0);
         node.put("op", op);
         var args = node.putArray("args");
         pred.sources().forEach(s -> args.add(rex(s, tagged, context)));
@@ -1333,30 +981,22 @@ public final class CockroachGenerator {
     }
 
     private static java.util.List<RelRN> wholeRow(Seq<RexRN> sources) {
-        if (sources.isEmpty()) {
-            return null;
-        }
+        if (sources.isEmpty()) return null;
         if (sources.allMatch(s -> s instanceof RexRN.Field)) {
             var source = ((RexRN.Field) sources.get(0)).source();
             var count = source.semantics().getRowType().getFieldCount();
             for (var i = 0; i < sources.size(); i++) {
                 var field = (RexRN.Field) sources.get(i);
-                if (!field.source().equals(source) || field.ordinal() != i) {
-                    return null;
-                }
+                if (!field.source().equals(source) || field.ordinal() != i) return null;
             }
             return sources.size() == count ? java.util.List.of(source) : null;
         }
         if (sources.allMatch(s -> s instanceof RexRN.JoinField)) {
             var first = (RexRN.JoinField) sources.get(0);
-            var total = first.left().semantics().getRowType().getFieldCount()
-                    + first.right().semantics().getRowType().getFieldCount();
+            var total = first.left().semantics().getRowType().getFieldCount() + first.right().semantics().getRowType().getFieldCount();
             for (var i = 0; i < sources.size(); i++) {
                 var field = (RexRN.JoinField) sources.get(i);
-                if (!field.left().equals(first.left()) || !field.right().equals(first.right())
-                        || field.ordinal() != i) {
-                    return null;
-                }
+                if (!field.left().equals(first.left()) || !field.right().equals(first.right()) || field.ordinal() != i) return null;
             }
             return sources.size() == total ? java.util.List.of(first.left(), first.right()) : null;
         }
@@ -1368,12 +1008,8 @@ public final class CockroachGenerator {
     }
 
     private static String constructName(Class<?> type) {
-        if (type.isSynthetic()) {
-            return "Java lambda";
-        }
-        if (type.isAnonymousClass()) {
-            return "anonymous " + type.getInterfaces()[0].getSimpleName();
-        }
+        if (type.isSynthetic()) return "Java lambda";
+        if (type.isAnonymousClass()) return "anonymous " + type.getInterfaces()[0].getSimpleName();
         return type.getSimpleName();
     }
 }

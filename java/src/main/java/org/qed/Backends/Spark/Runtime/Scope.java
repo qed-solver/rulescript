@@ -19,9 +19,7 @@ final class Scope {
 
     Map<String, List<Attribute>> input(String id) {
         var scope = new HashMap<String, List<Attribute>>();
-        if (inner.containsKey(id)) {
-            scope.putAll(inner.get(id));
-        }
+        if (inner.containsKey(id)) scope.putAll(inner.get(id));
         scope.put(id, get(id));
         scope.put(JOIN, get(id));
         return scope;
@@ -30,9 +28,7 @@ final class Scope {
     List<Attribute> get(String id) {
         for (int i = nested.size() - 1; i >= 0; i--) {
             var found = nested.get(i).get(id);
-            if (found != null) {
-                return found;
-            }
+            if (found != null) return found;
         }
         return global.get(id);
     }
@@ -50,16 +46,8 @@ final class Scope {
     }
 
     boolean visible(ExprId id) {
-        if (nested.isEmpty()) {
-            return false;
-        }
-        for (var columns : nested.get(nested.size() - 1).values()) {
-            for (var column : columns) {
-                if (column.exprId().equals(id)) {
-                    return true;
-                }
-            }
-        }
+        if (nested.isEmpty()) return false;
+        for (var columns : nested.get(nested.size() - 1).values()) for (var column : columns) if (column.exprId().equals(id)) return true;
         return false;
     }
 
@@ -82,9 +70,7 @@ final class Scope {
     private List<Attribute> find(String key) {
         for (int i = nested.size() - 1; i >= 0; i--) {
             var found = nested.get(i).get(key);
-            if (found != null) {
-                return found;
-            }
+            if (found != null) return found;
         }
         return null;
     }
@@ -104,9 +90,7 @@ final class Scope {
     List<Attribute> join() {
         for (int i = nested.size() - 1; i >= 0; i--) {
             var found = nested.get(i).get(JOIN);
-            if (found != null) {
-                return found;
-            }
+            if (found != null) return found;
         }
         return null;
     }
@@ -122,8 +106,7 @@ final class Scope {
         return inputs;
     }
 
-    static Map<String, List<Attribute>> over(String left, List<Attribute> leftColumns, String right,
-                                             List<Attribute> rightColumns) {
+    static Map<String, List<Attribute>> over(String left, List<Attribute> leftColumns, String right, List<Attribute> rightColumns) {
         var inputs = new HashMap<String, List<Attribute>>();
         inputs.put(left, leftColumns);
         inputs.put(right, rightColumns);

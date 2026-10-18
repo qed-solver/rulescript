@@ -17,7 +17,7 @@ func TestFoldNullTupleIsTupleNull(t *testing.T) {
 	e := newEnv(t)
 	src, _ := e.scan("t", 1)
 	before := e.f.ConstructSelect(src, e.filters(e.f.ConstructAnd(nullIsNull(e), nullIsNull(e))))
-	want := src
+	want := e.f.ConstructSelect(src, e.filters(e.f.ConstructTrue()))
 	e.expectRewrite(rule, before, want)
 	e.expectNoMatch(rule, e.f.ConstructSelect(src, e.filters(e.f.ConstructOr(nullIsNull(e), nullIsNull(e)))))
 	e.expectNoMatch(rule, e.f.ConstructSelect(src, e.filters(e.f.ConstructAnd(nullIsNull(e), e.f.ConstructIs(e.num(1), memo.NullSingleton)))))

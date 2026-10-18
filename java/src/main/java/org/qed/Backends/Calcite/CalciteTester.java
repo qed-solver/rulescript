@@ -21,12 +21,9 @@ public class CalciteTester {
     public static final String RULE_PACKAGE = "org.qed.RRuleInstances";
     public static final String TEST_PACKAGE = "org.qed.Backends.Calcite.Tests";
 
-    public static String genPath =
-            ProjectPaths.baseDir().resolve("src/main/java/org/qed/Backends/Calcite/Generated").toString();
-    public static String rulePath =
-            ProjectPaths.baseDir().resolve("src/main/java/org/qed/RRuleInstances").toString();
-    public static String testPath =
-            ProjectPaths.baseDir().resolve("src/main/java/org/qed/Backends/Calcite/Tests").toString();
+    public static String genPath = ProjectPaths.baseDir().resolve("src/main/java/org/qed/Backends/Calcite/Generated").toString();
+    public static String rulePath = ProjectPaths.baseDir().resolve("src/main/java/org/qed/RRuleInstances").toString();
+    public static String testPath = ProjectPaths.baseDir().resolve("src/main/java/org/qed/Backends/Calcite/Tests").toString();
 
     private static int failures = 0;
 
@@ -48,14 +45,6 @@ public class CalciteTester {
     public static HepPlanner loadRule(RelOptRule rule, int matchLimit) {
         System.out.printf("Loading Rule: %s (match limit: %d)\n", rule.getClass().getSimpleName(), matchLimit);
         return new HepPlanner(new HepProgramBuilder().addMatchLimit(matchLimit).addRuleInstance(rule).build());
-    }
-
-    public static HepPlanner loadRules(RelOptRule... rules) {
-        var builder = new HepProgramBuilder();
-        for (var rule : rules) {
-            builder.addRuleInstance(rule);
-        }
-        return new HepPlanner(builder.build());
     }
 
     public static Seq<RRule> ruleList() {
@@ -106,8 +95,7 @@ public class CalciteTester {
             var diagnostics = new javax.tools.DiagnosticCollector<javax.tools.JavaFileObject>();
             try (var fm = compiler.getStandardFileManager(diagnostics, null, null)) {
                 Files.createDirectories(outDir);
-                var ok = compiler.getTask(null, fm, diagnostics, List.of("-d", outDir.toString(), "-classpath",
-                        compileClasspath()), null, fm.getJavaFileObjects(source)).call();
+                var ok = compiler.getTask(null, fm, diagnostics, List.of("-d", outDir.toString(), "-classpath", compileClasspath()), null, fm.getJavaFileObjects(source)).call();
                 if (ok) {
                     compiled.add(name);
                     continue;
@@ -131,9 +119,7 @@ public class CalciteTester {
             var dir = Files.createTempDirectory("calcite-probe");
             new CalciteTester().serialize(rule, dir.toString());
             var classes = dir.resolve("classes");
-            if (compileGenerated(dir, List.of(rule.name()), classes).isEmpty()) {
-                throw new IllegalStateException("The generated code of " + rule.name() + " does not compile");
-            }
+            if (compileGenerated(dir, List.of(rule.name()), classes).isEmpty()) throw new IllegalStateException("The generated code of " + rule.name() + " does not compile");
             var loader = new GeneratedClassLoader(classes, CalciteTester.class.getClassLoader());
             var config = Class.forName(GENERATED_PACKAGE + "." + rule.name() + "$Config", true, loader);
             return (RelOptRule) config.getMethod("toRule").invoke(config.getField("DEFAULT").get(null));
@@ -147,11 +133,7 @@ public class CalciteTester {
         entries.add(System.getProperty("java.class.path"));
         for (var loader = Thread.currentThread().getContextClassLoader(); loader != null;
              loader = loader.getParent()) {
-            if (loader instanceof java.net.URLClassLoader urls) {
-                for (var url : urls.getURLs()) {
-                    entries.add(url.getPath());
-                }
-            }
+            if (loader instanceof java.net.URLClassLoader urls) for (var url : urls.getURLs()) entries.add(url.getPath());
         }
         return String.join(File.pathSeparator, entries);
     }
@@ -160,12 +142,9 @@ public class CalciteTester {
         GeneratedClassLoader(Path dir, ClassLoader parent) throws IOException {
             super(new java.net.URL[]{dir.toUri().toURL()}, parent);
         }
-
         @Override
         protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-            if (!name.startsWith(GENERATED_PACKAGE + ".")) {
-                return super.loadClass(name, resolve);
-            }
+            if (!name.startsWith(GENERATED_PACKAGE + ".")) return super.loadClass(name, resolve);
             synchronized (getClassLoadingLock(name)) {
                 var loaded = findLoadedClass(name);
                 if (loaded == null) {
@@ -175,9 +154,7 @@ public class CalciteTester {
                         loaded = super.loadClass(name, false);
                     }
                 }
-                if (resolve) {
-                    resolveClass(loaded);
-                }
+                if (resolve) resolveClass(loaded);
                 return loaded;
             }
         }
@@ -192,11 +169,8 @@ public class CalciteTester {
     }
 
     public static void runAllTests(java.util.Set<String> only) {
-        var testFiles = new File(testPath).listFiles((dir, name) -> name.endsWith("Test.java")
-                && (only.isEmpty() || only.contains(name.substring(0, name.length() - "Test.java".length()))));
-        if (testFiles == null) {
-            return;
-        }
+        var testFiles = new File(testPath).listFiles((dir, name) -> name.endsWith("Test.java") && (only.isEmpty() || only.contains(name.substring(0, name.length() - "Test.java".length()))));
+        if (testFiles == null) return;
         java.util.Arrays.sort(testFiles);
         for (var testFile : testFiles) {
             var className = TEST_PACKAGE + "." + testFile.getName().replace(".java", "");
@@ -223,11 +197,8 @@ public class CalciteTester {
         try (var files = Files.walk(outDir)) {
             files.sorted(java.util.Comparator.reverseOrder()).forEach(path -> path.toFile().delete());
         }
-        System.out.printf("Generated %d/%d rules, %d compiled, %d test failures%n", generated.size(), requested,
-                compiled.size(), failures);
-        if (generated.size() != requested || compiled.size() != generated.size() || failures > 0) {
-            System.exit(1);
-        }
+        System.out.printf("Generated %d/%d rules, %d compiled, %d test failures%n", generated.size(), requested, compiled.size(), failures);
+        if (generated.size() != requested || compiled.size() != generated.size() || failures > 0) System.exit(1);
     }
 
     public void serialize(RRule rule, String path) {

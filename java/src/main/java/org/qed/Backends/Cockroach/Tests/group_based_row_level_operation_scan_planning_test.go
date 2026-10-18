@@ -19,7 +19,9 @@ func TestGroupBasedRowLevelOperationScanPlanning(t *testing.T) {
 	want := e.f.ConstructInnerJoin(sel, oth, e.filters(rest), &memo.JoinPrivate{})
 	e.expectRewrite(rule, before, want)
 	e.expectNoMatch(rule, e.f.ConstructLeftJoin(tgt, oth, e.filters(eval1, eval2, rest), &memo.JoinPrivate{}))
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(tgt, oth, e.filters(eval1, eval2), &memo.JoinPrivate{}))
+	e.expectRewrite(rule, e.f.ConstructInnerJoin(tgt, oth, e.filters(eval1, eval2), &memo.JoinPrivate{}),
+		e.f.ConstructInnerJoin(sel, oth, nil, &memo.JoinPrivate{}))
 	otherSide := e.f.ConstructEq(e.v(oc[0]), e.num(1))
-	e.expectNoMatch(rule, e.f.ConstructInnerJoin(tgt, oth, e.filters(otherSide, eval2, rest), &memo.JoinPrivate{}))
+	e.expectRewrite(rule, e.f.ConstructInnerJoin(tgt, oth, e.filters(otherSide, eval2, rest), &memo.JoinPrivate{}),
+		e.f.ConstructInnerJoin(e.f.ConstructSelect(tgt, e.filters(eval2)), oth, e.filters(otherSide, rest), &memo.JoinPrivate{}))
 }

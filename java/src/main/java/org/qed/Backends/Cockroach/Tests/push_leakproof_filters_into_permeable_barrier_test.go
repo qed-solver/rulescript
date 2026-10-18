@@ -26,5 +26,8 @@ func TestPushLeakproofFiltersIntoPermeableBarrier(t *testing.T) {
 	nearMissLeak := e.f.ConstructEq(e.v(nearMissCols[0]), e.num(1))
 	nearMissRemaining := e.f.ConstructEq(e.v(nearMissCols[0]), e.num(2))
 	nearMiss := e.f.ConstructSelect(nearMissBarrier, e.filters(e.f.ConstructOr(nearMissLeak, nearMissRemaining)))
-	e.expectNoMatch(rule, nearMiss)
+	e.expectRewrite(rule, nearMiss, e.f.ConstructProject(
+		e.f.ConstructSelect(nearMissInput, e.filters(e.f.ConstructOr(nearMissLeak, nearMissRemaining))),
+		memo.ProjectionsExpr{}, opt.MakeColSet(nearMissCols[0])))
+	e.expectNoMatch(rule, e.f.ConstructSelect(nearMissInput, e.filters(nearMissLeak, nearMissRemaining)))
 }

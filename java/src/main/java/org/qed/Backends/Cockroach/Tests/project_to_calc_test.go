@@ -16,7 +16,8 @@ func TestProjectToCalc(t *testing.T) {
 	second := e.f.ConstructProjectionsItem(e.f.ConstructEq(e.v(cols[1]), e.num(2)), e.f.Metadata().AddColumn("second", types.Bool))
 	projections := memo.ProjectionsExpr{first, second}
 	before := e.f.ConstructProject(input, projections, opt.ColSet{})
-	e.expectAbsorbed(rule, before)
+	e.expectRewrite(rule, before, e.f.ConstructProject(
+		e.f.ConstructSelect(input, e.filters(e.f.ConstructTrue())), projections, opt.ColSet{}))
 
 	nearMiss := e.f.ConstructProject(input, memo.ProjectionsExpr{first}, opt.ColSet{})
 	e.expectNoMatch(rule, nearMiss)

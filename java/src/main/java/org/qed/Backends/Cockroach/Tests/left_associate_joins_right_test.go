@@ -22,5 +22,6 @@ func TestLeftAssociateJoinsRight(t *testing.T) {
 	e.expectRewrite(rule, before, want)
 
 	nearMiss := e.f.ConstructInnerJoin(beforeLeft, c, e.filters(pax), &memo.JoinPrivate{})
-	e.expectNoMatch(rule, nearMiss)
+	e.expectRewrite(rule, nearMiss, e.f.ConstructInnerJoin(a, e.f.ConstructInnerJoin(b, c, nil, &memo.JoinPrivate{}), e.filters(pax), &memo.JoinPrivate{}))
+	e.expectNoMatch(rule, e.f.ConstructLeftJoin(beforeLeft, c, e.filters(pax, pbu), &memo.JoinPrivate{}))
 }

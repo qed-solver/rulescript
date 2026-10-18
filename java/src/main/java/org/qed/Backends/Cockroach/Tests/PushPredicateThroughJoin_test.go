@@ -28,16 +28,35 @@ func TestPushPredicateThroughJoin(t *testing.T) {
 	)
 	e.expectRewrite(rule, before, want)
 
+	extraLeft, elc := e.scan("u", 1)
+	extraRight, erc := e.scan("t", 1)
+	extraJoin := e.f.ConstructEq(e.v(elc[0]), e.v(erc[0]))
+	extraConjunct := e.f.ConstructEq(e.v(elc[0]), e.num(3))
+	absorbed := e.f.ConstructSelect(
+		e.f.ConstructInnerJoin(extraLeft, extraRight, e.filters(extraJoin), &memo.JoinPrivate{}),
+		e.filters(
+			e.f.ConstructEq(e.v(elc[0]), e.num(1)),
+			e.f.ConstructEq(e.v(erc[0]), e.num(2)),
+			extraJoin,
+			extraConjunct,
+		),
+	)
+	e.expectRewrite(rule, absorbed, e.f.ConstructInnerJoin(
+		e.f.ConstructSelect(extraLeft, e.filters(e.f.ConstructEq(e.v(elc[0]), e.num(1)))),
+		e.f.ConstructSelect(extraRight, e.filters(e.f.ConstructEq(e.v(erc[0]), e.num(2)))),
+		e.filters(extraJoin, extraJoin, extraConjunct),
+		&memo.JoinPrivate{},
+	))
+
 	nearMissLeft, nlc := e.scan("u", 1)
 	nearMissRight, nrc := e.scan("t", 1)
 	nearMiss := e.f.ConstructSelect(
-		e.f.ConstructInnerJoin(nearMissLeft, nearMissRight,
+		e.f.ConstructLeftJoin(nearMissLeft, nearMissRight,
 			e.filters(e.f.ConstructEq(e.v(nlc[0]), e.v(nrc[0]))), &memo.JoinPrivate{}),
 		e.filters(
 			e.f.ConstructEq(e.v(nlc[0]), e.num(1)),
 			e.f.ConstructEq(e.v(nrc[0]), e.num(2)),
 			e.f.ConstructEq(e.v(nlc[0]), e.v(nrc[0])),
-			e.f.ConstructEq(e.v(nlc[0]), e.num(3)),
 		),
 	)
 	e.expectNoMatch(rule, nearMiss)

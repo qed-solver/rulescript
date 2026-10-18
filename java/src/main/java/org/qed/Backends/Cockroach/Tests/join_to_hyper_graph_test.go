@@ -25,5 +25,8 @@ func TestJoinToHyperGraph(t *testing.T) {
 
 	wrongBC := e.f.ConstructEq(e.v(ac[0]), e.v(cc[0]))
 	nearMiss := e.f.ConstructInnerJoin(beforeLeft, c, e.filters(acCond, wrongBC), &memo.JoinPrivate{})
-	e.expectNoMatch(rule, nearMiss)
+	repeated := e.f.ConstructInnerJoin(a, e.f.ConstructInnerJoin(b, c, nil, &memo.JoinPrivate{}),
+		e.filters(ab, acCond, wrongBC), &memo.JoinPrivate{})
+	e.expectRewrite(rule, nearMiss, repeated)
+	e.expectNoMatch(rule, e.f.ConstructLeftJoin(beforeLeft, c, e.filters(acCond, bcCond), &memo.JoinPrivate{}))
 }

@@ -27,5 +27,9 @@ func TestReorderJoin(t *testing.T) {
 	e.expectRewrite(rule, before, want)
 
 	nearMiss := e.f.ConstructInnerJoin(adc, b, e.filters(e.f.ConstructEq(e.v(ac[0]), e.v(bc[0]))), &memo.JoinPrivate{})
-	e.expectNoMatch(rule, nearMiss)
+	oneConjunct := e.f.ConstructInnerJoin(ab, d, nil, &memo.JoinPrivate{})
+	e.expectRewrite(rule, nearMiss, e.f.ConstructProject(
+		e.f.ConstructInnerJoin(oneConjunct, c, e.filters(e.f.ConstructEq(e.v(dc[0]), e.v(cc[0]))), &memo.JoinPrivate{}),
+		memo.ProjectionsExpr{}, opt.MakeColSet(ac[0], dc[0], cc[0], bc[0])))
+	e.expectNoMatch(rule, e.f.ConstructLeftJoin(adc, b, e.filters(e.f.ConstructEq(e.v(ac[0]), e.v(bc[0]))), &memo.JoinPrivate{}))
 }

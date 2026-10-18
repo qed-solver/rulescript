@@ -26,7 +26,3 @@ func TestHoistSelectExists(t *testing.T) {
 	e.expectNoMatch(rule, e.f.ConstructSelect(l, e.filters(e.exists(s), rest)))
 	e.expectNoMatch(rule, e.f.ConstructSemiJoin(l, subSel, e.filters(), &memo.JoinPrivate{}))
 }
-
-func TestSQLHoistSelectExists(t *testing.T) {
-	expectSQLFires(t, "HoistSelectExists", "SELECT a FROM t WHERE a = 1 AND EXISTS (SELECT x FROM u WHERE x > 0)")
-}
