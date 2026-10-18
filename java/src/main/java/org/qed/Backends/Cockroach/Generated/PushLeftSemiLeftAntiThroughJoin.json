@@ -1,0 +1,93 @@
+{
+  "name" : "PushLeftSemiLeftAntiThroughJoin",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "semi",
+    "cond" : {
+      "op" : "pred",
+      "name" : "S",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r4"
+      }, {
+        "op" : "field",
+        "ordinal" : 2,
+        "of" : "r4"
+      } ]
+    },
+    "left" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "pred",
+        "name" : "C",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r3" ]
+        } ]
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "X",
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "Y",
+        "id" : "r1"
+      },
+      "id" : "r3"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "Z",
+      "id" : "r2",
+      "arity" : 1
+    },
+    "id" : "r4"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "pred",
+      "name" : "C",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r6" ]
+      } ]
+    },
+    "left" : {
+      "op" : "join",
+      "type" : "semi",
+      "cond" : {
+        "op" : "pred",
+        "name" : "S",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r5" ]
+        } ]
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "X",
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "Z",
+        "id" : "r2",
+        "arity" : 1
+      },
+      "id" : "r5"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "Y",
+      "id" : "r1"
+    },
+    "id" : "r6"
+  }
+}

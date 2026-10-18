@@ -1,0 +1,75 @@
+{
+  "name" : "PruneProjectCols",
+  "from" : {
+    "op" : "project",
+    "input" : {
+      "op" : "project",
+      "input" : {
+        "op" : "scan",
+        "name" : "Source",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "exprs" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      }, {
+        "op" : "proj",
+        "name" : "Used",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "proj",
+        "name" : "Unused",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ],
+      "id" : "r1"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "Top",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r1"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r1"
+      } ]
+    } ],
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "Top",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      }, {
+        "op" : "proj",
+        "name" : "Used",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ]
+    } ],
+    "id" : "r3"
+  }
+}

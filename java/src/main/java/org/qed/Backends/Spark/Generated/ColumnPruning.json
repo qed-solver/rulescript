@@ -1,0 +1,109 @@
+{
+  "name" : "ColumnPruning",
+  "from" : {
+    "op" : "project",
+    "input" : {
+      "op" : "project",
+      "input" : {
+        "op" : "scan",
+        "name" : "R",
+        "arity" : 3,
+        "id" : "r0"
+      },
+      "exprs" : [ {
+        "op" : "proj",
+        "name" : "p2_c0",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "proj",
+        "name" : "p2_c1",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "proj",
+        "name" : "p2_c2",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "proj",
+        "name" : "p2_c3",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ],
+      "id" : "r1"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "g0",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r1"
+      } ]
+    }, {
+      "op" : "proj",
+      "name" : "g1",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 2,
+        "of" : "r1"
+      } ]
+    } ],
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "project",
+      "input" : {
+        "op" : "scan",
+        "name" : "R",
+        "arity" : 3,
+        "id" : "r0"
+      },
+      "exprs" : [ {
+        "op" : "proj",
+        "name" : "p2_c0",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "proj",
+        "name" : "p2_c2",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ],
+      "id" : "r3"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "g0",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r3"
+      } ]
+    }, {
+      "op" : "proj",
+      "name" : "g1",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r3"
+      } ]
+    } ],
+    "id" : "r4"
+  }
+}

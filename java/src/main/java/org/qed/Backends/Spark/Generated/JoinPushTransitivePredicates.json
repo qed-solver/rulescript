@@ -1,0 +1,107 @@
+{
+  "name" : "JoinPushTransitivePredicates",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "left" : {
+      "op" : "scan",
+      "name" : "LeftInput",
+      "arity" : 1,
+      "nonnull" : [ 0 ],
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "filter",
+      "input" : {
+        "op" : "scan",
+        "name" : "RightInput",
+        "arity" : 1,
+        "nonnull" : [ 0 ],
+        "id" : "r1"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "p",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r1" ]
+        } ]
+      },
+      "id" : "r2"
+    },
+    "cond" : {
+      "op" : "scalar",
+      "operator" : "=",
+      "args" : [ {
+        "op" : "joinfield",
+        "ordinal" : 0,
+        "left" : "r0",
+        "right" : "r1"
+      }, {
+        "op" : "joinfield",
+        "ordinal" : 1,
+        "left" : "r0",
+        "right" : "r1"
+      } ]
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "inner",
+    "left" : {
+      "op" : "filter",
+      "input" : {
+        "op" : "scan",
+        "name" : "LeftInput",
+        "arity" : 1,
+        "nonnull" : [ 0 ],
+        "id" : "r0"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "p",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "id" : "r4"
+    },
+    "right" : {
+      "op" : "filter",
+      "input" : {
+        "op" : "scan",
+        "name" : "RightInput",
+        "arity" : 1,
+        "nonnull" : [ 0 ],
+        "id" : "r1"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "p",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r1" ]
+        } ]
+      },
+      "id" : "r2"
+    },
+    "cond" : {
+      "op" : "scalar",
+      "operator" : "=",
+      "args" : [ {
+        "op" : "joinfield",
+        "ordinal" : 0,
+        "left" : "r0",
+        "right" : "r1"
+      }, {
+        "op" : "joinfield",
+        "ordinal" : 1,
+        "left" : "r0",
+        "right" : "r1"
+      } ]
+    },
+    "id" : "r5"
+  }
+}

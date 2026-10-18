@@ -1,0 +1,33 @@
+{
+  "name" : "RemoveEmptySingle",
+  "from" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "empty",
+      "of" : "r0",
+      "arity" : 1,
+      "id" : "r1"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r1"
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "f",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r1" ]
+      } ]
+    } ],
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "empty",
+    "of" : "r2",
+    "arity" : 2,
+    "id" : "r3"
+  }
+}

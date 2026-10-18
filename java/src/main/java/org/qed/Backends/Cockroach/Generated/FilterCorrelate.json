@@ -1,0 +1,111 @@
+{
+  "name" : "FilterCorrelate",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "p_left",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r2"
+        } ]
+      }, {
+        "op" : "pred",
+        "name" : "p_right",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r2"
+        } ]
+      }, {
+        "op" : "pred",
+        "name" : "p_both",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r2" ]
+        } ]
+      } ]
+    },
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "true"
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "L",
+        "id" : "r0",
+        "arity" : 1
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "R",
+        "id" : "r1",
+        "arity" : 1
+      },
+      "id" : "r2"
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "p_both",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r4" ]
+      } ]
+    },
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "true"
+      },
+      "left" : {
+        "op" : "filter",
+        "cond" : {
+          "op" : "pred",
+          "name" : "p_left",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        },
+        "input" : {
+          "op" : "scan",
+          "name" : "L",
+          "id" : "r0",
+          "arity" : 1
+        },
+        "id" : "r5"
+      },
+      "right" : {
+        "op" : "filter",
+        "cond" : {
+          "op" : "pred",
+          "name" : "p_right",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r1" ]
+          } ]
+        },
+        "input" : {
+          "op" : "scan",
+          "name" : "R",
+          "id" : "r1",
+          "arity" : 1
+        },
+        "id" : "r6"
+      },
+      "id" : "r4"
+    },
+    "id" : "r7"
+  }
+}

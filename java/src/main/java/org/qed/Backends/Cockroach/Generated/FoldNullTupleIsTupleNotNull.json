@@ -1,0 +1,44 @@
+{
+  "name" : "FoldNullTupleIsTupleNotNull",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "scalar",
+        "operator" : "IS NOT NULL",
+        "args" : [ {
+          "op" : "null",
+          "type" : "int"
+        } ]
+      }, {
+        "op" : "scalar",
+        "operator" : "IS NOT NULL",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ]
+      } ]
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "false"
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "id" : "r0"
+    },
+    "id" : "r2"
+  }
+}

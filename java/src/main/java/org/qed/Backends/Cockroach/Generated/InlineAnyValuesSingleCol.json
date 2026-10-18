@@ -1,0 +1,86 @@
+{
+  "name" : "InlineAnyValuesSingleCol",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "semi",
+    "cond" : {
+      "op" : "scalar",
+      "operator" : "=",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r2"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r2"
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "S",
+      "id" : "r0",
+      "arity" : 1
+    },
+    "right" : {
+      "op" : "set",
+      "type" : "union",
+      "all" : true,
+      "left" : {
+        "op" : "values",
+        "rows" : [ [ {
+          "op" : "int",
+          "value" : 1
+        } ] ],
+        "id" : "r3"
+      },
+      "right" : {
+        "op" : "values",
+        "rows" : [ [ {
+          "op" : "int",
+          "value" : 3
+        } ] ],
+        "id" : "r4"
+      },
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "or",
+      "args" : [ {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "int",
+          "value" : 1
+        } ]
+      }, {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "int",
+          "value" : 3
+        } ]
+      } ]
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "S",
+      "id" : "r0",
+      "arity" : 1
+    },
+    "id" : "r5"
+  }
+}

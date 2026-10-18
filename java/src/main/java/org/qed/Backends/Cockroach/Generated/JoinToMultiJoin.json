@@ -1,0 +1,98 @@
+{
+  "name" : "JoinToMultiJoin",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "pred",
+      "name" : "C",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r4" ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "X",
+      "id" : "r0",
+      "arity" : 1
+    },
+    "right" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "pred",
+        "name" : "Fm",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r3" ]
+        } ]
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "Y",
+        "id" : "r1"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "Z",
+        "id" : "r2"
+      },
+      "id" : "r3"
+    },
+    "id" : "r4"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "Fm",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r6"
+        }, {
+          "op" : "field",
+          "ordinal" : 2,
+          "of" : "r6"
+        } ]
+      }, {
+        "op" : "pred",
+        "name" : "C",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r6" ]
+        } ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "X",
+      "id" : "r0",
+      "arity" : 1
+    },
+    "right" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "true"
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "Y",
+        "id" : "r1"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "Z",
+        "id" : "r2"
+      },
+      "id" : "r5"
+    },
+    "id" : "r6"
+  }
+}

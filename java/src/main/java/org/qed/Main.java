@@ -11,9 +11,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 
-/**
- * The Main logic of Qed-Parser.
- */
 public class Main {
 
     public static void main(String[] args) {
@@ -22,11 +19,6 @@ public class Main {
         }
     }
 
-    /**
-     * Parse a file or a directory of files.
-     *
-     * @param path The input path.
-     */
 
     public static void parseFile(String path) {
         String type = FilenameUtils.getExtension(path);
@@ -44,11 +36,6 @@ public class Main {
         }
     }
 
-    /**
-     * Parse a .sql file.
-     *
-     * @param filename The input filename.
-     */
 
     private static void parseSQLFile(String filename) {
         try {
@@ -84,16 +71,6 @@ public class Main {
         }
     }
 
-    /**
-     * Assuming that the .cos file is always in the following format:<br>
-     * schema schema_name(column:int, ...);<br>
-     * table table_name(schema_name);<br>
-     * query _ `query_body`; <br>
-     * The .cos file will be translated to a .sql file, which contains the translated SQL statement.
-     * Then the .sql file will be passed to parseSQLFile(...) and will not be deleted after it is used.
-     *
-     * @param filename The input .cos filename
-     */
     private static void parseCOSFile(String filename) {
         try {
             Scanner scanner = new Scanner(new File(filename));

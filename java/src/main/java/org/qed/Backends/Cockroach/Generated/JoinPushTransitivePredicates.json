@@ -1,0 +1,104 @@
+{
+  "name" : "JoinPushTransitivePredicates",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "scalar",
+      "operator" : "=",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r2"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r2"
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "LeftInput",
+      "arity" : 1,
+      "non_null" : [ 0 ],
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "pred",
+        "name" : "p",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r1" ]
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "RightInput",
+        "arity" : 1,
+        "non_null" : [ 0 ],
+        "id" : "r1"
+      },
+      "id" : "r3"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "scalar",
+      "operator" : "=",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r4"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r4"
+      } ]
+    },
+    "left" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "pred",
+        "name" : "p",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "LeftInput",
+        "arity" : 1,
+        "non_null" : [ 0 ],
+        "id" : "r0"
+      },
+      "id" : "r5"
+    },
+    "right" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "pred",
+        "name" : "p",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r1" ]
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "RightInput",
+        "arity" : 1,
+        "non_null" : [ 0 ],
+        "id" : "r1"
+      },
+      "id" : "r3"
+    },
+    "id" : "r4"
+  }
+}

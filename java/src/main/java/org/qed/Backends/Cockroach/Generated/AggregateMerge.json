@@ -1,0 +1,69 @@
+{
+  "name" : "AggregateMerge",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "aggregate",
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r1"
+    } ],
+    "aggs" : [ ],
+    "input" : {
+      "op" : "aggregate",
+      "groups" : [ {
+        "op" : "group_key",
+        "name" : "k1",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ]
+      }, {
+        "op" : "group_key",
+        "name" : "k2",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ]
+      } ],
+      "aggs" : [ {
+        "op" : "agg",
+        "name" : "v",
+        "distinct" : false,
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ]
+      } ],
+      "input" : {
+        "op" : "scan",
+        "name" : "S",
+        "id" : "r0"
+      },
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "groups" : [ {
+      "op" : "group_key",
+      "name" : "k1",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ]
+    } ],
+    "aggs" : [ ],
+    "input" : {
+      "op" : "scan",
+      "name" : "S",
+      "id" : "r0"
+    },
+    "id" : "r3"
+  }
+}

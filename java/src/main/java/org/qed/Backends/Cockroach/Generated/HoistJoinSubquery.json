@@ -1,0 +1,96 @@
+{
+  "name" : "HoistJoinSubquery",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "on_cond",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r3" ]
+        } ]
+      }, {
+        "op" : "exists",
+        "input" : {
+          "op" : "filter",
+          "cond" : {
+            "op" : "pred",
+            "name" : "sub_pred",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r2" ]
+            } ]
+          },
+          "input" : {
+            "op" : "scan",
+            "name" : "S",
+            "id" : "r2"
+          },
+          "id" : "r4"
+        }
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "R",
+      "id" : "r1"
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "pred",
+      "name" : "on_cond",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r5" ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "exists",
+        "input" : {
+          "op" : "filter",
+          "cond" : {
+            "op" : "pred",
+            "name" : "sub_pred",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r2" ]
+            } ]
+          },
+          "input" : {
+            "op" : "scan",
+            "name" : "S",
+            "id" : "r2"
+          },
+          "id" : "r4"
+        }
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "R",
+        "id" : "r1"
+      },
+      "id" : "r6"
+    },
+    "id" : "r5"
+  }
+}

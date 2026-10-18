@@ -1,56 +1,46 @@
 package org.qed.Backends.Calcite.Tests;
 
-import kala.collection.Seq;
-import kala.tuple.Tuple;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.tools.RelBuilder;
+import org.apache.calcite.rel.RelNode;
 import org.qed.Backends.Calcite.CalciteTester;
-import org.qed.RelType;
+import org.qed.RRuleInstances.ProjectMerge;
 import org.qed.RuleBuilder;
 
-public class ProjectMergeTest {
+import java.util.List;
 
+public class ProjectMergeTest {
     public static void runTest() {
-        var tester = new CalciteTester();
+        var rule = new ProjectMerge();
+        RuleChecks.rewritesPattern(rule);
+        RuleChecks.rewritesConcretePredicates(rule);
+        RuleChecks.rejectsNearMisses(rule);
+        ordinaryTables(rule);
+    }
+
+    private static void ordinaryTables(ProjectMerge rule) {
         var builder = RuleBuilder.create();
-        
-        // Create a source table with 3 fields
-        var sourceTable = builder.createQedTable(Seq.of(
-            Tuple.of(RelType.fromString("INTEGER", true), false),  // field 0
-            Tuple.of(RelType.fromString("INTEGER", true), false),  // field 1
-            Tuple.of(RelType.fromString("INTEGER", true), false)   // field 2
-        ));
-        builder.addTable(sourceTable);
-        
-        var scan = builder.scan(sourceTable.getName()).build();
-        
-        // Before: scan → project(f0, f1) → project(field(1), field(0))
-        // Inner projection selects f0, f1 from source
-        // Outer projection reorders them to f1, f0
-        var before = builder
-            .push(scan)
-            .project(
-                builder.field(0),  // f0
-                builder.field(1)   // f1
-            )
-            .project(
-                builder.field(1),  // selects field 1 from inner projection (which is f1)
-                builder.field(0)   // selects field 0 from inner projection (which is f0)
-            )
-            .build();
-        
-        // After: scan → project(f1, f0)
-        // Single merged projection directly selects f1, f0 from source
-        var after = builder
-            .push(scan)
-            .project(
-                builder.field(1),  // f1 directly from source
-                builder.field(0)   // f0 directly from source
-            )
-            .build();
-            
-        var runner = CalciteTester.loadRule(
-            org.qed.Backends.Calcite.Generated.ProjectMerge.Config.DEFAULT.toRule()
-        );
-        tester.verify(runner, before, after);
+        var table = RuleChecks.table(builder, 1, false);
+        var beforeBuilder = RuleChecks.ruleBuilder(builder);
+        beforeBuilder.scan(table);
+        beforeBuilder.project(List.of(beforeBuilder.call(SqlStdOperatorTable.ABS, beforeBuilder.field(0))));
+        beforeBuilder.project(List.of(beforeBuilder.call(SqlStdOperatorTable.ABS, beforeBuilder.field(0))));
+        RelNode before = beforeBuilder.build();
+
+        var expectedBuilder = RuleChecks.ruleBuilder(builder);
+        expectedBuilder.scan(table);
+        var inner = expectedBuilder.call(SqlStdOperatorTable.ABS, expectedBuilder.field(0));
+        expectedBuilder.project(List.of(expectedBuilder.call(SqlStdOperatorTable.ABS, inner)));
+        RelNode expected = expectedBuilder.build();
+        RuleChecks.rewrites(rule, before, expected);
+
+        var wideBuilder = RuleBuilder.create();
+        var wideTable = RuleChecks.table(wideBuilder, 2, false);
+        var nearMissBuilder = RuleChecks.ruleBuilder(wideBuilder);
+        nearMissBuilder.scan(wideTable);
+        nearMissBuilder.project(List.of(nearMissBuilder.call(SqlStdOperatorTable.ABS, nearMissBuilder.field(0))));
+        nearMissBuilder.project(List.of(nearMissBuilder.call(SqlStdOperatorTable.ABS, nearMissBuilder.field(0))));
+        RuleChecks.doesNotApply(rule, nearMissBuilder.build());
     }
 
     public static void main(String[] args) {

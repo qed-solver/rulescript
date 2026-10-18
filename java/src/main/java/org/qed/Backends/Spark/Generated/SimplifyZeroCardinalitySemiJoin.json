@@ -1,0 +1,34 @@
+{
+  "name" : "SimplifyZeroCardinalitySemiJoin",
+  "from" : {
+    "op" : "join",
+    "type" : "semi",
+    "left" : {
+      "op" : "scan",
+      "name" : "Left",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "empty",
+      "of" : "r1",
+      "arity" : 1,
+      "id" : "r2"
+    },
+    "cond" : {
+      "op" : "pred",
+      "name" : "on",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0", "r2" ]
+      } ]
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "empty",
+    "of" : "r0",
+    "arity" : 1,
+    "id" : "r4"
+  }
+}

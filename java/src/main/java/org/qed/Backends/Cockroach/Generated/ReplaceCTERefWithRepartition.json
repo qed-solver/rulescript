@@ -1,0 +1,23 @@
+{
+  "name" : "ReplaceCTERefWithRepartition",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "scan",
+    "name" : "Cte",
+    "id" : "r0"
+  },
+  "to" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    } ],
+    "input" : {
+      "op" : "scan",
+      "name" : "Cte",
+      "id" : "r0"
+    },
+    "id" : "r1"
+  }
+}

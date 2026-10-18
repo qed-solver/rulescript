@@ -343,7 +343,7 @@ public interface RelRN {
 
     default RexRN.GroupBy groupBy(String name) {
         return new RexRN.GroupBy(
-            RuleBuilder.create().genericProjectionOp(name, new RelType.VarType(name + "_type", true)), 
+            RuleBuilder.create().genericProjectionOp(name, new RelType.VarType(name + "_type", true)),
             fields()
         );
     }
@@ -356,8 +356,8 @@ public interface RelRN {
         return new AggCall(
             name,
             RuleBuilder.create().genericAggregateOp(name, new RelType.VarType(name + "_type", true)),
-            false, 
-            new RelType.VarType(name + "_type", true), 
+            false,
+            new RelType.VarType(name + "_type", true),
             fields()
         );
     }

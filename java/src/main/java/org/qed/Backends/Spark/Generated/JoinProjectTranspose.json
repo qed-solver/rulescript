@@ -1,0 +1,135 @@
+{
+  "name" : "JoinProjectTranspose",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "left" : {
+      "op" : "project",
+      "input" : {
+        "op" : "scan",
+        "name" : "L",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "exprs" : [ {
+        "op" : "proj",
+        "name" : "TL",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ],
+      "id" : "r2"
+    },
+    "right" : {
+      "op" : "project",
+      "input" : {
+        "op" : "scan",
+        "name" : "R",
+        "arity" : 2,
+        "id" : "r1"
+      },
+      "exprs" : [ {
+        "op" : "proj",
+        "name" : "TR",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r1" ]
+        } ]
+      } ],
+      "id" : "r3"
+    },
+    "cond" : {
+      "op" : "pred",
+      "name" : "C",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r2", "r3" ]
+      } ]
+    },
+    "id" : "r4"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "left" : {
+        "op" : "scan",
+        "name" : "L",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "R",
+        "arity" : 2,
+        "id" : "r1"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "C",
+        "args" : [ {
+          "op" : "proj",
+          "name" : "TL",
+          "args" : [ {
+            "op" : "joinfield",
+            "ordinal" : 0,
+            "left" : "r0",
+            "right" : "r1"
+          }, {
+            "op" : "joinfield",
+            "ordinal" : 1,
+            "left" : "r0",
+            "right" : "r1"
+          } ]
+        }, {
+          "op" : "proj",
+          "name" : "TR",
+          "args" : [ {
+            "op" : "joinfield",
+            "ordinal" : 2,
+            "left" : "r0",
+            "right" : "r1"
+          }, {
+            "op" : "joinfield",
+            "ordinal" : 3,
+            "left" : "r0",
+            "right" : "r1"
+          } ]
+        } ]
+      },
+      "id" : "r5"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "TL",
+      "args" : [ {
+        "op" : "joinfield",
+        "ordinal" : 0,
+        "left" : "r0",
+        "right" : "r1"
+      }, {
+        "op" : "joinfield",
+        "ordinal" : 1,
+        "left" : "r0",
+        "right" : "r1"
+      } ]
+    }, {
+      "op" : "proj",
+      "name" : "TR",
+      "args" : [ {
+        "op" : "joinfield",
+        "ordinal" : 2,
+        "left" : "r0",
+        "right" : "r1"
+      }, {
+        "op" : "joinfield",
+        "ordinal" : 3,
+        "left" : "r0",
+        "right" : "r1"
+      } ]
+    } ],
+    "id" : "r6"
+  }
+}

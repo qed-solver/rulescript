@@ -1,70 +1,76 @@
 package org.qed.Backends.Calcite.Tests;
 
-import kala.collection.Seq;
-import kala.tuple.Tuple;
-import org.qed.Backends.Calcite.CalciteTester;
-import org.qed.RelType;
+import org.apache.calcite.rel.RelCollations;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.core.AggregateCall;
+import org.apache.calcite.rel.logical.LogicalAggregate;
+import org.apache.calcite.rel.logical.LogicalProject;
+import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.util.ImmutableBitSet;
+import org.qed.Backends.Calcite.CalciteRuntime;
+import org.qed.RRule;
+import org.qed.RRuleInstances.ProjectAggregateMerge;
 import org.qed.RuleBuilder;
+import org.qed.RelType;
+
+import java.util.List;
 
 public class ProjectAggregateMergeTest {
-
     public static void runTest() {
-        var tester = new CalciteTester();
-        var builder = RuleBuilder.create();
-        
-        // Create source table with 4 fields
-        var sourceTable = builder.createQedTable(Seq.of(
-            Tuple.of(RelType.fromString("INTEGER", true), false),  // field 0 - group key
-            Tuple.of(RelType.fromString("INTEGER", true), false),  // field 1 - for sum/max
-            Tuple.of(RelType.fromString("INTEGER", true), false),  // field 2 - for avg
-            Tuple.of(RelType.fromString("INTEGER", true), false)   // field 3 - for count
-        ));
-        builder.addTable(sourceTable);
-        
-        var scan = builder.scan(sourceTable.getName()).build();
-        
-        // Before: Aggregate with 4 agg calls, then project uses only 2 of them
-        // Aggregate: group by field(0), sum(field(1)), avg(field(2)), count(field(3)), max(field(1))
-        // Result fields: [0=group, 1=sum, 2=avg, 3=count, 4=max]
-        // Project: uses only field(0), field(1), field(3) - skips avg and max
-        var before = builder
-            .push(scan)
-            .aggregate(
-                builder.groupKey(builder.field(0)),
-                builder.sum(false, "agg1", builder.field(1)),    // Will be used - becomes field 1
-                builder.avg(builder.field(2)),                    // Will be unused - field 2
-                builder.count(false, "agg3", builder.field(3)),  // Will be used - becomes field 3
-                builder.max(builder.field(1))                     // Will be unused - field 4
-            )
-            .project(
-                builder.field(0),  // group key
-                builder.field(1),  // agg1 (sum)
-                builder.field(3)   // agg3 (count) - skips field 2 (avg) and field 4 (max)
-            )
-            .build();
-        
-        // After: Aggregate with only 2 used agg calls, project adjusted
-        // Aggregate: group by field(0), sum(field(1)), count(field(3))
-        // Result fields: [0=group, 1=sum, 2=count]
-        // Project: field(0), field(1), field(2)
-        var after = builder
-            .push(scan)
-            .aggregate(
-                builder.groupKey(builder.field(0)),
-                builder.sum(false, "agg1", builder.field(1)),   // field 1
-                builder.count(false, "agg3", builder.field(3))  // field 2 (was 3)
-            )
-            .project(
-                builder.field(0),  // group key
-                builder.field(1),  // agg1 (sum)
-                builder.field(2)   // agg3 (count) - adjusted index
-            )
-            .build();
-            
-        var runner = CalciteTester.loadRule(
-            org.qed.Backends.Calcite.Generated.ProjectAggregateMerge.Config.DEFAULT.toRule()
-        );
-        tester.verify(runner, before, after);
+        var rule = new ProjectAggregateMerge();
+        RuleChecks.rewritesPattern(rule);
+        RuleChecks.rewritesConcretePredicates(rule);
+        RuleChecks.rejectsNearMisses(rule);
+        ordinaryTables(rule);
+    }
+
+    private static void ordinaryTables(RRule rule) {
+        var ruleBuilder = RuleBuilder.create();
+        var table = RuleChecks.table(ruleBuilder, 1, false);
+        var builder = RuleChecks.ruleBuilder(ruleBuilder);
+        var scan = builder.scan(table).build();
+        var inputField = new RexInputRef(0, scan.getRowType().getFieldList().get(0).getType());
+        var groupOp = ruleBuilder.genericProjectionOp("g", new RelType.VarType("g_type", true));
+        var groupExpr = builder.getRexBuilder().makeCall(groupOp, List.of(inputField));
+        var input = LogicalProject.create(scan, List.of(), List.of(groupExpr, inputField), List.of("g", "arg"));
+        var groupSet = ImmutableBitSet.of(0);
+        var integer = RelType.fromString("INTEGER", true);
+        var f1 = AggregateCall.create(ruleBuilder.genericAggregateOp("f1", integer), false, false, false,
+                List.of(1), -1, null, RelCollations.EMPTY, 1, input, null, "f1");
+        var f2 = AggregateCall.create(ruleBuilder.genericAggregateOp("f2", integer), false, false, false,
+                List.of(1), -1, null, RelCollations.EMPTY, 1, input, null, "f2");
+        var f3 = AggregateCall.create(ruleBuilder.genericAggregateOp("f3", integer), false, false, false,
+                List.of(1), -1, null, RelCollations.EMPTY, 1, input, null, "f3");
+        var beforeAggregate = LogicalAggregate.create(input, List.of(), groupSet, null, List.of(f1, f2, f3));
+        var before = select(beforeAggregate, 0, 1, 3);
+        var afterInput = LogicalProject.create(scan, List.of(), List.of(inputField, groupExpr), List.of("arg", "g"));
+        var afterAggregate = LogicalAggregate.create(afterInput, List.of(), ImmutableBitSet.of(1), null,
+                List.of(AggregateCall.create(ruleBuilder.genericAggregateOp("f1", integer), false, false, false,
+                                List.of(0), -1, null, RelCollations.EMPTY, 1, afterInput, null, "f1"),
+                        AggregateCall.create(ruleBuilder.genericAggregateOp("f3", integer), false, false, false,
+                                List.of(0), -1, null, RelCollations.EMPTY, 1, afterInput, null, "f3")));
+        var outputBuilder = ruleBuilder.transform(config -> CalciteRuntime.configure(config).withSimplifyValues(false));
+        var refs = new java.util.ArrayList<org.apache.calcite.rex.RexNode>();
+        for (var i = 0; i < 3; i++) {
+            var targetType = before.getRowType().getFieldList().get(i).getType();
+            var ref = outputBuilder.getRexBuilder().makeInputRef(afterAggregate, i);
+            refs.add(outputBuilder.getRexBuilder().makeCast(targetType, ref));
+        }
+        var after = LogicalProject.create(afterAggregate, List.of(), refs, List.of("g", "f1", "f3"));
+        RuleChecks.rewrites(rule, before, after);
+
+        var retainedAll = select(beforeAggregate, 0, 1, 2, 3);
+        RuleChecks.doesNotApply(rule, retainedAll);
+    }
+
+    private static RelNode select(RelNode input, int... indexes) {
+        var refs = new java.util.ArrayList<org.apache.calcite.rex.RexNode>();
+        for (var index : indexes) {
+            refs.add(new RexInputRef(index, input.getRowType().getFieldList().get(index).getType()));
+        }
+        var names = java.util.Arrays.stream(indexes)
+                .mapToObj(index -> input.getRowType().getFieldList().get(index).getName()).toList();
+        return LogicalProject.create(input, List.of(), refs, names);
     }
 
     public static void main(String[] args) {

@@ -1,0 +1,77 @@
+{
+  "name" : "SemiJoinFilterTranspose",
+  "from" : {
+    "op" : "join",
+    "type" : "semi",
+    "left" : {
+      "op" : "filter",
+      "input" : {
+        "op" : "scan",
+        "name" : "X",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "filter",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "id" : "r2"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "Y",
+      "arity" : 2,
+      "id" : "r1"
+    },
+    "cond" : {
+      "op" : "pred",
+      "name" : "join_cond",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0", "r1" ]
+      } ]
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "join",
+      "type" : "semi",
+      "left" : {
+        "op" : "scan",
+        "name" : "X",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "Y",
+        "arity" : 2,
+        "id" : "r1"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "join_cond",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0", "r1" ]
+        } ]
+      },
+      "id" : "r4"
+    },
+    "cond" : {
+      "op" : "pred",
+      "name" : "filter",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0" ]
+      } ]
+    },
+    "id" : "r5"
+  }
+}

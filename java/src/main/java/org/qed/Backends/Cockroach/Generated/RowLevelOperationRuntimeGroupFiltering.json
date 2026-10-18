@@ -1,0 +1,79 @@
+{
+  "name" : "RowLevelOperationRuntimeGroupFiltering",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "cond",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0" ]
+      } ]
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "T",
+      "arity" : 2,
+      "non_null" : [ 0, 1 ],
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "cond",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0" ]
+      } ]
+    },
+    "input" : {
+      "op" : "join",
+      "type" : "semi",
+      "cond" : {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r2"
+        }, {
+          "op" : "field",
+          "ordinal" : 2,
+          "of" : "r2"
+        } ]
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "T",
+        "arity" : 2,
+        "non_null" : [ 0, 1 ],
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "filter",
+        "cond" : {
+          "op" : "pred",
+          "name" : "cond",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        },
+        "input" : {
+          "op" : "scan",
+          "name" : "T",
+          "arity" : 2,
+          "non_null" : [ 0, 1 ],
+          "id" : "r0"
+        },
+        "id" : "r1"
+      },
+      "id" : "r2"
+    },
+    "id" : "r3"
+  }
+}

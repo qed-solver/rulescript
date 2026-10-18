@@ -1,0 +1,61 @@
+{
+  "name" : "EliminateAggregateFilter",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "aggregate",
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "f",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r0"
+      } ]
+    } ],
+    "input" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "true"
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "Source",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "f",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r0"
+      } ]
+    } ],
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 2,
+      "id" : "r0"
+    },
+    "id" : "r3"
+  }
+}

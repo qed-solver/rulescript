@@ -1,0 +1,31 @@
+{
+  "name" : "SimplifyZeroCardinalityAntiJoin",
+  "from" : {
+    "op" : "join",
+    "type" : "anti",
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "values",
+      "rows" : [ [ {
+        "op" : "int",
+        "value" : 0
+      } ] ],
+      "id" : "r1"
+    },
+    "cond" : {
+      "op" : "true"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "empty",
+    "of" : "r0",
+    "arity" : 1,
+    "id" : "r3"
+  }
+}

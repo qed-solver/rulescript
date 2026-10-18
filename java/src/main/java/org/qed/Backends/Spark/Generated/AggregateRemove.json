@@ -1,0 +1,27 @@
+{
+  "name" : "AggregateRemove",
+  "from" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "scan",
+      "name" : "S",
+      "arity" : 1,
+      "unique" : true,
+      "id" : "r0"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    } ],
+    "aggs" : [ ],
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "scan",
+    "name" : "S",
+    "arity" : 1,
+    "unique" : true,
+    "id" : "r0"
+  }
+}

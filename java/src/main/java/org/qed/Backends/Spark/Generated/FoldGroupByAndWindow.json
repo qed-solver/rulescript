@@ -1,0 +1,103 @@
+{
+  "name" : "FoldGroupByAndWindow",
+  "from" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "left" : {
+        "op" : "scan",
+        "name" : "Input",
+        "arity" : 2,
+        "nonnull" : [ 0, 1 ],
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "aggregate",
+        "input" : {
+          "op" : "scan",
+          "name" : "Input",
+          "arity" : 2,
+          "nonnull" : [ 0, 1 ],
+          "id" : "r0"
+        },
+        "groups" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ],
+        "aggs" : [ {
+          "op" : "agg",
+          "name" : "w",
+          "distinct" : false,
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r0"
+          } ]
+        } ],
+        "id" : "r1"
+      },
+      "cond" : {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 0,
+          "left" : "r0",
+          "right" : "r1"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 2,
+          "left" : "r0",
+          "right" : "r1"
+        } ]
+      },
+      "id" : "r2"
+    },
+    "groups" : [ {
+      "op" : "joinfield",
+      "ordinal" : 0,
+      "left" : "r0",
+      "right" : "r1"
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "a",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "joinfield",
+        "ordinal" : 1,
+        "left" : "r0",
+        "right" : "r1"
+      } ]
+    } ],
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "scan",
+      "name" : "Input",
+      "arity" : 2,
+      "nonnull" : [ 0, 1 ],
+      "id" : "r0"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "a",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r0"
+      } ]
+    } ],
+    "id" : "r4"
+  }
+}

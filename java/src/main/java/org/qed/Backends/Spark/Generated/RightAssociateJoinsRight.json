@@ -1,0 +1,135 @@
+{
+  "name" : "RightAssociateJoinsRight",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "left" : {
+      "op" : "scan",
+      "name" : "A",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "join",
+      "type" : "inner",
+      "left" : {
+        "op" : "scan",
+        "name" : "B",
+        "arity" : 1,
+        "id" : "r1"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "C",
+        "arity" : 1,
+        "id" : "r2"
+      },
+      "cond" : {
+        "op" : "true"
+      },
+      "id" : "r3"
+    },
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "p_ac",
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 0,
+          "left" : "r0",
+          "right" : "r3"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 2,
+          "left" : "r0",
+          "right" : "r3"
+        } ]
+      }, {
+        "op" : "pred",
+        "name" : "p_abc",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0", "r3" ]
+        } ]
+      } ]
+    },
+    "id" : "r4"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "left" : {
+        "op" : "join",
+        "type" : "inner",
+        "left" : {
+          "op" : "scan",
+          "name" : "A",
+          "arity" : 1,
+          "id" : "r0"
+        },
+        "right" : {
+          "op" : "scan",
+          "name" : "C",
+          "arity" : 1,
+          "id" : "r2"
+        },
+        "cond" : {
+          "op" : "pred",
+          "name" : "p_ac",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0", "r2" ]
+          } ]
+        },
+        "id" : "r5"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "B",
+        "arity" : 1,
+        "id" : "r1"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "p_abc",
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 0,
+          "left" : "r5",
+          "right" : "r1"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 2,
+          "left" : "r5",
+          "right" : "r1"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 1,
+          "left" : "r5",
+          "right" : "r1"
+        } ]
+      },
+      "id" : "r6"
+    },
+    "exprs" : [ {
+      "op" : "joinfield",
+      "ordinal" : 0,
+      "left" : "r5",
+      "right" : "r1"
+    }, {
+      "op" : "joinfield",
+      "ordinal" : 2,
+      "left" : "r5",
+      "right" : "r1"
+    }, {
+      "op" : "joinfield",
+      "ordinal" : 1,
+      "left" : "r5",
+      "right" : "r1"
+    } ],
+    "id" : "r7"
+  }
+}

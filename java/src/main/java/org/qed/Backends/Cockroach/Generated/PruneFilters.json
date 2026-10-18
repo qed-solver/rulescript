@@ -1,0 +1,92 @@
+{
+  "name" : "PruneFilters",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "shared",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "pred",
+        "name" : "rest_outer",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ]
+    },
+    "input" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "and",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "shared",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "rest_inner",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "Source",
+        "id" : "r0"
+      },
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "rest_outer",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0" ]
+      } ]
+    },
+    "input" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "and",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "shared",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "rest_inner",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "Source",
+        "id" : "r0"
+      },
+      "id" : "r1"
+    },
+    "id" : "r3"
+  }
+}

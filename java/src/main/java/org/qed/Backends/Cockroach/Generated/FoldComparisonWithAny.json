@@ -1,0 +1,45 @@
+{
+  "name" : "FoldComparisonWithAny",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "or",
+      "args" : [ {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "true"
+        }, {
+          "op" : "false"
+        } ]
+      }, {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "true"
+        }, {
+          "op" : "true"
+        } ]
+      } ]
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "true"
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "id" : "r0"
+    },
+    "id" : "r2"
+  }
+}

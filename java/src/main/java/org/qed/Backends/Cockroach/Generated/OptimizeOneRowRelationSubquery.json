@@ -1,0 +1,55 @@
+{
+  "name" : "OptimizeOneRowRelationSubquery",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r1"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r1"
+    } ],
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "true"
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "L",
+        "id" : "r0",
+        "arity" : 1
+      },
+      "right" : {
+        "op" : "values",
+        "rows" : [ [ {
+          "op" : "true"
+        } ] ],
+        "id" : "r2"
+      },
+      "id" : "r1"
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    }, {
+      "op" : "true"
+    } ],
+    "input" : {
+      "op" : "scan",
+      "name" : "L",
+      "id" : "r0",
+      "arity" : 1
+    },
+    "id" : "r4"
+  }
+}

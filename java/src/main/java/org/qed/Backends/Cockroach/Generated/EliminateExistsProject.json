@@ -1,0 +1,51 @@
+{
+  "name" : "EliminateExistsProject",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "exists",
+      "input" : {
+        "op" : "project",
+        "exprs" : [ {
+          "op" : "proj",
+          "name" : "f",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r1"
+          } ]
+        } ],
+        "input" : {
+          "op" : "scan",
+          "name" : "Input",
+          "id" : "r1"
+        },
+        "id" : "r2"
+      }
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Outer",
+      "id" : "r0"
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "exists",
+      "input" : {
+        "op" : "scan",
+        "name" : "Input",
+        "id" : "r1"
+      }
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Outer",
+      "id" : "r0"
+    },
+    "id" : "r4"
+  }
+}

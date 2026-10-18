@@ -1,0 +1,61 @@
+{
+  "name" : "PruneSingleValue",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "left" : {
+      "op" : "scan",
+      "name" : "O",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "values",
+      "rows" : [ [ {
+        "op" : "true"
+      } ] ],
+      "id" : "r1"
+    },
+    "cond" : {
+      "op" : "pred",
+      "name" : "jcond",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0", "r1" ]
+      } ]
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "filter",
+      "input" : {
+        "op" : "scan",
+        "name" : "O",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "jcond",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "true"
+        } ]
+      },
+      "id" : "r3"
+    },
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    }, {
+      "op" : "true"
+    } ],
+    "id" : "r4"
+  }
+}

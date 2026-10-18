@@ -1,0 +1,66 @@
+{
+  "name" : "AggregateUnionAggregate",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "aggregate",
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r2"
+    } ],
+    "aggs" : [ ],
+    "input" : {
+      "op" : "set",
+      "type" : "union",
+      "all" : true,
+      "left" : {
+        "op" : "scan",
+        "name" : "A",
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "aggregate",
+        "groups" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r1"
+        } ],
+        "aggs" : [ ],
+        "input" : {
+          "op" : "scan",
+          "name" : "L",
+          "id" : "r1"
+        },
+        "id" : "r3"
+      },
+      "id" : "r2"
+    },
+    "id" : "r4"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r5"
+    } ],
+    "aggs" : [ ],
+    "input" : {
+      "op" : "set",
+      "type" : "union",
+      "all" : true,
+      "left" : {
+        "op" : "scan",
+        "name" : "A",
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "L",
+        "id" : "r1"
+      },
+      "id" : "r5"
+    },
+    "id" : "r6"
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "name" : "AggregateToSemiJoin",
+  "from" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "left" : {
+        "op" : "scan",
+        "name" : "L",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "aggregate",
+        "input" : {
+          "op" : "scan",
+          "name" : "R",
+          "arity" : 1,
+          "id" : "r1"
+        },
+        "groups" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r1"
+        } ],
+        "aggs" : [ ],
+        "id" : "r2"
+      },
+      "cond" : {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 0,
+          "left" : "r0",
+          "right" : "r2"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 1,
+          "left" : "r0",
+          "right" : "r2"
+        } ]
+      },
+      "id" : "r3"
+    },
+    "groups" : [ {
+      "op" : "joinfield",
+      "ordinal" : 0,
+      "left" : "r0",
+      "right" : "r2"
+    } ],
+    "aggs" : [ ],
+    "id" : "r4"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "join",
+      "type" : "semi",
+      "left" : {
+        "op" : "scan",
+        "name" : "L",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "R",
+        "arity" : 1,
+        "id" : "r1"
+      },
+      "cond" : {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 0,
+          "left" : "r0",
+          "right" : "r1"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 1,
+          "left" : "r0",
+          "right" : "r1"
+        } ]
+      },
+      "id" : "r5"
+    },
+    "groups" : [ {
+      "op" : "joinfield",
+      "ordinal" : 0,
+      "left" : "r0",
+      "right" : "r1"
+    } ],
+    "aggs" : [ ],
+    "id" : "r6"
+  }
+}

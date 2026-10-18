@@ -1,0 +1,68 @@
+{
+  "name" : "NegateAnd",
+  "from" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "cond" : {
+      "op" : "not",
+      "arg" : {
+        "op" : "and",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "left",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "right",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        } ]
+      }
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "cond" : {
+      "op" : "or",
+      "args" : [ {
+        "op" : "not",
+        "arg" : {
+          "op" : "pred",
+          "name" : "left",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        }
+      }, {
+        "op" : "not",
+        "arg" : {
+          "op" : "pred",
+          "name" : "right",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        }
+      } ]
+    },
+    "id" : "r2"
+  }
+}

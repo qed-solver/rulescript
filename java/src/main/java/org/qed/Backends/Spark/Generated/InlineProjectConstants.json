@@ -1,0 +1,99 @@
+{
+  "name" : "InlineProjectConstants",
+  "from" : {
+    "op" : "project",
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "left" : {
+        "op" : "scan",
+        "name" : "Source",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "Const",
+        "arity" : 1,
+        "nonnull" : [ 0 ],
+        "unique" : true,
+        "id" : "r1"
+      },
+      "cond" : {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 0,
+          "left" : "r0",
+          "right" : "r1"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 1,
+          "left" : "r0",
+          "right" : "r1"
+        } ]
+      },
+      "id" : "r2"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "f",
+      "args" : [ {
+        "op" : "joinfield",
+        "ordinal" : 0,
+        "left" : "r0",
+        "right" : "r1"
+      } ]
+    } ],
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "left" : {
+        "op" : "scan",
+        "name" : "Source",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "Const",
+        "arity" : 1,
+        "nonnull" : [ 0 ],
+        "unique" : true,
+        "id" : "r1"
+      },
+      "cond" : {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 0,
+          "left" : "r0",
+          "right" : "r1"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 1,
+          "left" : "r0",
+          "right" : "r1"
+        } ]
+      },
+      "id" : "r2"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "f",
+      "args" : [ {
+        "op" : "joinfield",
+        "ordinal" : 1,
+        "left" : "r0",
+        "right" : "r1"
+      } ]
+    } ],
+    "id" : "r4"
+  }
+}

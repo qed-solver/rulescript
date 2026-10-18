@@ -1,33 +1,59 @@
 package org.qed.Backends.Calcite.Tests;
 
-import kala.collection.Seq;
-import kala.tuple.Tuple;
-import org.qed.Backends.Calcite.CalciteTester;
-import org.qed.RelType;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rel.logical.LogicalUnion;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.tools.RelBuilder;
+import org.qed.RRuleInstances.FilterSetOpTranspose;
 import org.qed.RuleBuilder;
 
-public class FilterSetOpTransposeTest {
+import java.util.List;
 
+public class FilterSetOpTransposeTest {
     public static void runTest() {
-        var tester = new CalciteTester();
-        var builder = RuleBuilder.create();
-        var table = builder.createQedTable(Seq.of(
-            Tuple.of(RelType.fromString("INTEGER", true), false)
-        ));
-        builder.addTable(table);
-        
-        var scan1 = builder.scan(table.getName()).build();
-        var scan2 = builder.scan(table.getName()).build();
-        
-        var union = builder.push(scan1).push(scan2).union(false).build();
-        var before = builder.push(union).filter(builder.call(builder.genericPredicateOp("filter", true), builder.fields())).build();
-        
-        var filteredScan1 = builder.push(scan1).filter(builder.call(builder.genericPredicateOp("filter", true), builder.fields())).build();
-        var filteredScan2 = builder.push(scan2).filter(builder.call(builder.genericPredicateOp("filter", true), builder.fields())).build();
-        var after = builder.push(filteredScan1).push(filteredScan2).union(false).build();
-        
-        var runner = CalciteTester.loadRule(org.qed.Backends.Calcite.Generated.FilterSetOpTranspose.Config.DEFAULT.toRule());
-        tester.verify(runner, before, after);
+        var rule = new FilterSetOpTranspose();
+        RuleChecks.rewritesPattern(rule);
+        RuleChecks.rewritesConcretePredicates(rule);
+        RuleChecks.rejectsNearMisses(rule);
+        positiveConcretePlan();
+        rejectsDistinctUnion();
+    }
+
+    private static void positiveConcretePlan() {
+        var b = builder();
+        var left = scan("FILTER_LEFT");
+        var right = scan("FILTER_RIGHT");
+        var union = b.push(left).push(right).union(true, 2).build();
+        var before = b.push(union).filter(b.call(SqlStdOperatorTable.GREATER_THAN,
+                b.field(0), b.literal(10))).build();
+
+        var leftFiltered = b.push(left).filter(b.call(SqlStdOperatorTable.GREATER_THAN,
+                b.field(0), b.literal(10))).build();
+        var rightFiltered = b.push(right).filter(b.call(SqlStdOperatorTable.GREATER_THAN,
+                b.field(0), b.literal(10))).build();
+        var expected = b.push(leftFiltered).push(rightFiltered).union(true, 2).build();
+        RuleChecks.rewrites(new FilterSetOpTranspose(), before, expected);
+    }
+
+    private static void rejectsDistinctUnion() {
+        var b = builder();
+        var left = scan("DISTINCT_LEFT");
+        var right = scan("DISTINCT_RIGHT");
+        var union = LogicalUnion.create(List.of(left, right), false);
+        var condition = b.call(SqlStdOperatorTable.GREATER_THAN,
+                b.getRexBuilder().makeInputRef(union, 0), b.literal(10));
+        RuleChecks.doesNotApply(new FilterSetOpTranspose(), LogicalFilter.create(union, condition));
+    }
+
+    private static RelBuilder builder() {
+        return RuleBuilder.create();
+    }
+
+    private static RelNode scan(String name) {
+        var qed = RuleBuilder.create();
+        var table = RuleChecks.table(qed, 1, false, false);
+        return qed.scan(table).build();
     }
 
     public static void main(String[] args) {

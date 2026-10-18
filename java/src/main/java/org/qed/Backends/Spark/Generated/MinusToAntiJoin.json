@@ -1,0 +1,63 @@
+{
+  "name" : "MinusToAntiJoin",
+  "from" : {
+    "op" : "set",
+    "kind" : "except",
+    "all" : false,
+    "inputs" : [ {
+      "op" : "scan",
+      "name" : "A",
+      "arity" : 1,
+      "id" : "r0"
+    }, {
+      "op" : "scan",
+      "name" : "B",
+      "arity" : 1,
+      "id" : "r1"
+    } ],
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "join",
+      "type" : "anti",
+      "left" : {
+        "op" : "scan",
+        "name" : "A",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "B",
+        "arity" : 1,
+        "id" : "r1"
+      },
+      "cond" : {
+        "op" : "scalar",
+        "operator" : "<=>",
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 0,
+          "left" : "r0",
+          "right" : "r1"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 1,
+          "left" : "r0",
+          "right" : "r1"
+        } ]
+      },
+      "id" : "r3"
+    },
+    "groups" : [ {
+      "op" : "joinfield",
+      "ordinal" : 0,
+      "left" : "r0",
+      "right" : "r1"
+    } ],
+    "aggs" : [ ],
+    "id" : "r4"
+  }
+}

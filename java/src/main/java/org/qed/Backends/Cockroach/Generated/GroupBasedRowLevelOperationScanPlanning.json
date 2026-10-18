@@ -1,0 +1,89 @@
+{
+  "name" : "GroupBasedRowLevelOperationScanPlanning",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "Eval1",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "pred",
+        "name" : "Eval2",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "pred",
+        "name" : "Rest",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r2" ]
+        } ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "Target",
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "Other",
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "pred",
+      "name" : "Rest",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r3" ]
+      } ]
+    },
+    "left" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "and",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "Eval1",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "Eval2",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "Target",
+        "id" : "r0"
+      },
+      "id" : "r4"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "Other",
+      "id" : "r1"
+    },
+    "id" : "r3"
+  }
+}

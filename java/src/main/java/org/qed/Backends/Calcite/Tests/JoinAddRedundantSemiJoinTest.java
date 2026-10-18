@@ -1,69 +1,53 @@
 package org.qed.Backends.Calcite.Tests;
 
-import kala.collection.Seq;
-import kala.tuple.Tuple;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.qed.Backends.Calcite.CalciteTester;
-import org.qed.RelType;
+import org.qed.RRuleInstances.JoinAddRedundantSemiJoin;
 import org.qed.RuleBuilder;
 
 public class JoinAddRedundantSemiJoinTest {
-
     public static void runTest() {
-        var tester = new CalciteTester();
+        var rule = new JoinAddRedundantSemiJoin();
+        RuleChecks.rewritesPattern(rule);
+        RuleChecks.rewritesConcretePredicates(rule);
+        RuleChecks.rejectsNearMisses(rule);
+        handBuiltJoin(rule);
+        handBuiltNoMatch(rule);
+    }
+
+    private static void handBuiltJoin(JoinAddRedundantSemiJoin rule) {
+        var beforeBuilder = RuleBuilder.create();
+        var left = RuleChecks.table(beforeBuilder, 1, false);
+        var right = RuleChecks.table(beforeBuilder, 1, false);
+        beforeBuilder.scan(left).scan(right);
+        var condition = beforeBuilder.call(beforeBuilder.genericPredicateOp("matches", true),
+                beforeBuilder.joinFields().asJava());
+        RelNode before = beforeBuilder.join(JoinRelType.INNER, condition).build();
+
+        var expectedBuilder = RuleBuilder.create();
+        left = RuleChecks.table(expectedBuilder, 1, false);
+        right = RuleChecks.table(expectedBuilder, 1, false);
+        expectedBuilder.scan(left);
+        var leftScan = expectedBuilder.build();
+        expectedBuilder.scan(right);
+        var rightScan = expectedBuilder.build();
+        expectedBuilder.push(leftScan).push(rightScan);
+        condition = expectedBuilder.call(expectedBuilder.genericPredicateOp("matches", true),
+                expectedBuilder.joinFields().asJava());
+        expectedBuilder.join(JoinRelType.SEMI, condition)
+                .push(rightScan).join(JoinRelType.INNER, condition);
+        RelNode expected = expectedBuilder.build();
+        RuleChecks.rewrites(rule, before, expected);
+    }
+
+    private static void handBuiltNoMatch(JoinAddRedundantSemiJoin rule) {
         var builder = RuleBuilder.create();
-        
-        // Create left and right tables
-        var leftTable = builder.createQedTable(Seq.of(
-            Tuple.of(RelType.fromString("INTEGER", true), false),
-            Tuple.of(RelType.fromString("INTEGER", true), false)
-        ));
-        builder.addTable(leftTable);
-        
-        var rightTable = builder.createQedTable(Seq.of(
-            Tuple.of(RelType.fromString("INTEGER", true), false),
-            Tuple.of(RelType.fromString("INTEGER", true), false)
-        ));
-        builder.addTable(rightTable);
-        
-        var scanLeft = builder.scan(leftTable.getName()).build();
-        var scanRight = builder.scan(rightTable.getName()).build();
-        
-        // Before: left INNER JOIN right ON left.f0 = right.f0
-        var before = builder
-            .push(scanLeft)
-            .push(scanRight)
-            .join(JoinRelType.INNER,
-                builder.equals(
-                    builder.field(2, 0, 0),  // left.f0
-                    builder.field(2, 1, 0)   // right.f0
-                )
-            )
-            .build();
-        
-        // After: (left SEMI JOIN right ON left.f0 = right.f0) INNER JOIN right ON left.f0 = right.f0
-        var after = builder
-            .push(scanLeft)
-            .push(scanRight)
-            .join(JoinRelType.SEMI,
-                builder.equals(
-                    builder.field(2, 0, 0),  // left.f0
-                    builder.field(2, 1, 0)   // right.f0
-                )
-            )
-            .push(scanRight)
-            .join(JoinRelType.INNER,
-                builder.equals(
-                    builder.field(2, 0, 0),  // left.f0 (from semi join result)
-                    builder.field(2, 1, 0)   // right.f0 (from new right scan)
-                )
-            )
-            .build();
-            
-        var runner = CalciteTester.loadRule(
-            org.qed.Backends.Calcite.Generated.JoinAddRedundantSemiJoin.Config.DEFAULT.toRule(), 1
-        );
-        tester.verify(runner, before, after);
+        var left = RuleChecks.table(builder, 1, false);
+        var right = RuleChecks.table(builder, 1, false);
+        builder.scan(left).scan(right);
+        var condition = builder.call(builder.genericPredicateOp("matches", true), builder.joinFields().asJava());
+        RelNode plan = builder.join(JoinRelType.LEFT, condition).build();
+        RuleChecks.doesNotApply(rule, plan);
     }
 
     public static void main(String[] args) {

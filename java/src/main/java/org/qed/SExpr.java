@@ -60,7 +60,6 @@ public sealed interface SExpr {
     record Str(String value) implements SExpr {
         @Override
         public String toString() {
-            // TODO: Proper escaping
             return "\"" + value + "\"";
         }
     }

@@ -1,0 +1,163 @@
+{
+  "name" : "ExpandDisjunctionForJoinInputs",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "or",
+      "args" : [ {
+        "op" : "and_scalar",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "pl",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r2"
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "pr",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 2,
+            "of" : "r2"
+          } ]
+        } ]
+      }, {
+        "op" : "and_scalar",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "rl",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r2"
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "sr",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 3,
+            "of" : "r2"
+          } ]
+        } ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "arity" : 2,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "R",
+      "arity" : 2,
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "or",
+        "args" : [ {
+          "op" : "and_scalar",
+          "args" : [ {
+            "op" : "pred",
+            "name" : "pl",
+            "args" : [ {
+              "op" : "field",
+              "ordinal" : 0,
+              "of" : "r3"
+            } ]
+          }, {
+            "op" : "pred",
+            "name" : "pr",
+            "args" : [ {
+              "op" : "field",
+              "ordinal" : 2,
+              "of" : "r3"
+            } ]
+          } ]
+        }, {
+          "op" : "and_scalar",
+          "args" : [ {
+            "op" : "pred",
+            "name" : "rl",
+            "args" : [ {
+              "op" : "field",
+              "ordinal" : 1,
+              "of" : "r3"
+            } ]
+          }, {
+            "op" : "pred",
+            "name" : "sr",
+            "args" : [ {
+              "op" : "field",
+              "ordinal" : 3,
+              "of" : "r3"
+            } ]
+          } ]
+        } ]
+      }, {
+        "op" : "or",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "pl",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r3"
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "rl",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r3"
+          } ]
+        } ]
+      }, {
+        "op" : "or",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "pr",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 2,
+            "of" : "r3"
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "sr",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 3,
+            "of" : "r3"
+          } ]
+        } ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "arity" : 2,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "R",
+      "arity" : 2,
+      "id" : "r1"
+    },
+    "id" : "r3"
+  }
+}

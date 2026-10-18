@@ -1,0 +1,48 @@
+{
+  "name" : "FilterToCalc",
+  "from" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "cond" : {
+      "op" : "pred",
+      "name" : "cond",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0" ]
+      } ]
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "filter",
+      "input" : {
+        "op" : "scan",
+        "name" : "Source",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "cond",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "id" : "r1"
+    },
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    } ],
+    "id" : "r2"
+  }
+}

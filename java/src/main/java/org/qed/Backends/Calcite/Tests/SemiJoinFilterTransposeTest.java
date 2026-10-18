@@ -1,44 +1,58 @@
 package org.qed.Backends.Calcite.Tests;
 
-import kala.collection.Seq;
-import kala.tuple.Tuple;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.qed.Backends.Calcite.CalciteTester;
-import org.qed.RelType;
+import org.qed.RRuleInstances.SemiJoinFilterTranspose;
 import org.qed.RuleBuilder;
 
 public class SemiJoinFilterTransposeTest {
-
     public static void runTest() {
-        var tester = new CalciteTester();
-        var builder = RuleBuilder.create();
-        
-        var leftTable = builder.createQedTable(Seq.of(Tuple.of(RelType.fromString("INTEGER", true), false)));
-        var rightTable = builder.createQedTable(Seq.of(Tuple.of(RelType.fromString("INTEGER", true), false)));
-        builder.addTable(leftTable);
-        builder.addTable(rightTable);
-        
-        var leftScan = builder.scan(leftTable.getName()).build();
-        var rightScan = builder.scan(rightTable.getName()).build();
+        var rule = new SemiJoinFilterTranspose();
+        RuleChecks.rewritesPattern(rule);
+        RuleChecks.rewritesConcretePredicates(rule);
+        RuleChecks.rejectsNearMisses(rule);
+        handBuiltSemijoinMatch(rule);
+        rejectsInnerJoinNearMiss();
+    }
 
-        builder.push(leftScan);
-        builder.push(rightScan);
-        var joinPredicate = builder.equals(builder.field(2, 0, 0), builder.field(2, 1, 0));
-        var semiJoin = builder.join(JoinRelType.SEMI, joinPredicate).build();
-        builder.push(semiJoin);
-        var filterPredicate = builder.call(builder.genericPredicateOp("filter", true), builder.field(0));
-        var before = builder.filter(filterPredicate).build();
+    private static void handBuiltSemijoinMatch(SemiJoinFilterTranspose rule) {
+        var schema = RuleBuilder.create();
+        var leftName = RuleChecks.table(schema, 2, false, false);
+        var rightName = RuleChecks.table(schema, 2, false, false);
+        var b = RuleChecks.ruleBuilder(schema);
 
-        builder.push(leftScan);
-        var leftFilterPredicate = builder.call(builder.genericPredicateOp("filter", true), builder.field(0));
-        var filteredLeft = builder.filter(leftFilterPredicate).build();
-        builder.push(filteredLeft);
-        builder.push(rightScan);
-        var afterJoinPredicate = builder.equals(builder.field(2, 0, 0), builder.field(2, 1, 0));
-        var after = builder.join(JoinRelType.SEMI, afterJoinPredicate).build();
-        
-        var runner = CalciteTester.loadRule(org.qed.Backends.Calcite.Generated.SemiJoinFilterTranspose.Config.DEFAULT.toRule());
-        tester.verify(runner, before, after);
+        RelNode left = b.scan(leftName).build();
+        RelNode right = b.scan(rightName).build();
+        RelNode filteredLeft = b.push(left)
+                .filter(RuleChecks.gt(b, b.field(1), 3))
+                .build();
+        RelNode before = b.push(filteredLeft).push(right)
+                .join(JoinRelType.SEMI, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
+                .build();
+
+        RelNode semi = b.push(left).push(right)
+                .join(JoinRelType.SEMI, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
+                .build();
+        RelNode expected = b.push(semi)
+                .filter(RuleChecks.gt(b, b.field(1), 3))
+                .build();
+        RuleChecks.rewrites(rule, before, expected);
+    }
+
+    private static void rejectsInnerJoinNearMiss() {
+        var schema = RuleBuilder.create();
+        var leftName = RuleChecks.table(schema, 2, false, false);
+        var rightName = RuleChecks.table(schema, 2, false, false);
+        var b = RuleChecks.ruleBuilder(schema);
+        RelNode left = b.scan(leftName).build();
+        RelNode right = b.scan(rightName).build();
+        RelNode filteredLeft = b.push(left)
+                .filter(RuleChecks.gt(b, b.field(1), 3))
+                .build();
+        RelNode innerJoin = b.push(filteredLeft).push(right)
+                .join(JoinRelType.INNER, RuleChecks.eq(b, b.field(2, 0, 0), b.field(2, 1, 0)))
+                .build();
+        RuleChecks.doesNotApply(new SemiJoinFilterTranspose(), innerJoin);
     }
 
     public static void main(String[] args) {

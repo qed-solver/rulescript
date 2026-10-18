@@ -1,0 +1,82 @@
+{
+  "name" : "ConvertToCatalyst",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "F",
+      "args" : [ {
+        "op" : "proj",
+        "name" : "E",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ]
+      }, {
+        "op" : "proj",
+        "name" : "E",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ]
+      } ]
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "S",
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r2"
+    } ],
+    "input" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "pred",
+        "name" : "F",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r2"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r2"
+        } ]
+      },
+      "input" : {
+        "op" : "project",
+        "exprs" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "proj",
+          "name" : "E",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r0"
+          } ]
+        } ],
+        "input" : {
+          "op" : "scan",
+          "name" : "S",
+          "id" : "r0"
+        },
+        "id" : "r2"
+      },
+      "id" : "r3"
+    },
+    "id" : "r4"
+  }
+}

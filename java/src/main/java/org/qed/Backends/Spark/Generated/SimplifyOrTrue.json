@@ -1,0 +1,39 @@
+{
+  "name" : "SimplifyOrTrue",
+  "from" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "cond" : {
+      "op" : "or",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "left",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "true"
+      } ]
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "cond" : {
+      "op" : "true"
+    },
+    "id" : "r2"
+  }
+}

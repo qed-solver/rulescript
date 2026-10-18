@@ -1,0 +1,54 @@
+{
+  "name" : "EliminateExistsGroupBy",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "semi",
+    "cond" : {
+      "op" : "true"
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "Outer",
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "aggregate",
+      "groups" : [ {
+        "op" : "group_key",
+        "name" : "g",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r1"
+        } ]
+      } ],
+      "aggs" : [ ],
+      "input" : {
+        "op" : "scan",
+        "name" : "Input",
+        "id" : "r1"
+      },
+      "id" : "r2"
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "semi",
+    "cond" : {
+      "op" : "true"
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "Outer",
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "Input",
+      "id" : "r1"
+    },
+    "id" : "r4"
+  }
+}

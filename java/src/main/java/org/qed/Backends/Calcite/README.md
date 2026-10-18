@@ -1,28 +1,25 @@
 # Apache Calcite
 
+## Layout
+
+- `../../RRuleInstances/` — the RuleScript rules.
+- `CalciteGenerator.java` — translates a rule into a Calcite `RelRule`.
+- `CalciteRuntime.java` — helpers called by the generated rules.
+- `Generated/` — generated Calcite rules, one per rule.
+- `Tests/` — one test per rule, plus tests for the generator.
+- `CalciteTester.java` — generates the rules, compiles them and runs the tests.
+- `EmptyConfig.java` — base config for the generated rules.
+
 ## Generate Rules and Execute Tests
 
-Run the Calcite generator from the repository root:
+From `java/`:
 
 ```sh
 ./mvnw -q compile exec:java@calcite-codegen-test
 ```
 
-This command does two things:
+To run only some rules:
 
-1. Generates Calcite rule classes into:
-   - `src/main/java/org/qed/Backends/Calcite/Generated/*.java`
-2. Runs all Calcite backend tests discovered under:
-   - `src/main/java/org/qed/Backends/Calcite/Tests/*Test.java`
-
-## Writing Calcite Tests
-
-Calcite tests are Java classes in `src/main/java/org/qed/Backends/Calcite/Tests/` with a public static `runTest()` method.
-
-Typical flow in each test:
-
-1. Build `before` and `after` plans with `RuleBuilder`.
-2. Load the generated rule into a `HepPlanner` through `CalciteTester`.
-3. Call `tester.verify(runner, before, after)`.
-
-`CalciteTester.runAllTests()` reflects over all `*Test.java` files and invokes `runTest()` automatically during `calcite-codegen-test`.
+```sh
+./mvnw -q compile exec:java@calcite-codegen-test -Dexec.args="FilterMerge FilterJoin"
+```

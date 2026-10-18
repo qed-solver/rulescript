@@ -1,0 +1,51 @@
+{
+  "name" : "PruneMutationFetchCols",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "M",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ]
+    } ],
+    "input" : {
+      "op" : "scan",
+      "name" : "I",
+      "arity" : 2,
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "M",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r2"
+      } ]
+    } ],
+    "input" : {
+      "op" : "project",
+      "exprs" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ],
+      "input" : {
+        "op" : "scan",
+        "name" : "I",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "id" : "r2"
+    },
+    "id" : "r3"
+  }
+}

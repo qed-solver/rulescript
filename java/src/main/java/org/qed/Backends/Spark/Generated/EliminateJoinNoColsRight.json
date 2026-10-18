@@ -1,0 +1,52 @@
+{
+  "name" : "EliminateJoinNoColsRight",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "project",
+      "input" : {
+        "op" : "values",
+        "rows" : [ [ {
+          "op" : "true"
+        } ] ],
+        "id" : "r1"
+      },
+      "exprs" : [ ],
+      "id" : "r2"
+    },
+    "cond" : {
+      "op" : "pred",
+      "name" : "on",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0", "r2" ]
+      } ]
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "scan",
+      "name" : "L",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "cond" : {
+      "op" : "pred",
+      "name" : "on",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0" ]
+      } ]
+    },
+    "id" : "r4"
+  }
+}

@@ -1,59 +1,44 @@
 package org.qed.Backends.Calcite.Tests;
 
-import kala.collection.Seq;
-import kala.tuple.Tuple;
+import org.apache.calcite.rel.core.JoinRelType;
 import org.qed.Backends.Calcite.CalciteTester;
-import org.qed.RelType;
+import org.qed.RRuleInstances.AggregateFilterTranspose;
 import org.qed.RuleBuilder;
 
 public class AggregateFilterTransposeTest {
-
     public static void runTest() {
-        var tester = new CalciteTester();
+        var rule = new AggregateFilterTranspose();
+        RuleChecks.rewritesPattern(rule);
+        RuleChecks.rewritesConcretePredicates(rule);
+        RuleChecks.rejectsNearMisses(rule);
         var builder = RuleBuilder.create();
-        
-        var sourceTable = builder.createQedTable(Seq.of(
-            Tuple.of(RelType.fromString("INTEGER", true), false),   // ID (index 0)
-            Tuple.of(RelType.fromString("VARCHAR", true), false),   // CATEGORY1 (index 1)
-            Tuple.of(RelType.fromString("VARCHAR", true), false),   // CATEGORY2 (index 2)
-            Tuple.of(RelType.fromString("DECIMAL", true), false)    // AMOUNT (index 3)
-        ));
-        builder.addTable(sourceTable);
-        
-        var sourceScan = builder.scan(sourceTable.getName()).build();
-        
-        var before = builder
-            .push(sourceScan)
-            .filter(builder.call(
-                builder.genericPredicateOp("pred", true),
-                builder.field(1), builder.field(2)
-            ))
-            .aggregate(
-                builder.groupKey(builder.field(1), builder.field(2)),  
-                builder.sum(builder.field(3))
-            )
-            .build();
-            
-        var after = builder
-            .push(sourceScan)
-            .aggregate(
-                builder.groupKey(builder.field(1), builder.field(2)),  
-                builder.sum(builder.field(3))         
-            )
-            .filter(builder.call(
-                builder.genericPredicateOp("pred", true),
-                builder.field(0), builder.field(1)
-            ))
-            .build();
-            
-        var runner = CalciteTester.loadRules(
-            org.qed.Backends.Calcite.Generated.AggregateFilterTranspose.Config.DEFAULT.toRule()
-        );
-        tester.verify(runner, before, after);
+        var left = RuleChecks.table(builder, 1, false, false);
+        var right = RuleChecks.table(builder, 1, false, false);
+        var b = RuleChecks.ruleBuilder(builder);
+        var predicate = builder.genericPredicateOp("keep_group", false);
+        var aggregate = builder.genericAggregateOp("sum_value", org.qed.RelType.fromString("INTEGER", true));
+        var source = b.scan(left).scan(right).join(JoinRelType.INNER, b.literal(true)).build();
+        var before = b.push(source)
+                .filter(b.call(predicate, b.field(0)))
+                .aggregate(b.groupKey(b.field(0)), b.aggregateCall(aggregate, false, null, "sum_value", b.field(1)))
+                .build();
+        var expected = b.scan(left).scan(right).join(JoinRelType.INNER, b.literal(true))
+                .aggregate(b.groupKey(b.field(0)), b.aggregateCall(aggregate, false, null, "sum_value", b.field(1)))
+                .filter(b.call(predicate, b.field(0))).build();
+        RuleChecks.rewrites(rule, before, expected);
+        var nearMiss = b.push(source)
+                .filter(RuleChecks.gt(b, b.field(1), 3))
+                .aggregate(b.groupKey(b.field(0)), b.aggregateCall(aggregate, false, null, "sum_value", b.field(1)))
+                .build();
+        RuleChecks.doesNotApply(rule, nearMiss);
     }
 
     public static void main(String[] args) {
-    System.out.println("Running AggregateFilterTranspose comprehensive test...");
+        System.out.println("Running AggregateFilterTranspose test...");
         runTest();
+        if (CalciteTester.failures() > 0) {
+            throw new AssertionError(CalciteTester.failures() + " test failures");
+        }
+        System.out.println("AggregateFilterTranspose: 0 test failures");
     }
 }

@@ -1,0 +1,151 @@
+{
+  "name" : "CalcMerge",
+  "from" : {
+    "op" : "project",
+    "input" : {
+      "op" : "filter",
+      "input" : {
+        "op" : "project",
+        "input" : {
+          "op" : "filter",
+          "input" : {
+            "op" : "scan",
+            "name" : "S",
+            "arity" : 2,
+            "id" : "r0"
+          },
+          "cond" : {
+            "op" : "pred",
+            "name" : "BCond",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r0" ]
+            } ]
+          },
+          "id" : "r1"
+        },
+        "exprs" : [ {
+          "op" : "proj",
+          "name" : "B1",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        }, {
+          "op" : "proj",
+          "name" : "B2",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        } ],
+        "id" : "r2"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "TCond",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r2" ]
+        } ]
+      },
+      "id" : "r3"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "T1",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r2" ]
+      } ]
+    }, {
+      "op" : "proj",
+      "name" : "T2",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r2" ]
+      } ]
+    } ],
+    "id" : "r4"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "filter",
+      "input" : {
+        "op" : "scan",
+        "name" : "S",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "cond" : {
+        "op" : "and",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "BCond",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "TCond",
+          "args" : [ {
+            "op" : "proj",
+            "name" : "B1",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r0" ]
+            } ]
+          }, {
+            "op" : "proj",
+            "name" : "B2",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r0" ]
+            } ]
+          } ]
+        } ]
+      },
+      "id" : "r5"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "T1",
+      "args" : [ {
+        "op" : "proj",
+        "name" : "B1",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "proj",
+        "name" : "B2",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ]
+    }, {
+      "op" : "proj",
+      "name" : "T2",
+      "args" : [ {
+        "op" : "proj",
+        "name" : "B1",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "proj",
+        "name" : "B2",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ]
+    } ],
+    "id" : "r6"
+  }
+}

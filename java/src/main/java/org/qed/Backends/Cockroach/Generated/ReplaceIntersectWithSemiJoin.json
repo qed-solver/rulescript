@@ -1,0 +1,81 @@
+{
+  "name" : "ReplaceIntersectWithSemiJoin",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "set",
+    "type" : "intersect",
+    "all" : false,
+    "left" : {
+      "op" : "scan",
+      "name" : "A",
+      "arity" : 2,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "B",
+      "arity" : 2,
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r3"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r3"
+    } ],
+    "aggs" : [ ],
+    "input" : {
+      "op" : "join",
+      "type" : "semi",
+      "cond" : {
+        "op" : "and",
+        "args" : [ {
+          "op" : "scalar",
+          "operator" : "IS NOT DISTINCT FROM",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r3"
+          }, {
+            "op" : "field",
+            "ordinal" : 2,
+            "of" : "r3"
+          } ]
+        }, {
+          "op" : "scalar",
+          "operator" : "IS NOT DISTINCT FROM",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r3"
+          }, {
+            "op" : "field",
+            "ordinal" : 3,
+            "of" : "r3"
+          } ]
+        } ]
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "A",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "B",
+        "arity" : 2,
+        "id" : "r1"
+      },
+      "id" : "r3"
+    },
+    "id" : "r4"
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "name" : "ValuesReduce",
+  "from" : {
+    "op" : "project",
+    "input" : {
+      "op" : "values",
+      "rows" : [ [ {
+        "op" : "int",
+        "value" : 1
+      }, {
+        "op" : "int",
+        "value" : 2
+      }, {
+        "op" : "int",
+        "value" : 3
+      } ], [ {
+        "op" : "int",
+        "value" : 4
+      }, {
+        "op" : "int",
+        "value" : 5
+      }, {
+        "op" : "int",
+        "value" : 6
+      } ] ],
+      "id" : "r0"
+    },
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 2,
+      "of" : "r0"
+    }, {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    } ],
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "values",
+    "rows" : [ [ {
+      "op" : "int",
+      "value" : 3
+    }, {
+      "op" : "int",
+      "value" : 1
+    } ], [ {
+      "op" : "int",
+      "value" : 6
+    }, {
+      "op" : "int",
+      "value" : 4
+    } ] ],
+    "id" : "r2"
+  }
+}

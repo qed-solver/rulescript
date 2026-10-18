@@ -1,62 +1,24 @@
 package org.qed.RRuleInstances;
 
-import org.apache.calcite.rel.RelNode;
-import org.qed.RelRN;
+import kala.collection.Seq;
 import org.qed.RRule;
-import org.qed.RuleBuilder;
+import org.qed.RelRN;
 
+// ORIGIN: Calcite
+// SCOPE: PARTIAL — the union has exactly two inputs (Calcite's rule fires on any number of inputs); both inputs are one-column relations of the same type, as required by Calcite's union type-checking.
 public record UnionToDistinct() implements RRule {
+    static final RelRN a = RelRN.scan("A", "T");
+    static final RelRN b = RelRN.scan("B", "T");
 
-    static final RelRN left = RelRN.scan("Left", "Source_Type");
-    static final RelRN right = RelRN.scan("Right", "Source_Type");
-    
+    static final RelRN unionAll = a.union(true, b);
+
     @Override
     public RelRN before() {
-        return new DistinctUnion(left, right);
+        return a.union(false, b);
     }
-    
+
     @Override
     public RelRN after() {
-        var unionAll = new UnionAll(left, right);
-        return new DistinctAggregate(unionAll);
-    }
-
-    public static record DistinctUnion(RelRN left, RelRN right) implements RelRN {
-        @Override
-        public RelNode semantics() {
-            var builder = RuleBuilder.create();
-            builder.push(left.semantics());
-            builder.push(right.semantics());
-            builder.union(false, 2);
-            
-            return builder.build();
-        }
-    }
-
-    public static record UnionAll(RelRN left, RelRN right) implements RelRN {
-        @Override
-        public RelNode semantics() {
-            var builder = RuleBuilder.create();
-
-            builder.push(left.semantics());
-            builder.push(right.semantics());
-
-            builder.union(true, 2);
-            
-            return builder.build();
-        }
-    }
-
-    public static record DistinctAggregate(RelRN input) implements RelRN {
-        @Override
-        public RelNode semantics() {
-            var builder = RuleBuilder.create();
-            builder.push(input.semantics());
-            // Group by all fields to remove duplicates
-            var groupKey = builder.groupKey(builder.field(0));
-            builder.aggregate(groupKey);
-            
-            return builder.build();
-        }
+        return new RelRN.Aggregate(unionAll, Seq.of(unionAll.field(0)), Seq.empty());
     }
 }

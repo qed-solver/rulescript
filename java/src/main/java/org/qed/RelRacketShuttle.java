@@ -29,11 +29,11 @@ public record RelRacketShuttle(Env env) {
         var tables = SExpr.def("tables", SExpr.app("list", tabs));
         var output = """
                 #lang cosette
-                                
+
                 %s
-                                
+
                 %s
-                                
+
                 (solve-relations r0 r1 tables println)
                 """.formatted(rels.joinToString("\n"), tables);
         Files.write(path, output.getBytes());
@@ -96,11 +96,9 @@ public record RelRacketShuttle(Env env) {
                 yield SExpr.app("r-agg", aggs, groupSet, visit(aggregate.getInput()));
             }
             case LogicalUnion union -> {
-                // TODO: Handle non-all union
                 yield SExpr.app("r-union", SExpr.app("list", Seq.from(union.getInputs()).map(this::visit)));
             }
             case LogicalSort sort -> {
-                // TODO: Properly handle sorting.
                 yield this.visit(sort.getInput());
             }
             default -> throw new UnsupportedOperationException("Not implemented: " + rel.getRelTypeName());

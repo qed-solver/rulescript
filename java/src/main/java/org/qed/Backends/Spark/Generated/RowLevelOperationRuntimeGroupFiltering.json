@@ -1,0 +1,80 @@
+{
+  "name" : "RowLevelOperationRuntimeGroupFiltering",
+  "from" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "scan",
+      "name" : "T",
+      "arity" : 2,
+      "nonnull" : [ 0, 1 ],
+      "id" : "r0"
+    },
+    "cond" : {
+      "op" : "pred",
+      "name" : "cond",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0" ]
+      } ]
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "join",
+      "type" : "semi",
+      "left" : {
+        "op" : "scan",
+        "name" : "T",
+        "arity" : 2,
+        "nonnull" : [ 0, 1 ],
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "filter",
+        "input" : {
+          "op" : "scan",
+          "name" : "T",
+          "arity" : 2,
+          "nonnull" : [ 0, 1 ],
+          "id" : "r0"
+        },
+        "cond" : {
+          "op" : "pred",
+          "name" : "cond",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        },
+        "id" : "r1"
+      },
+      "cond" : {
+        "op" : "scalar",
+        "operator" : "=",
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 0,
+          "left" : "r0",
+          "right" : "r1"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 2,
+          "left" : "r0",
+          "right" : "r1"
+        } ]
+      },
+      "id" : "r2"
+    },
+    "cond" : {
+      "op" : "pred",
+      "name" : "cond",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0" ]
+      } ]
+    },
+    "id" : "r3"
+  }
+}

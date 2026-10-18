@@ -1,0 +1,44 @@
+{
+  "name" : "FoldInNull",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "scalar",
+      "operator" : "=",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      }, {
+        "op" : "null",
+        "type" : "same_as",
+        "refs" : [ {
+          "of" : "r0",
+          "ordinal" : 0
+        } ]
+      } ]
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "null",
+      "type" : "bool"
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "id" : "r2"
+  }
+}

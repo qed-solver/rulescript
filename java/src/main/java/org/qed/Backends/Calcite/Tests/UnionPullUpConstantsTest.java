@@ -1,83 +1,39 @@
 package org.qed.Backends.Calcite.Tests;
 
 import kala.collection.Seq;
-import kala.tuple.Tuple;
-import org.qed.Backends.Calcite.CalciteTester;
-import org.qed.RelType;
-import org.qed.RuleBuilder;
+import org.qed.Backends.Calcite.Tests.RuleChecks;
+import org.qed.RRuleInstances.UnionPullUpConstants;
+import org.qed.RelRN;
+import org.qed.RexRN;
 
-public class UnionPullUpConstantsTest {
-
+public final class UnionPullUpConstantsTest {
     public static void runTest() {
-        var tester = new CalciteTester();
-        var builder = RuleBuilder.create();
-        
-        // Create source tables with 3 fields each
-        var leftTable = builder.createQedTable(Seq.of(
-            Tuple.of(RelType.fromString("INTEGER", true), false),
-            Tuple.of(RelType.fromString("INTEGER", true), false),
-            Tuple.of(RelType.fromString("INTEGER", true), false)
-        ));
-        builder.addTable(leftTable);
-        
-        var rightTable = builder.createQedTable(Seq.of(
-            Tuple.of(RelType.fromString("INTEGER", true), false),
-            Tuple.of(RelType.fromString("INTEGER", true), false),
-            Tuple.of(RelType.fromString("INTEGER", true), false)
-        ));
-        builder.addTable(rightTable);
-        
-        var scanLeft = builder.scan(leftTable.getName()).build();
-        var scanRight = builder.scan(rightTable.getName()).build();
-        
-        // Before: both sides project with constant in middle
-        // Left: [field(0), literal("ACTIVE"), field(2)]
-        // Right: [field(0), literal("ACTIVE"), field(2)]
-        // Union: all 3 columns including the constant
-        var before = builder
-            .push(scanLeft)
-            .project(
-                builder.field(0),
-                builder.alias(builder.literal("ACTIVE"), "status"),
-                builder.field(2)
-            )
-            .push(scanRight)
-            .project(
-                builder.field(0),
-                builder.alias(builder.literal("ACTIVE"), "status"),
-                builder.field(2)
-            )
-            .union(true, 2)
-            .build();
-        
-        // After: pull constant to top
-        // Left reduced: [field(0), field(2)]
-        // Right reduced: [field(0), field(2)]
-        // Union: only 2 columns
-        // Top project adds constant back: [field(0), literal("ACTIVE"), field(1)]
-        var after = builder
-            .push(scanLeft)
-            .project(
-                builder.field(0),
-                builder.field(2)
-            )
-            .push(scanRight)
-            .project(
-                builder.field(0),
-                builder.field(2)
-            )
-            .union(true, 2)
-            .project(
-                builder.field(0),
-                builder.alias(builder.literal("ACTIVE"), "status"),
-                builder.field(1)
-            )
-            .build();
-            
-        var runner = CalciteTester.loadRules(
-            org.qed.Backends.Calcite.Generated.UnionPullUpConstants.Config.DEFAULT.toRule(), org.qed.Backends.Calcite.Generated.ProjectMerge.Config.DEFAULT.toRule()
-        );
-        tester.verify(runner, before, after);
+        var rule = new UnionPullUpConstants();
+        RuleChecks.rewritesPattern(rule);
+        RuleChecks.rewritesConcretePredicates(rule);
+        RuleChecks.rejectsNearMisses(rule);
+        independentlyBuiltPlan();
+        rejectsDistinctUnion();
+    }
+
+    private static void independentlyBuiltPlan() {
+        var left = RelRN.scanMany("IndependentLeft", Seq.of(
+                RexRN.varType("LeftKey", false), RexRN.varType("SharedValue", true)));
+        var right = RelRN.scanMany("IndependentRight", Seq.of(
+                RexRN.varType("RightKey", false), RexRN.varType("SharedValue", true)));
+        var constant = RexRN.trueLiteral();
+        var before = left.project(Seq.of(constant, left.field(1)))
+                .union(true, right.project(Seq.of(constant, right.field(1))));
+        var branchUnion = left.project(Seq.of(left.field(1)))
+                .union(true, right.project(Seq.of(right.field(1))));
+        var expected = branchUnion.project(Seq.of(constant, branchUnion.field(0)));
+        RuleChecks.rewrites(new UnionPullUpConstants(), FaithfulPlans.of(before), FaithfulPlans.expected(expected));
+    }
+
+    private static void rejectsDistinctUnion() {
+        var scan = RelRN.scanMany("DistinctInput", Seq.of(RexRN.varType("Value", true)));
+        var projected = scan.project(Seq.of(RexRN.trueLiteral()));
+        RuleChecks.doesNotApply(new UnionPullUpConstants(), FaithfulPlans.of(projected.union(false, projected)));
     }
 
     public static void main(String[] args) {

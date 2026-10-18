@@ -18,3 +18,4 @@
 java/target/
 java/**/.DS_Store
 **/.DS_Store
+java/vendor/

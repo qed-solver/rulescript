@@ -1,0 +1,85 @@
+{
+  "name" : "HoistSelectExists",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "exists",
+        "input" : {
+          "op" : "filter",
+          "cond" : {
+            "op" : "pred",
+            "name" : "sub_pred",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r1" ]
+            } ]
+          },
+          "input" : {
+            "op" : "scan",
+            "name" : "S",
+            "id" : "r1"
+          },
+          "id" : "r2"
+        }
+      }, {
+        "op" : "pred",
+        "name" : "rest",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ]
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "L",
+      "id" : "r0"
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "rest",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0" ]
+      } ]
+    },
+    "input" : {
+      "op" : "join",
+      "type" : "semi",
+      "cond" : {
+        "op" : "true"
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "L",
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "filter",
+        "cond" : {
+          "op" : "pred",
+          "name" : "sub_pred",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r1" ]
+          } ]
+        },
+        "input" : {
+          "op" : "scan",
+          "name" : "S",
+          "id" : "r1"
+        },
+        "id" : "r2"
+      },
+      "id" : "r4"
+    },
+    "id" : "r5"
+  }
+}

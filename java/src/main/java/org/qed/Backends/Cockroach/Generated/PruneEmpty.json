@@ -1,0 +1,26 @@
+{
+  "name" : "PruneEmpty",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "p",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0" ]
+      } ]
+    },
+    "input" : {
+      "op" : "empty",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "empty",
+    "arity" : 1,
+    "id" : "r0"
+  }
+}

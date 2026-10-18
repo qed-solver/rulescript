@@ -1,0 +1,51 @@
+{
+  "name" : "SimplifySameVarInequalities",
+  "from" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "cond" : {
+      "op" : "scalar",
+      "operator" : "<>",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      }, {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ]
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "scalar",
+        "operator" : "IS NULL",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ]
+      }, {
+        "op" : "null",
+        "type" : "int"
+      } ]
+    },
+    "id" : "r2"
+  }
+}

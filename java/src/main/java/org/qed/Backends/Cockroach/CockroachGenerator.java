@@ -1,1657 +1,1015 @@
 package org.qed.Backends.Cockroach;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import kala.collection.Seq;
-import kala.collection.immutable.ImmutableMap;
-import org.qed.CodeGenerator;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.core.TableScan;
+import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rel.logical.LogicalJoin;
+import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.rex.RexCorrelVariable;
+import org.apache.calcite.rex.RexFieldAccess;
+import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.rex.RexLiteral;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexSubQuery;
+import org.apache.calcite.sql.SqlKind;
+import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
-import java.util.concurrent.atomic.AtomicInteger;
-public class CockroachGenerator implements CodeGenerator<CockroachGenerator.Env> {
-    private static String b(String var) {
-        return "$" + var + ":*";
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
+
+public final class CockroachGenerator {
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final String CASE_OPERATOR = "CASE";
+
+    private final Map<String, String> ids = new LinkedHashMap<>();
+    private final Map<String, List<TypeRef>> typeRefs = new LinkedHashMap<>();
+
+    private record TypeRef(String of, int ordinal) { }
+
+    public String generate(RRule rule) {
+        return generate(rule, "normalize");
     }
-    private static String r(String var) {
-        return "$" + var;
+
+    public String generate(RRule rule, String mode) {
+        try {
+            return MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(new CockroachGenerator().rule(rule, mode)) + "\n";
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException(e);
+        }
     }
-    private static String N(String type, String... children) {
-        StringBuilder sb = new StringBuilder("(").append(type);
-        for (String c : children) sb.append("\n    ").append(c);
-        return sb.append("\n)").toString();
+
+    private ObjectNode rule(RRule rule, String mode) {
+        var node = MAPPER.createObjectNode();
+        node.put("name", rule.name());
+        node.put("mode", mode);
+        collectTypeRefs(rule.before());
+        var from = rel(rule.before(), true);
+        var to = rel(rule.after(), true);
+        var positionalScans = new HashSet<String>();
+        collectJoinFieldRelations(rel(rule.before(), false), positionalScans);
+        collectJoinFieldRelations(rel(rule.after(), false), positionalScans);
+        constrainPositionalScans(from, positionalScans);
+        constrainPositionalScans(to, positionalScans);
+        literalKeys = 0;
+        computedKeys(from, true);
+        computedKeys(to, false);
+        var preds = new LinkedHashMap<String, PredicatePattern>();
+        activePreds = preds;
+        var projs = new HashSet<String>();
+        var groups = new HashSet<String>();
+        var aggs = new HashSet<String>();
+        checkRel(from, true, preds, projs, groups, aggs);
+        checkRel(to, false, preds, projs, groups, aggs);
+        var matchedValues = new ArrayList<ObjectNode>();
+        collectValues(from, matchedValues);
+        mapNewValues(to, true, from, matchedValues);
+        var matchedProjectIds = new HashSet<String>();
+        collectProjectIds(from, matchedProjectIds);
+        var keptProjectIds = new HashSet<String>();
+        collectProjectIds(to, keptProjectIds);
+        var replacedProjects = new ArrayList<ObjectNode>();
+        collectProjects(from, replacedProjects);
+        replacedProjects.removeIf(project -> keptProjectIds.contains(project.path("id").asText()));
+        checkConcreteProjectMappings(to, true, from, matchedProjectIds, replacedProjects);
+        node.set("from", from);
+        node.set("to", to);
+        return node;
     }
-    private static String filtersBoundBy(String condVar, String ref) {
-        return "(FiltersBoundBy " + r(condVar) + " " + ref + ")";
+
+    private static Map<String, PredicatePattern> activePreds = new LinkedHashMap<>();
+    private static int literalKeys;
+
+    private static void computedKeys(JsonNode node, boolean from) {
+        if (node == null) return;
+        if (node.isObject() && node.path("op").asText().equals("aggregate") && from) {
+            for (var group : node.withArray("groups")) if (group.path("op").asText().equals("proj")) ((ObjectNode) group).put("op", "group_key");
+            for (var agg : node.withArray("aggs")) {
+                var args = agg.withArray("args");
+                for (int i = 0; i < args.size(); i++) {
+                    var arg = (ObjectNode) args.get(i);
+                    if (arg.path("op").asText().equals("proj")) {
+                        arg.put("op", "group_key");
+                    } else if (Set.of("int", "true", "false").contains(arg.path("op").asText())) {
+                        var literal = arg.deepCopy();
+                        arg.removeAll();
+                        arg.put("op", "group_key");
+                        arg.put("name", "literal" + literalKeys++);
+                        arg.putArray("args");
+                        arg.set("scalar", literal);
+                    }
+                }
+            }
+        }
+        if (node.isObject() && node.path("op").asText().equals("project") && !from) for (var expr : node.withArray("exprs")) if (expr.path("op").asText().equals("group_key")) ((ObjectNode) expr).put("op", "proj");
+        for (var child : node) computedKeys(child, from);
     }
-    private static boolean flag(Env env, String key) {
-        return env.bindings().containsKey(key);
+
+    private static void collectValues(ObjectNode rel, List<ObjectNode> found) {
+        switch (rel.path("op").asText()) {
+            case "values" -> found.add(rel);
+            case "filter", "project", "aggregate" -> collectValues((ObjectNode) rel.get("input"), found);
+            case "join", "set" -> {
+                collectValues((ObjectNode) rel.get("left"), found);
+                collectValues((ObjectNode) rel.get("right"), found);
+            }
+            default -> { }
+        }
     }
-    private static String get(Env env, String key) {
-        return env.bindings().get(key);
+
+    private static int countOp(JsonNode node, String op) {
+        if (node == null) return 0;
+        int count = node.isObject() && node.path("op").asText().equals(op) ? 1 : 0;
+        for (var child : node) count += countOp(child, op);
+        return count;
     }
-    private static String get(Env env, String key, String def) {
-        return env.bindings().getOrDefault(key, def);
+
+    private static void mapNewValues(ObjectNode rel, boolean root, ObjectNode from, List<ObjectNode> matched) {
+        switch (rel.path("op").asText()) {
+            case "values" -> {
+                if (matched.stream().anyMatch(v -> v.path("id").asText().equals(rel.path("id").asText()))) return;
+                int width = rel.withArray("rows").get(0).size();
+                if (root) return;
+                ObjectNode source = null;
+                List<Integer> mapping = null;
+                for (var candidate : matched) {
+                    if (candidate.withArray("rows").size() != rel.withArray("rows").size()) continue;
+                    var ordinals = new ArrayList<Integer>();
+                    var used = new HashSet<Integer>();
+                    boolean valid = true;
+                    for (int target = 0; target < width; target++) {
+                        int match = -1;
+                        for (int input = 0; input < candidate.withArray("rows").get(0).size(); input++) {
+                            boolean same = true;
+                            for (int row = 0; row < rel.withArray("rows").size(); row++) same &= rel.withArray("rows").get(row).get(target).equals(candidate.withArray("rows").get(row).get(input));
+                            if (same) {
+                                if (match >= 0) { valid = false; break; }
+                                match = input;
+                            }
+                        }
+                        if (match < 0 || !used.add(match)) { valid = false; break; }
+                        ordinals.add(match);
+                    }
+                    if (valid) {
+                        source = candidate;
+                        mapping = ordinals;
+                    }
+                }
+                if (source == null) {
+                    var projects = new ArrayList<ObjectNode>();
+                    collectProjects(from, projects);
+                    if (rel.withArray("rows").size() == 1) {
+                        for (var project : projects) {
+                            var ordinals = new ArrayList<Integer>();
+                            var used = new HashSet<Integer>();
+                            var valid = true;
+                            for (int target = 0; target < width && valid; target++) {
+                                int match = -1;
+                                for (int index = 0; index < project.withArray("exprs").size(); index++) {
+                                    if (project.withArray("exprs").get(index).equals(rel.withArray("rows").get(0).get(target))) {
+                                        if (match >= 0) { valid = false; break; }
+                                        match = index;
+                                    }
+                                }
+                                if (match < 0 || !used.add(match)) { valid = false; }
+                                else { ordinals.add(match); }
+                            }
+                            if (valid) {
+                                source = project;
+                                mapping = ordinals;
+                            }
+                        }
+                    }
+                }
+                rel.put("reuse_cols_of", source.path("id").asText());
+                var ordinals = rel.putArray("ordinals");
+                mapping.forEach(ordinals::add);
+            }
+            case "filter", "project", "aggregate" -> mapNewValues((ObjectNode) rel.get("input"), false, from, matched);
+            case "join", "set" -> {
+                mapNewValues((ObjectNode) rel.get("left"), false, from, matched);
+                mapNewValues((ObjectNode) rel.get("right"), false, from, matched);
+            }
+            default -> { }
+        }
     }
-    private static String joinType(org.apache.calcite.rel.core.JoinRelType ty) {
-        return switch (ty) {
-            case INNER -> "InnerJoin";
-            case LEFT -> "LeftJoin";
-            case RIGHT -> "RightJoin";
-            case FULL -> "FullJoin";
-            case SEMI -> "SemiJoin";
-            case ANTI -> "AntiJoin";
-            default -> "InnerJoin";
+
+    private void addTypeRefs(RelRN source, String of) {
+        switch (source) {
+            case RelRN.Scan scan -> typeRefs.computeIfAbsent(scan.ty().toString(), k -> new ArrayList<>()).add(new TypeRef(of, 0));
+            case RelRN.ScanMany scan -> {
+                for (int i = 0; i < scan.tys().size(); i++) typeRefs.computeIfAbsent(scan.tys().get(i).toString(), k -> new ArrayList<>()).add(new TypeRef(of, i));
+            }
+            default -> { }
+        }
+    }
+
+    private void collectTypeRefs(RelRN rel) {
+        switch (rel) {
+            case RelRN.Scan scan -> addTypeRefs(scan, id(scan));
+            case RelRN.ScanMany scan -> addTypeRefs(scan, id(scan));
+            case RelRN.Empty empty -> addTypeRefs(empty.sourceType(), id(empty));
+            case RelRN.Filter filter -> collectTypeRefs(filter.source());
+            case RelRN.Project project -> collectTypeRefs(project.source());
+            case RelRN.ProjectMany project -> collectTypeRefs(project.source());
+            case RelRN.Aggregate aggregate -> collectTypeRefs(aggregate.source());
+            case RelRN.Join join -> { collectTypeRefs(join.left()); collectTypeRefs(join.right()); }
+            case RelRN.Union set -> set.sources().forEach(this::collectTypeRefs);
+            case RelRN.Intersect set -> set.sources().forEach(this::collectTypeRefs);
+            case RelRN.Minus set -> set.sources().forEach(this::collectTypeRefs);
+            default -> { }
+        }
+    }
+
+    private static void collectJoinFieldRelations(JsonNode node, Set<String> ids) {
+        if (node.isObject()) {
+            if (node.path("op").asText().equals("joinfield")) {
+                ids.add(node.path("left").asText());
+                ids.add(node.path("right").asText());
+            }
+            node.elements().forEachRemaining(child -> collectJoinFieldRelations(child, ids));
+        } else if (node.isArray()) {
+            node.elements().forEachRemaining(child -> collectJoinFieldRelations(child, ids));
+        }
+    }
+
+    private static void constrainPositionalScans(JsonNode node, Set<String> ids) {
+        if (node.isObject()) {
+            if (node.path("op").asText().equals("scan") && ids.contains(node.path("id").asText()) && !node.has("arity")) ((ObjectNode) node).put("arity", 1);
+            node.elements().forEachRemaining(child -> constrainPositionalScans(child, ids));
+        } else if (node.isArray()) {
+            node.elements().forEachRemaining(child -> constrainPositionalScans(child, ids));
+        }
+    }
+
+    private static int joinCount(ObjectNode rel) {
+        return switch (rel.path("op").asText()) {
+            case "filter", "project", "aggregate" -> joinCount((ObjectNode) rel.get("input"));
+            case "join" -> 1 + joinCount((ObjectNode) rel.get("left")) + joinCount((ObjectNode) rel.get("right"));
+            case "set" -> joinCount((ObjectNode) rel.get("left")) + joinCount((ObjectNode) rel.get("right"));
+            default -> 0;
         };
     }
-    private String getJoinType(org.apache.calcite.rel.core.JoinRelType ty) {
-        return joinType(ty);
+
+    private static int setCount(ObjectNode rel) {
+        return switch (rel.path("op").asText()) {
+            case "filter", "project", "aggregate" -> setCount((ObjectNode) rel.get("input"));
+            case "join" -> setCount((ObjectNode) rel.get("left")) + setCount((ObjectNode) rel.get("right"));
+            case "set" -> 1 + setCount((ObjectNode) rel.get("left")) + setCount((ObjectNode) rel.get("right"));
+            default -> 0;
+        };
     }
-    @Override
-    public Env preMatch(String rulename) {
-        return Env.empty(rulename);
-    }
-    @Override
-    public Env preTransform(Env env) {
-        String p = env.pattern();
-        if (p == null) return env;
-        int idx = p.indexOf("(HasZeroRows $");
-        if (idx < 0) return env;
-        int start = idx + "(HasZeroRows $".length();
-        int end = p.indexOf(")", start);
-        if (end <= start) return env;
-        String var = p.substring(start, end).trim();
-        if (var.isEmpty()) return env;
-        return env.addBinding("hasZeroRows", "true").addBinding("zeroInput", var);
-    }
-    @Override
-    public Env onMatchScan(Env env, RelRN.Scan scan) {
-        String var = env.generateVar("input");
-        return env.addBinding(scan.name(), var).focus(b(var));
-    }
-    @Override
-    public Env onMatchFilter(Env env, RelRN.Filter filter) {
-        if (filter.source() instanceof RelRN.Project) {
-            return matchFilterOverProject(env);
-        }
-        if (filter.source() instanceof RelRN.Union) {
-            return matchFilterOverUnion(env);
-        }
-        Env sourceEnv = onMatch(env, filter.source());
-        String sourcePattern = sourceEnv.current();
-        Env condEnv = onMatch(sourceEnv, filter.cond());
-        if (filter.source() instanceof RelRN.Empty) {
-            String inputVar = condEnv.generateVar("input");
-            String filtersVar = condEnv.generateVar("filters");
-            String pattern = N("Select", b(inputVar) + " & (HasZeroRows " + r(inputVar) + ")", b(filtersVar) );
-            return condEnv .addBinding("isPruneEmptyFilter", "true") .addBinding("pruneEmptyInput", inputVar) .setPattern(pattern).focus(pattern);
-        }
-        if (filter.cond() instanceof RexRN.True) {
-            String pattern = N("Select", sourcePattern, "[]");
-            return condEnv.setPattern(pattern).focus(pattern);
-        }
-        if (filter.cond() instanceof RexRN.False) {
-            String onVar = condEnv.generateVar("on");
-            Env onEnv = condEnv.addBinding("on", onVar);
-            String itemVar = onEnv.generateVar("item");
-            Env itemEnv = onEnv.addBinding("item", itemVar);
-            String listPat = r(onVar) + ":[\n" + "        ...\n" + "        " + r(itemVar) + ":(FiltersItem (False))\n" + "        ...\n" + "    ]";
-            String pattern = N("Select", sourcePattern, listPat);
-            return itemEnv.setPattern(pattern).focus(pattern);
-        }
-        String condPattern = condEnv.current();
-        if (filter.source() instanceof RelRN.Aggregate) {
-            String condVarName = extractVar(condPattern);
-            String privateVar = get(sourceEnv, "aggregate_private", null);
-            if (condVarName != null && privateVar != null) {
-                condPattern = condPattern + " & " + filtersBoundBy(condVarName, "(GroupingCols " + r(privateVar) + ")");
+
+    private static void collectProjects(ObjectNode rel, List<ObjectNode> found) {
+        switch (rel.path("op").asText()) {
+            case "project" -> {
+                found.add(rel);
+                collectProjects((ObjectNode) rel.get("input"), found);
             }
-        }
-        String filterCondVarName = extractVar(condEnv.current());
-        if (filterCondVarName != null) {
-            condEnv = condEnv.addBinding("filterCondVar", filterCondVarName);
-        }
-        String pattern = N("Select", sourcePattern, condPattern);
-        return condEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env matchFilterOverProject(Env env) {
-        String inputVar = env.generateVar("input");
-        Env inputEnv = env.addBinding("input", inputVar);
-        String projVar = inputEnv.generateVar("proj");
-        Env projEnv = inputEnv.addBinding("proj", projVar);
-        String passthroughVar = projEnv.generateVar("passthrough");
-        Env passEnv = projEnv.addBinding("passthrough", passthroughVar);
-        String condVar = passEnv.generateVar("cond");
-        Env condEnv = passEnv.addBinding("cond", condVar);
-        String inputColsVar = condEnv.generateVar("inputCols");
-        Env resultEnv = condEnv.addBinding("inputCols", inputColsVar);
-        String projectPat = "(Project\n" + "    " + b(inputVar) + "\n" + "    " + b(projVar) + "\n" + "    " + b(passthroughVar) + "\n" + ")";
-        String condLine = b(condVar) + " &\n" + "    " + filtersBoundBy(condVar, r(inputColsVar) + ":(OutputCols " + r(inputVar) + ")");
-        String pattern = N("Select", projectPat, condLine);
-        return resultEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env matchFilterOverUnion(Env env) {
-        String inputVar = env.generateVar("input");
-        Env inputEnv = env.addBinding("input", inputVar);
-        String leftVar = inputEnv.generateVar("left");
-        Env leftEnv = inputEnv.addBinding("left", leftVar);
-        String rightVar = leftEnv.generateVar("right");
-        Env rightEnv = leftEnv.addBinding("right", rightVar);
-        String colmapVar = rightEnv.generateVar("colmap");
-        Env colmapEnv = rightEnv.addBinding("colmap", colmapVar);
-        String filterVar = colmapEnv.generateVar("filter");
-        Env filterEnv = colmapEnv.addBinding("filter", filterVar);
-        String itemVar = filterEnv.generateVar("item");
-        Env itemEnv = filterEnv.addBinding("item", itemVar);
-        String inputColsVar = itemEnv.generateVar("inputCols");
-        Env resultEnv = itemEnv.addBinding("inputCols", inputColsVar) .addBinding("isFilterSetOpTranspose", "true");
-        String unionPat = r(inputVar) + ":(Union " + r(leftVar) + ":* " + r(rightVar) + ":* " + r(colmapVar) + ":*)";
-        String listPat = r(filterVar) + ":[\n" + "        ...\n" + "        " + r(itemVar) + ":* &\n" + "            (CanMapOnSetOp " + r(itemVar) + ") &\n" + "            (IsBoundBy " + r(itemVar) + " " + r(inputColsVar) + ":(OutputCols " + r(inputVar) + "))\n" + "        ...\n" + "    ]";
-        String pattern = N("Select", unionPat, listPat);
-        return resultEnv.setPattern(pattern).focus(pattern);
-    }
-    public Env onMatchProject(Env env, RelRN.Project project) {
-        if (project.source() instanceof RelRN.Empty) {
-            return matchProjectOverEmpty(env);
-        }
-        if (project.source() instanceof RelRN.Aggregate aggregate) {
-            return matchProjectOverAggregate(env, aggregate);
-        }
-        if (project.source() instanceof RelRN.Project) {
-            return matchProjectOverProject(env, project);
-        }
-        return matchProjectGeneral(env, project);
-    }
-    private Env matchProjectOverEmpty(Env env) {
-        String inputVar = env.generateVar("input");
-        Env inputEnv = env.addBinding("zeroInput", inputVar) .addBinding("hasZeroRows", "true");
-        String projectionsVar = inputEnv.generateVar("projections");
-        Env projEnv = inputEnv.addBinding("projections", projectionsVar);
-        String passthroughVar = projEnv.generateVar("passthrough");
-        Env passEnv = projEnv.addBinding("passthrough", passthroughVar);
-        String pattern = N("Project", b(inputVar) + " & (HasZeroRows " + r(inputVar) + ")", b(projectionsVar), b(passthroughVar) );
-        return passEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env matchProjectOverAggregate(Env env, RelRN.Aggregate aggregate) {
-        String inputVar = env.generateVar("input");
-        Env inputEnv = env.addBinding("input", inputVar);
-        Env aggInputEnv = onMatch(inputEnv, aggregate.source());
-        String innerInputVar = aggInputEnv.current().replace("$", "").replace(":*", "").trim();
-        Env aggBound = aggInputEnv.addBinding("innerInput", innerInputVar);
-        Env aggsEnv = onMatchAggCalls(aggBound, aggregate.aggCalls());
-        String aggregationsVar = aggsEnv.generateVar("aggregations");
-        Env aggsBindEnv = aggsEnv.addBinding("aggregations", aggregationsVar);
-        Env groupEnv = onMatchGroupSet(aggsBindEnv, aggregate.groupSet());
-        String groupingPrivateVar = groupEnv.generateVar("groupingPrivate");
-        Env gpBindEnv = groupEnv.addBinding("groupingPrivate", groupingPrivateVar);
-        Env projEnv = onMatch(gpBindEnv, aggregate.source());
-        String projectionsVar = projEnv.generateVar("projections");
-        Env projBindEnv = projEnv.addBinding("projections", projectionsVar);
-        String passthroughVar = projBindEnv.generateVar("passthrough");
-        Env passEnv = projBindEnv.addBinding("passthrough", passthroughVar);
-        String neededVar = passEnv.generateVar("needed");
-        Env resultEnv = passEnv.addBinding("needed", neededVar);
-        String groupByPat = "(GroupBy\n" + "        " + b(innerInputVar) + "\n" + "        " + b(aggregationsVar) + "\n" + "        " + b(groupingPrivateVar) + "\n" + "    )";
-        String passCond = b(passthroughVar) + " &\n" + "        (CanPruneAggCols\n" + "            " + r(aggregationsVar) + "\n" + "            " + r(neededVar) + ":(UnionCols\n" + "                (ProjectionOuterCols " + r(projectionsVar) + ")\n" + "                " + r(passthroughVar) + "\n" + "            )\n" + "        )";
-        String pattern = "(Project\n" + "    " + r(inputVar) + ":(" + groupByPat.trim() + "\n" + "    " + b(projectionsVar) + "\n" + "    " + passCond + "\n" + ")";
-        pattern = "(Project\n" + "    " + r(inputVar) + ":(GroupBy\n" + "        " + b(innerInputVar) + "\n" + "        " + b(aggregationsVar) + "\n" + "        " + b(groupingPrivateVar) + "\n" + "    )\n" + "    " + b(projectionsVar) + "\n" + "    " + b(passthroughVar) + " &\n" + "        (CanPruneAggCols\n" + "            " + r(aggregationsVar) + "\n" + "            " + r(neededVar) + ":(UnionCols\n" + "                (ProjectionOuterCols " + r(projectionsVar) + ")\n" + "                " + r(passthroughVar) + "\n" + "            )\n" + "        )\n" + ")";
-        return resultEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env matchProjectOverProject(Env env, RelRN.Project project) {
-        RelRN.Project innerProject = (RelRN.Project) project.source();
-        Env outerProjEnv = onMatch(env, project.map());
-        String outerProjPat = outerProjEnv.current();
-        Env innerInputEnv = onMatch(outerProjEnv, innerProject.source());
-        String innerInputPat = innerInputEnv.current();
-        Env innerProjEnv = onMatch(innerInputEnv, innerProject.map());
-        String innerProjPat = innerProjEnv.current();
-        String innerPassVar = innerProjEnv.generateVar("innerPassthrough");
-        Env innerPassEnv = innerProjEnv.addBinding("innerPassthrough", innerPassVar);
-        String outerPassVar = innerPassEnv.generateVar("passthrough");
-        Env resultEnv = innerPassEnv.addBinding("passthrough", outerPassVar);
-        String outerProjRef = outerProjPat.replace(":*", "");
-        String innerProjRef = innerProjPat.replace(":*", "");
-        String innerProjBlock = "Project\n    " + innerInputPat + "\n    " + innerProjPat + "\n    " + b(innerPassVar);
-        String condLine = outerProjPat + " &\n" + "        (CanMergeProjections " + outerProjRef + " " + innerProjRef + ")";
-        String pattern = "(Project\n" + "    $input:(" + innerProjBlock + ")\n" + "    " + condLine + "\n" + "    " + b(outerPassVar) + "\n" + ")";
-        return resultEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env matchProjectGeneral(Env env, RelRN.Project project) {
-        Env sourceEnv = onMatch(env, project.source());
-        String sourcePat = sourceEnv.current();
-        Env projEnv = onMatch(sourceEnv, project.map());
-        String projPat = projEnv.current();
-        String passthroughVar = projEnv.generateVar("passthrough");
-        Env passEnv = projEnv.addBinding("passthrough", passthroughVar);
-        String passthroughCond = "";
-        if (project.source() instanceof RelRN.Filter) {
-            String condVarName = get(sourceEnv, "filterCondVar", null);
-            if (condVarName != null) {
-                passthroughCond = " & " + filtersBoundBy(condVarName, r(passthroughVar));
+            case "filter", "aggregate" -> collectProjects((ObjectNode) rel.get("input"), found);
+            case "join", "set" -> {
+                collectProjects((ObjectNode) rel.get("left"), found);
+                collectProjects((ObjectNode) rel.get("right"), found);
             }
+            default -> { }
         }
-        String pattern = N("Project", sourcePat, projPat, b(passthroughVar) + passthroughCond );
-        return passEnv.setPattern(pattern).focus(pattern);
     }
-    @Override
-    public Env onMatchJoin(Env env, RelRN.Join join) {
-        if (join.cond() instanceof RexRN.And and && and.sources().size() == 2) {
-            boolean hasTrue = and.sources().stream().anyMatch(s -> s instanceof RexRN.True);
-            boolean hasFalse = and.sources().stream().anyMatch(s -> s instanceof RexRN.False);
-            RexRN other = and.sources().stream() .filter(s -> !(s instanceof RexRN.True) && !(s instanceof RexRN.False)) .findFirst().orElse(null);
-            if (hasTrue && other != null) {
-                return matchJoinReduceTrue(env, join);
+
+    private static void collectProjectIds(ObjectNode rel, Set<String> ids) {
+        switch (rel.path("op").asText()) {
+            case "project" -> {
+                ids.add(rel.path("id").asText());
+                collectProjectIds((ObjectNode) rel.get("input"), ids);
             }
-            if (hasFalse && other != null) {
-                return matchJoinReduceFalse(env, join);
+            case "filter", "aggregate" -> collectProjectIds((ObjectNode) rel.get("input"), ids);
+            case "join", "set" -> {
+                collectProjectIds((ObjectNode) rel.get("left"), ids);
+                collectProjectIds((ObjectNode) rel.get("right"), ids);
             }
+            default -> { }
         }
-        Env leftEnv = onMatch(env, join.left());
-        String leftPat = leftEnv.current();
-        Env rightEnv = onMatch(leftEnv, join.right());
-        String rightPat = rightEnv.current();
-        Env condEnv = onMatch(rightEnv, join.cond());
-        String condPat = condEnv.current();
-        String privateVar = condEnv.generateVar("private");
-        Env privateEnv = condEnv .addBinding("private_" + System.identityHashCode(join), privateVar) .addBinding("last_private", privateVar);
-        if (join.ty().semantics() == org.apache.calcite.rel.core.JoinRelType.INNER) {
-            String leftVar = privateEnv.generateVar("left");
-            String rightVar = privateEnv.generateVar("right");
-            String onVar = privateEnv.generateVar("on");
-            Env bound = privateEnv .addBinding("left", leftVar) .addBinding("right", rightVar) .addBinding("on", onVar) .addBinding("private", privateVar);
-            if (env.rulename.equals("JoinAddRedundantSemiJoin")) {
-                return matchJoinAddRedundantSemiJoin(bound, privateVar, leftVar, rightVar);
+    }
+
+    private static void checkConcreteProjectMappings(ObjectNode rel, boolean root, ObjectNode from, Set<String> matchedIds, List<ObjectNode> replaced) {
+        switch (rel.path("op").asText()) {
+            case "project" -> {
+                boolean concrete = false;
+                for (var expr : rel.withArray("exprs")) concrete |= Set.of("scalar", "true", "false", "null", "int", "field_alias", "and_scalar", "or", "not").contains(expr.path("op").asText());
+                int rootArity = rootOutputArity(from);
+                if (concrete && !matchedIds.contains(rel.path("id").asText()) && !(root && (rootArity < 0 || rootArity == rel.withArray("exprs").size()))) {
+                    var candidates = replaced.stream().filter(c -> c.withArray("exprs").size() == rel.withArray("exprs").size()).toList();
+                    if (candidates.size() == 1) rel.put("reuse_cols_of", candidates.get(0).path("id").asText());
+                }
+                checkConcreteProjectMappings((ObjectNode) rel.get("input"), false, from, matchedIds, replaced);
             }
-            if (env.rulename.equals("JoinCommute")) {
-                return matchJoinCommute(bound, privateVar, leftVar, rightVar, onVar);
+            case "filter" -> checkConcreteProjectMappings((ObjectNode) rel.get("input"), root, from, matchedIds, replaced);
+            case "aggregate" -> checkConcreteProjectMappings((ObjectNode) rel.get("input"), false, from, matchedIds, replaced);
+            case "join", "set" -> {
+                checkConcreteProjectMappings((ObjectNode) rel.get("left"), false, from, matchedIds, replaced);
+                checkConcreteProjectMappings((ObjectNode) rel.get("right"), false, from, matchedIds, replaced);
             }
+            default -> { }
         }
-        if (env.rulename.equals("JoinExtractFilter") && join.ty().semantics() == org.apache.calcite.rel.core.JoinRelType.INNER && !(join.cond() instanceof RexRN.And)) {
-            return matchJoinExtractFilter(privateEnv, join, privateVar);
-        }
-        if (env.rulename.equals("JoinPushTransitivePredicates") && join.ty().semantics() == org.apache.calcite.rel.core.JoinRelType.INNER) {
-            String condVarName = extractVar(condPat);
-            if (condVarName != null) {
-                condPat = condPat + " & ^(IsFilterEmpty " + r(condVarName) + ")";
+    }
+
+    private static int rootOutputArity(ObjectNode rel) {
+        return switch (rel.path("op").asText()) {
+            case "filter" -> rootOutputArity((ObjectNode) rel.get("input"));
+            case "project" -> rel.withArray("exprs").size();
+            case "aggregate" -> rel.withArray("groups").size() + rel.withArray("aggs").size();
+            case "empty", "scan" -> rel.path("arity").asInt(-1);
+            case "values" -> rel.withArray("rows").isEmpty() ? -1 : rel.withArray("rows").get(0).size();
+            case "join" -> {
+                int left = rootOutputArity((ObjectNode) rel.get("left"));
+                int right = rootOutputArity((ObjectNode) rel.get("right"));
+                yield left < 0 || right < 0 ? -1 : left + right;
             }
-        }
-        String jType = joinType(join.ty().semantics());
-        String pattern = N(jType, leftPat, rightPat, condPat, b(privateVar));
-        return privateEnv.setPattern(pattern).focus(pattern);
+            case "set" -> rootOutputArity((ObjectNode) rel.get("left"));
+            default -> -1;
+        };
     }
-    private Env matchJoinReduceTrue(Env env, RelRN.Join join) {
-        Env leftEnv = onMatch(env, join.left());
-        Env rightEnv = onMatch(leftEnv, join.right());
-        String onVar = rightEnv.generateVar("on");
-        Env onEnv = rightEnv.addBinding("on", onVar);
-        String itemVar = onEnv.generateVar("item");
-        Env itemEnv = onEnv.addBinding("item", itemVar);
-        String privateVar = itemEnv.generateVar("private");
-        Env resultEnv = itemEnv .addBinding("private_" + System.identityHashCode(join), privateVar) .addBinding("last_private", privateVar) .addBinding("joinReduceTrue", "true");
-        String listPat = r(onVar) + ":[\n" + "        ...\n" + "        " + r(itemVar) + ":(FiltersItem (True))\n" + "        ...\n" + "    ]";
-        String pattern = N(joinType(join.ty().semantics()), leftEnv.current(), rightEnv.current(), listPat, b(privateVar));
-        return resultEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env matchJoinReduceFalse(Env env, RelRN.Join join) {
-        Env leftEnv = onMatch(env, join.left());
-        Env rightEnv = onMatch(leftEnv, join.right());
-        String onVar = rightEnv.generateVar("on");
-        Env onEnv = rightEnv.addBinding("on", onVar);
-        String itemVar = onEnv.generateVar("item");
-        Env itemEnv = onEnv.addBinding("item", itemVar);
-        String privateVar = itemEnv.generateVar("private");
-        Env resultEnv = itemEnv .addBinding("private_" + System.identityHashCode(join), privateVar) .addBinding("last_private", privateVar) .addBinding("joinReduceFalse", "true");
-        String listPat = r(onVar) + ":[\n" + "        ...\n" + "        " + r(itemVar) + ":(FiltersItem\n" + "            (And * (False))\n" + "        )\n" + "        ...\n" + "    ] &\n" + "        ^(IsFilterFalse " + r(onVar) + ")";
-        String pattern = N(joinType(join.ty().semantics()), leftEnv.current(), rightEnv.current(), listPat, b(privateVar));
-        return resultEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env matchJoinAddRedundantSemiJoin(Env bound, String privateVar, String leftVar, String rightVar) {
-        bound = bound.addBinding("isJoinAddRedundantSemiJoin", "true");
-        String filtersVar = bound.generateVar("filters");
-        Env resultEnv = bound.addBinding("filters", filtersVar);
-        String privLine = b(privateVar) + " & ^(IsRedundantSemiJoin " + r(leftVar) + " " + r(rightVar) + " " + r(filtersVar) + ")";
-        String pattern = N("InnerJoin", r(leftVar) + ":^(Values)", b(rightVar), b(filtersVar), privLine );
-        return resultEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env matchJoinCommute(Env bound, String privateVar, String leftVar, String rightVar, String onVar) {
-        bound = bound.addBinding("isJoinCommute", "true");
-        String privLine = b(privateVar) + " &\n" + "        (CanCommuteJoin " + r(leftVar) + " " + r(rightVar) + ")";
-        String pattern = N("InnerJoin", b(leftVar), b(rightVar), b(onVar), privLine);
-        return bound.setPattern(pattern).focus(pattern);
-    }
-    private Env matchJoinExtractFilter(Env privateEnv, RelRN.Join join, String privateVar) {
-        String leftVar = privateEnv.generateVar("left");
-        String rightVar = privateEnv.generateVar("right");
-        String onVar = privateEnv.generateVar("on");
-        Env bound = privateEnv .addBinding("left", leftVar) .addBinding("right", rightVar) .addBinding("on", onVar) .addBinding("private", privateVar) .addBinding("isJoinExtractFilter", "true");
-        if (join.cond() instanceof RexRN.Pred pred) {
-            bound = bound.addBinding(pred.operator().getName(), onVar);
-        }
-        String condLine = b(onVar) + " &\n" + "        (CanExtractJoinFilter " + r(leftVar) + " " + r(rightVar) + " " + r(onVar) + ")";
-        String pattern = N(joinType(join.ty().semantics()), b(leftVar), b(rightVar), condLine, b(privateVar));
-        return bound.setPattern(pattern).focus(pattern);
-    }
-    @Override
-    public Env onMatchJoinWithSeparateConds(Env env, RelRN.JoinWithSeparateConds join) {
-        if (join.ty().semantics() == org.apache.calcite.rel.core.JoinRelType.INNER && join.cond() instanceof RexRN.And and && and.sources().size() > 2) {
-            String leftVar = env.generateVar("left");
-            Env leftEnv = env.addBinding("left", leftVar);
-            String rightVar = leftEnv.generateVar("right");
-            Env rightEnv = leftEnv.addBinding("right", rightVar);
-            String onVar = rightEnv.generateVar("on");
-            Env onEnv = rightEnv.addBinding("on", onVar);
-            String privateVar = onEnv.generateVar("private");
-            Env resultEnv = onEnv .addBinding("private", privateVar) .addBinding("isJoinConditionPush", "true");
-            String leftLine = b(leftVar) + " & ^(HasOuterCols " + r(leftVar) + ")";
-            String rightLine = b(rightVar) + " & ^(HasOuterCols " + r(rightVar) + ")";
-            String onLine = b(onVar) + " &\n" + "        (HasBoundConditions\n" + "            " + r(onVar) + "\n" + "            (OutputCols " + r(leftVar) + ")\n" + "            (OutputCols " + r(rightVar) + ")\n" + "        )";
-            String pattern = N("InnerJoin", leftLine, rightLine, onLine, b(privateVar));
-            return resultEnv.setPattern(pattern).focus(pattern);
-        }
-        Env leftEnv = onMatch(env, join.left());
-        Env rightEnv = onMatch(leftEnv, join.right());
-        Env condEnv = onMatch(rightEnv, join.cond());
-        String privateVar = condEnv.generateVar("private");
-        Env resultEnv = condEnv .addBinding("private_" + System.identityHashCode(join), privateVar) .addBinding("last_private", privateVar);
-        String jType = joinType(join.ty().semantics());
-        String pattern = N(jType, leftEnv.current(), rightEnv.current(), condEnv.current(), b(privateVar));
-        return resultEnv.setPattern(pattern).focus(pattern);
-    }
-    @Override
-    public Env onMatchUnion(Env env, RelRN.Union union) {
-        if (union.sources().size() == 2) {
-            RelRN l = union.sources().get(0), r = union.sources().get(1);
-            if (l instanceof RelRN.Empty && r instanceof RelRN.Empty) {
-                return matchUnionBothEmpty(env, union);
-            }
-        }
-        if (union.sources().size() == 2 && union.sources().get(0) instanceof RelRN.Union inner && inner.sources().size() == 2) {
-            return matchNestedUnion(env, union);
-        }
-        if (union.sources().size() == 2 && !union.all()) {
-            RelRN ls = union.sources().get(0), rs = union.sources().get(1);
-            if (!(ls instanceof RelRN.Union)) {
-                return matchDistinctUnion(env, union);
-            }
-        }
-        if (union.all() && union.sources().size() == 2) {
-            RelRN ls = union.sources().get(0), rs = union.sources().get(1);
-            RelRN.Project leftProj = toProjectIfPossible(ls);
-            RelRN.Project rightProj = toProjectIfPossible(rs);
-            if (leftProj != null && rightProj != null) {
-                return matchUnionPullUpConstants(env, union, leftProj, rightProj);
-            }
-        }
-        return matchUnionGeneral(env, union);
-    }
-    private static RelRN.Project toProjectIfPossible(RelRN node) {
-        if (node instanceof RelRN.Project p) return p;
-        if (node instanceof org.qed.RRuleInstances.UnionPullUpConstants.LeftProjectionWithConstants lp)
-            return new RelRN.Project(lp.input().field(0), lp.input());
-        if (node instanceof org.qed.RRuleInstances.UnionPullUpConstants.RightProjectionWithConstants rp)
-            return new RelRN.Project(rp.input().field(0), rp.input());
-        return null;
-    }
-    private Env matchUnionBothEmpty(Env env, RelRN.Union union) {
-        String leftVar = env.generateVar("left");
-        Env leftEnv = env.addBinding("left", leftVar);
-        String rightVar = leftEnv.generateVar("right");
-        Env rightEnv = leftEnv.addBinding("right", rightVar);
-        String privateVar = rightEnv.generateVar("private");
-        Env privEnv = rightEnv.addBinding("private", privateVar);
-        String outColsVar = privEnv.generateVar("outCols");
-        Env resultEnv = privEnv.addBinding("outCols", outColsVar) .addBinding("hasZeroRows", "true");
-        String uType = union.all() ? "UnionAll" : "Union";
-        String leftLine = b(leftVar) + " & (HasZeroRows " + r(leftVar) + ")";
-        String rightLine = b(rightVar) + " & (HasZeroRows " + r(rightVar) + ")";
-        String privLine = r(privateVar) + ":(SetPrivate * * " + r(outColsVar) + ":*)";
-        String pattern = N(uType, leftLine, rightLine, privLine);
-        return resultEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env matchNestedUnion(Env env, RelRN.Union union) {
-        String leftLeftVar = env.generateVar("leftLeft");
-        Env llEnv = env.addBinding("leftLeft", leftLeftVar);
-        String leftRightVar = llEnv.generateVar("leftRight");
-        Env lrEnv = llEnv.addBinding("leftRight", leftRightVar);
-        String innerPrivateVar = lrEnv.generateVar("innerPrivate");
-        Env ipEnv = lrEnv.addBinding("innerPrivate", innerPrivateVar);
-        String innerLeftCols = ipEnv.generateVar("innerLeftCols");
-        Env ilcEnv = ipEnv.addBinding("innerLeftCols", innerLeftCols);
-        String innerRightCols = ilcEnv.generateVar("innerRightCols");
-        Env ircEnv = ilcEnv.addBinding("innerRightCols", innerRightCols);
-        String innerOutCols = ircEnv.generateVar("innerOutCols");
-        Env iocEnv = ircEnv.addBinding("innerOutCols", innerOutCols);
-        String leftVar = iocEnv.generateVar("left");
-        Env lEnv = iocEnv.addBinding("left", leftVar);
-        String rightVar = lEnv.generateVar("right");
-        Env rEnv = lEnv.addBinding("right", rightVar);
-        String outerPrivate = rEnv.generateVar("outerPrivate");
-        Env opEnv = rEnv.addBinding("outerPrivate", outerPrivate);
-        String outerRightCols = opEnv.generateVar("outerRightCols");
-        Env orcEnv = opEnv.addBinding("outerRightCols", outerRightCols);
-        String outerOutCols = orcEnv.generateVar("outerOutCols");
-        Env resultEnv = orcEnv .addBinding("outerOutCols", outerOutCols) .addBinding("isUnionMerge", "true");
-        String uType = union.all() ? "UnionAll" : "Union";
-        String innerSetPriv = r(innerPrivateVar) + ":(SetPrivate " + b(innerLeftCols) + " " + b(innerRightCols) + " " + b(innerOutCols) + ")";
-        String innerUnion = "(" + uType + "\n" + "        " + b(leftLeftVar) + "\n" + "        " + b(leftRightVar) + "\n" + "        " + innerSetPriv + "\n" + "    )";
-        String outerSetPriv = r(outerPrivate) + ":(SetPrivate * " + b(outerRightCols) + " " + b(outerOutCols) + ")";
-        String pattern = N(uType, r(leftVar) + ":(" + innerUnion.trim(), b(rightVar), outerSetPriv );
-        pattern = "(" + uType + "\n" + "    " + r(leftVar) + ":(" + uType + "\n" + "        " + b(leftLeftVar) + "\n" + "        " + b(leftRightVar) + "\n" + "        " + r(innerPrivateVar) + ":(SetPrivate " + b(innerLeftCols) + " " + b(innerRightCols) + " " + b(innerOutCols) + ")\n" + "    )\n" + "    " + b(rightVar) + "\n" + "    " + r(outerPrivate) + ":(SetPrivate * " + b(outerRightCols) + " " + b(outerOutCols) + ")\n" + ")";
-        return resultEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env matchDistinctUnion(Env env, RelRN.Union union) {
-        Env leftEnv = onMatch(env, union.sources().get(0));
-        String leftVar = leftEnv.generateVar("left");
-        Env lBound = leftEnv.addBinding("left", leftVar);
-        Env rightEnv = onMatch(lBound, union.sources().get(1));
-        String rightVar = rightEnv.generateVar("right");
-        Env rBound = rightEnv.addBinding("right", rightVar);
-        String privateVar = rBound.generateVar("private");
-        Env privEnv = rBound.addBinding("private", privateVar);
-        String leftCols = privEnv.generateVar("leftCols");
-        Env lcEnv = privEnv.addBinding("leftCols", leftCols);
-        String rightCols = lcEnv.generateVar("rightCols");
-        Env rcEnv = lcEnv.addBinding("rightCols", rightCols);
-        String outCols = rcEnv.generateVar("outCols");
-        Env ocEnv = rcEnv.addBinding("outCols", outCols);
-        String keyColsVar = ocEnv.generateVar("keyCols");
-        Env kcEnv = ocEnv.addBinding("keyCols", keyColsVar);
-        String okVar = kcEnv.generateVar("ok");
-        Env resultEnv = kcEnv.addBinding("ok", okVar);
-        String setPriv = r(privateVar) + ":(SetPrivate " + b(leftCols) + " " + b(rightCols) + " " + b(outCols) + ") &\n" + "        (Let\n" + "            (" + r(keyColsVar) + " " + r(okVar) + "):(CanConvertUnionToDistinctUnionAll\n" + "                " + r(leftCols) + "\n" + "                " + r(rightCols) + "\n" + "            )\n" + "            " + r(okVar) + "\n" + "        )";
-        String pattern = N("Union", b(leftVar), b(rightVar), setPriv);
-        return resultEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env matchUnionPullUpConstants(Env env, RelRN.Union union, RelRN.Project leftProject, RelRN.Project rightProject) {
-        Env liEnv = onMatch(env, leftProject.source());
-        String leftInputVar = liEnv.generateVar("leftInput");
-        Env liBound = liEnv.addBinding("leftInput", leftInputVar);
-        String leftProjVar = liBound.generateVar("leftProjections");
-        Env lpEnv = liBound.addBinding("leftProjections", leftProjVar);
-        String leftPassVar = lpEnv.generateVar("leftPassthrough");
-        Env lpassEnv = lpEnv.addBinding("leftPassthrough", leftPassVar);
-        String leftVar = lpassEnv.generateVar("left");
-        Env lBound = lpassEnv.addBinding("left", leftVar);
-        Env riEnv = onMatch(lBound, rightProject.source());
-        String rightInputVar = riEnv.generateVar("rightInput");
-        Env riBound = riEnv.addBinding("rightInput", rightInputVar);
-        String rightProjVar = riBound.generateVar("rightProjections");
-        Env rpEnv = riBound.addBinding("rightProjections", rightProjVar);
-        String rightPassVar = rpEnv.generateVar("rightPassthrough");
-        Env rpassEnv = rpEnv.addBinding("rightPassthrough", rightPassVar);
-        String rightVar = rpassEnv.generateVar("right");
-        Env rBound = rpassEnv.addBinding("right", rightVar);
-        String privateVar = rBound.generateVar("private");
-        Env privEnv = rBound.addBinding("private", privateVar);
-        String leftCols = privEnv.generateVar("leftCols");
-        Env lcEnv = privEnv.addBinding("leftCols", leftCols);
-        String rightCols = lcEnv.generateVar("rightCols");
-        Env rcEnv = lcEnv.addBinding("rightCols", rightCols);
-        String outCols = rcEnv.generateVar("outCols");
-        Env resultEnv = rcEnv.addBinding("outCols", outCols);
-        String uType = union.all() ? "UnionAll" : "Union";
-        String setPriv = r(privateVar) + ":(SetPrivate " + b(leftCols) + " " + b(rightCols) + " " + b(outCols) + ") &\n" + "        (HasMatchingConstantsFromUnion\n" + "            " + r(leftProjVar) + "\n" + "            " + r(rightProjVar) + "\n" + "            " + r(leftCols) + "\n" + "            " + r(rightCols) + "\n" + "            " + r(outCols) + "\n" + "        )";
-        String pattern = "(" + uType + "\n" + "    " + r(leftVar) + ":(Project\n" + "        " + b(leftInputVar) + "\n" + "        " + b(leftProjVar) + "\n" + "        " + b(leftPassVar) + "\n" + "    )\n" + "    " + r(rightVar) + ":(Project\n" + "        " + b(rightInputVar) + "\n" + "        " + b(rightProjVar) + "\n" + "        " + b(rightPassVar) + "\n" + "    )\n" + "    " + setPriv + "\n" + ")";
-        return resultEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env matchUnionGeneral(Env env, RelRN.Union union) {
-        Env currentEnv = env;
-        Seq<String> sourcePatterns = Seq.empty();
-        for (RelRN source : union.sources()) {
-            Env sourceEnv = onMatch(currentEnv, source);
-            if (source instanceof RelRN.Union) {
-                String subPrivate = sourceEnv.bindings().get("union_private");
-                if (subPrivate != null) {
-                    sourceEnv = sourceEnv.addBinding("inner_union_private", subPrivate);
+
+    private static void checkRel(ObjectNode rel, boolean from, Map<String, PredicatePattern> preds, Set<String> projs, Set<String> groups, Set<String> aggs) {
+        switch (rel.path("op").asText()) {
+            case "scan" -> { }
+            case "empty" -> { }
+            case "values" -> {
+                int width = -1;
+                for (var row : rel.withArray("rows")) {
+                    for (var cell : row) {
+                    }
+                    width = row.size();
                 }
             }
-            sourcePatterns = sourcePatterns.appended(sourceEnv.current());
-            currentEnv = sourceEnv;
+            case "filter" -> {
+                checkCond((ObjectNode) rel.get("cond"), from, preds, projs);
+                checkRel((ObjectNode) rel.get("input"), from, preds, projs, groups, aggs);
+            }
+            case "project" -> {
+                var fields = new HashSet<String>();
+                for (var expr : rel.withArray("exprs")) {
+                    if (expr.path("op").asText().equals("proj")) {
+                        checkProj((ObjectNode) expr, from, projs);
+                    } else if (expr.path("op").asText().equals("field")) {
+                        if (!fields.add(expr.toString())) ((ObjectNode) expr).put("op", "field_alias");
+                    } else if (Set.of("scalar", "true", "false", "null", "int", "and", "and_scalar", "or", "not").contains(expr.path("op").asText())) {
+                        checkScalar((ObjectNode) expr, from, preds, projs);
+                    }
+                }
+                checkRel((ObjectNode) rel.get("input"), from, preds, projs, groups, aggs);
+            }
+            case "join" -> {
+                checkCond((ObjectNode) rel.get("cond"), from, preds, projs);
+                checkRel((ObjectNode) rel.get("left"), from, preds, projs, groups, aggs);
+                checkRel((ObjectNode) rel.get("right"), from, preds, projs, groups, aggs);
+            }
+            case "set" -> {
+                checkRel((ObjectNode) rel.get("left"), from, preds, projs, groups, aggs);
+                checkRel((ObjectNode) rel.get("right"), from, preds, projs, groups, aggs);
+            }
+            case "aggregate" -> {
+                for (var group : rel.withArray("groups")) {
+                    switch (group.path("op").asText()) {
+                        case "field", "int" -> { }
+                        case "group_key" -> {
+                            var name = group.path("name").asText();
+                            if (from) projs.add(name);
+                            checkArgs((ObjectNode) group, from, projs);
+                        }
+                    }
+                }
+                for (var agg : rel.withArray("aggs")) {
+                    var name = agg.path("name").asText();
+                    for (var arg : agg.withArray("args")) {
+                        if (arg.path("op").asText().equals("group_key")) {
+                            var keyName = arg.path("name").asText();
+                            if (from) {
+                                groups.add(keyName);
+                                projs.add(keyName);
+                            }
+                            checkArgs((ObjectNode) arg, from, projs);
+                        }
+                    }
+                    checkArgs((ObjectNode) agg, from, projs);
+                }
+                checkRel((ObjectNode) rel.get("input"), from, preds, projs, groups, aggs);
+            }
         }
-        String privateVar = currentEnv.generateVar("private");
-        Env resultEnv = currentEnv.addBinding("union_private", privateVar);
-        String uType = union.all() ? "UnionAll" : "Union";
-        String pattern = sourcePatterns.size() == 2
-            ? N(uType, sourcePatterns.get(0), sourcePatterns.get(1), b(privateVar))
-            : buildNestedUnion(uType, sourcePatterns, privateVar + ":*");
-        return resultEnv.setPattern(pattern).focus(pattern);
     }
-    private String buildNestedUnion(String uType, Seq<String> sources, String privatePattern) {
-        if (sources.size() == 2) {
-            return N(uType, sources.get(0), sources.get(1), "$" + privatePattern);
-        }
-        return N(uType, sources.get(0), buildNestedUnion(uType, sources.drop(1), privatePattern), "$" + privatePattern );
-    }
-    @Override
-    public Env onMatchIntersect(Env env, RelRN.Intersect intersect) {
-        if (intersect.sources().size() == 2 && intersect.sources().get(0) instanceof RelRN.Intersect inner && inner.sources().size() == 2) {
-            return matchNestedIntersect(env, intersect);
-        }
-        if (intersect.sources().size() == 2 && intersect.sources().get(1) instanceof RelRN.Empty) {
-            String leftVar = env.generateVar("left");
-            String rightVar = env.generateVar("right");
-            String iType = intersect.all() ? "IntersectAll" : "Intersect";
-            String pattern = "(" + iType + "\n" + "    " + b(leftVar) + "\n" + "    " + b(rightVar) + " & (HasZeroRows " + r(rightVar) + ")\n" + ")";
-            return env.addBinding("isPruneEmptyIntersect", "true") .addBinding("pruneEmptyLeft", leftVar) .setPattern(pattern).focus(pattern);
-        }
-        Env currentEnv = env;
-        Seq<String> sourcePatterns = Seq.empty();
-        for (RelRN source : intersect.sources()) {
-            Env sourceEnv = onMatch(currentEnv, source);
-            if (source instanceof RelRN.Intersect) {
-                String subPrivate = sourceEnv.bindings().get("intersect_private");
-                if (subPrivate != null) {
-                    sourceEnv = sourceEnv.addBinding("inner_intersect_private", subPrivate);
+
+    private static void checkCond(ObjectNode cond, boolean from, Map<String, PredicatePattern> preds, Set<String> projs) {
+        switch (cond.path("op").asText()) {
+            case "true", "false" -> { }
+            case "pred" -> {
+                checkArgs(cond, from, projs);
+            }
+            case "and" -> {
+                for (var arg : cond.withArray("args")) {
+                    if (arg.path("op").asText().equals("and")) {
+                        cond.put("op", "and_scalar");
+                        checkScalar(cond, from, preds, projs);
+                        return;
+                    }
+                }
+                for (var arg : cond.withArray("args")) {
+                    booleanNull((ObjectNode) arg);
+                    checkCond((ObjectNode) arg, from, preds, projs);
                 }
             }
-            sourcePatterns = sourcePatterns.appended(sourceEnv.current());
-            currentEnv = sourceEnv;
-        }
-        String privateVar = currentEnv.generateVar("private");
-        Env resultEnv = currentEnv.addBinding("intersect_private", privateVar);
-        String iType = intersect.all() ? "IntersectAll" : "Intersect";
-        String pattern = sourcePatterns.size() == 2
-            ? N(iType, sourcePatterns.get(0), sourcePatterns.get(1), b(privateVar))
-            : buildNestedIntersect(iType, sourcePatterns, privateVar + ":*");
-        return resultEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env matchNestedIntersect(Env env, RelRN.Intersect intersect) {
-        String leftLeftVar = env.generateVar("leftLeft");
-        Env llEnv = env.addBinding("leftLeft", leftLeftVar);
-        String leftRightVar = llEnv.generateVar("leftRight");
-        Env lrEnv = llEnv.addBinding("leftRight", leftRightVar);
-        String innerPrivate = lrEnv.generateVar("innerPrivate");
-        Env ipEnv = lrEnv.addBinding("innerPrivate", innerPrivate);
-        String innerLeftCols = ipEnv.generateVar("innerLeftCols");
-        Env ilcEnv = ipEnv.addBinding("innerLeftCols", innerLeftCols);
-        String innerRightCols = ilcEnv.generateVar("innerRightCols");
-        Env ircEnv = ilcEnv.addBinding("innerRightCols", innerRightCols);
-        String leftVar = ircEnv.generateVar("left");
-        Env lEnv = ircEnv.addBinding("left", leftVar);
-        String rightVar = lEnv.generateVar("right");
-        Env rEnv = lEnv.addBinding("right", rightVar);
-        String outerPrivate = rEnv.generateVar("outerPrivate");
-        Env opEnv = rEnv.addBinding("outerPrivate", outerPrivate);
-        String outerRightCols = opEnv.generateVar("outerRightCols");
-        Env orcEnv = opEnv.addBinding("outerRightCols", outerRightCols);
-        String outerOutCols = orcEnv.generateVar("outerOutCols");
-        Env resultEnv = orcEnv .addBinding("outerOutCols", outerOutCols) .addBinding("isIntersectMerge", "true");
-        String iType = intersect.all() ? "IntersectAll" : "Intersect";
-        String innerSetPriv = r(innerPrivate) + ":(SetPrivate " + b(innerLeftCols) + " " + b(innerRightCols) + " *)";
-        String outerSetPriv = r(outerPrivate) + ":(SetPrivate * " + b(outerRightCols) + " " + b(outerOutCols) + ")";
-        String pattern = "(" + iType + "\n" + "    " + r(leftVar) + ":(" + iType + "\n" + "        " + b(leftLeftVar) + "\n" + "        " + b(leftRightVar) + "\n" + "        " + innerSetPriv + "\n" + "    )\n" + "    " + b(rightVar) + "\n" + "    " + outerSetPriv + "\n" + ")";
-        return resultEnv.setPattern(pattern).focus(pattern);
-    }
-    private String buildNestedIntersect(String iType, Seq<String> sources, String privatePattern) {
-        if (sources.size() == 2) {
-            return N(iType, sources.get(0), sources.get(1), "$" + privatePattern);
-        }
-        return N(iType, sources.get(0), buildNestedIntersect(iType, sources.drop(1), privatePattern), "$" + privatePattern );
-    }
-    @Override
-    public Env onMatchMinus(Env env, RelRN.Minus minus) {
-        if (env.rulename.equals("MinusMerge") && minus.sources().size() == 2 && minus.sources().get(0) instanceof RelRN.Minus) {
-            return matchMinusMerge(env, minus);
-        }
-        if (minus.sources().size() == 2 && minus.sources().get(0) instanceof RelRN.Empty) {
-            String leftVar = env.generateVar("left");
-            String rightVar = "right";
-            String pattern = "(Except\n" + "    " + b(leftVar) + " & (HasZeroRows " + r(leftVar) + ")\n" + "    " + r(rightVar) + ":*\n" + ")";
-            return env.addBinding("isPruneEmptyMinus", "true") .addBinding("pruneEmptyLeft", leftVar) .addBinding("right", rightVar) .setPattern(pattern).focus(pattern);
-        }
-        Env currentEnv = env;
-        Seq<String> sourcePatterns = Seq.empty();
-        for (RelRN source : minus.sources()) {
-            Env sourceEnv = onMatch(currentEnv, source);
-            sourcePatterns = sourcePatterns.appended(sourceEnv.current());
-            currentEnv = sourceEnv;
-        }
-        String privateVar = currentEnv.generateVar("private");
-        Env resultEnv = currentEnv.addBinding("minus_private", privateVar);
-        String pattern;
-        if (minus.sources().size() == 2) {
-            pattern = N("Except", sourcePatterns.get(0), sourcePatterns.get(1), b(privateVar));
-        } else {
-            pattern = "(Except\n    " + sourcePatterns.joinToString("\n    ") + "\n    " + b(privateVar) + "\n)";
-        }
-        return resultEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env matchMinusMerge(Env env, RelRN.Minus minus) {
-        String leftVar = env.generateVar("left");
-        Env lEnv = env.addBinding("left", leftVar);
-        String leftLeftVar = lEnv.generateVar("leftLeft");
-        Env llEnv = lEnv.addBinding("leftLeft", leftLeftVar);
-        String leftRightVar = llEnv.generateVar("leftRight");
-        Env lrEnv = llEnv.addBinding("leftRight", leftRightVar);
-        String innerPriv = lrEnv.generateVar("innerPrivate");
-        Env ipEnv = lrEnv.addBinding("innerPrivate", innerPriv);
-        String rightVar = ipEnv.generateVar("right");
-        Env rEnv = ipEnv.addBinding("right", rightVar);
-        String outerPriv = rEnv.generateVar("outerPrivate");
-        Env resultEnv = rEnv .addBinding("outerPrivate", outerPriv) .addBinding("isMinusMerge", "true");
-        String pattern = "(Except\n" + "    " + r(leftVar) + ":(Except\n" + "        " + b(leftLeftVar) + "\n" + "        " + b(leftRightVar) + "\n" + "        " + b(innerPriv) + "\n" + "    )\n" + "    " + b(rightVar) + "\n" + "    " + b(outerPriv) + "\n" + ")";
-        return resultEnv.setPattern(pattern).focus(pattern);
-    }
-    @Override
-    public Env onMatchAggregate(Env env, RelRN.Aggregate aggregate) {
-        if (aggregate.source() instanceof RelRN.Join topJoin && topJoin.ty().semantics() == org.apache.calcite.rel.core.JoinRelType.LEFT && topJoin.left() instanceof RelRN.Join bottomJoin && bottomJoin.ty().semantics() == org.apache.calcite.rel.core.JoinRelType.LEFT) {
-            return matchAggregateDoubleJoin(env);
-        }
-        if (aggregate.source() instanceof RelRN.Join j && j.ty().semantics() == org.apache.calcite.rel.core.JoinRelType.LEFT) {
-            return matchAggregateLeftJoin(env, aggregate);
-        }
-        if (aggregate.source() instanceof RelRN.Project) {
-            return matchAggregateProjectSource(env, aggregate);
-        }
-        Env sourceEnv = onMatch(env, aggregate.source());
-        String sourcePat = sourceEnv.current();
-        Env aggsEnv = onMatchAggCalls(sourceEnv, aggregate.aggCalls());
-        String aggsPat = aggsEnv.current();
-        Env groupEnv = onMatchGroupSet(aggsEnv, aggregate.groupSet());
-        String privateVar = groupEnv.generateVar("private");
-        Env privEnv = groupEnv.addBinding("aggregate_private", privateVar);
-        String aggType = determineAggregateType(aggregate);
-        if (hasProjectionExpressionsInAggregate(aggregate)) {
-            String inputVar = privEnv.generateVar("input");
-            Env inputEnv = privEnv.addBinding("input", inputVar);
-            String aggregationsVar = inputEnv.generateVar("aggregations");
-            Env aggsBindEnv = inputEnv.addBinding("aggregations", aggregationsVar);
-            String groupingPriv = aggsBindEnv.generateVar("groupingPrivate");
-            Env gpEnv = aggsBindEnv.addBinding("groupingPrivate", groupingPriv);
-            String condLine = b(aggregationsVar) + " & (CanExtractProjectFromAggregate " + r(aggregationsVar) + ")";
-            String pattern = N(aggType, b(inputVar), condLine, b(groupingPriv));
-            return gpEnv.addBinding("isAggregateExtractProject", "true") .setPattern(pattern).focus(pattern);
-        }
-        String filterBoundBy = "";
-        if (aggregate.source() instanceof RelRN.Filter) {
-            String condVarName = get(sourceEnv, "filterCondVar", null);
-            if (condVarName != null) {
-                filterBoundBy = " & " + filtersBoundBy(condVarName, "(GroupingCols " + r(privateVar) + ")");
+            case "scalar", "not", "or", "and_scalar", "in_single", "not_in_single", "exists", "any", "field" ->
+                    checkScalar(cond, from, preds, projs);
+            case "null" -> {
+                checkScalar(cond, from, preds, projs);
             }
         }
-        String pattern = N(aggType, sourcePat, aggsPat, b(privateVar) + filterBoundBy);
-        return privEnv.setPattern(pattern).focus(pattern);
     }
-    private Env matchAggregateDoubleJoin(Env env) {
-        String leftVar = env.generateVar("left");
-        Env lEnv = env.addBinding("left", leftVar);
-        String middleVar = lEnv.generateVar("middle");
-        Env mEnv = lEnv.addBinding("middle", middleVar);
-        String rightVar = mEnv.generateVar("right");
-        Env rEnv = mEnv.addBinding("right", rightVar);
-        String rightFiltersVar = rEnv.generateVar("rightFilters");
-        Env rfEnv = rEnv.addBinding("rightFilters", rightFiltersVar);
-        String aggregationsVar = rfEnv.generateVar("aggregations");
-        Env aggsEnv = rfEnv.addBinding("aggregations", aggregationsVar);
-        String groupingPrivVar = aggsEnv.generateVar("groupingPrivate");
-        Env gpEnv = aggsEnv.addBinding("groupingPrivate", groupingPrivVar);
-        String groupingColsVar = gpEnv.generateVar("groupingCols");
-        Env gcEnv = gpEnv.addBinding("groupingCols", groupingColsVar);
-        String orderingVar = gcEnv.generateVar("ordering");
-        Env resultEnv = gcEnv.addBinding("ordering", orderingVar);
-        String pattern = "(DistinctOn\n" + "    (LeftJoin\n" + "        (LeftJoin\n" + "            " + b(leftVar) + "\n" + "            " + b(middleVar) + "\n" + "            *\n" + "        )\n" + "        " + b(rightVar) + "\n" + "        " + b(rightFiltersVar) + "\n" + "    )\n" + "    " + r(aggregationsVar) + ":[]\n" + "    " + r(groupingPrivVar) + ":(GroupingPrivate " + b(groupingColsVar) + " " + b(orderingVar) + ") &\n" + "        (ColsAreEmpty\n" + "            (IntersectionCols\n" + "                (OutputCols " + r(middleVar) + ")\n" + "                (UnionCols\n" + "                    (FilterOuterCols " + r(rightFiltersVar) + ")\n" + "                    " + r(groupingColsVar) + "\n" + "                )\n" + "            )\n" + "        ) &\n" + "        (OrderingCanProjectCols\n" + "            " + r(orderingVar) + "\n" + "            (UnionCols (OutputCols " + r(leftVar) + ") (OutputCols " + r(rightVar) + "))\n" + "        )\n" + ")";
-        return resultEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env matchAggregateLeftJoin(Env env, RelRN.Aggregate aggregate) {
-        String leftVar = env.generateVar("left");
-        Env lEnv = env.addBinding("left", leftVar);
-        String aggsVar = lEnv.generateVar("aggregations");
-        Env aggsEnv = lEnv.addBinding("aggregations", aggsVar);
-        String groupingPrivVar = aggsEnv.generateVar("groupingPrivate");
-        Env gpEnv = aggsEnv.addBinding("groupingPrivate", groupingPrivVar);
-        String groupingColsVar = gpEnv.generateVar("groupingCols");
-        Env gcEnv = gpEnv.addBinding("groupingCols", groupingColsVar);
-        String orderingVar = gcEnv.generateVar("ordering");
-        Env ordEnv = gcEnv.addBinding("ordering", orderingVar);
-        String leftColsVar = ordEnv.generateVar("leftCols");
-        Env resultEnv = ordEnv.addBinding("leftCols", leftColsVar);
-        String pattern = "(DistinctOn\n" + "    (LeftJoin\n" + "        " + b(leftVar) + "\n" + "        *\n" + "        *\n" + "    )\n" + "    " + r(aggsVar) + ":[]\n" + "    " + r(groupingPrivVar) + ":(GroupingPrivate " + b(groupingColsVar) + " " + b(orderingVar) + ") &\n" + "        (ColsAreSubset\n" + "            " + r(groupingColsVar) + "\n" + "            " + r(leftColsVar) + ":(OutputCols " + r(leftVar) + ")\n" + "        ) &\n" + "        (OrderingCanProjectCols\n" + "            " + r(orderingVar) + "\n" + "            " + r(leftColsVar) + "\n" + "        )\n" + ")";
-        return resultEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env matchAggregateProjectSource(Env env, RelRN.Aggregate aggregate) {
-        String aggType = determineAggregateType(aggregate);
-        if (env.rulename.equals("AggregateProjectConstantToDummyJoin")) {
-            String inputVar = env.generateVar("input");
-            Env inputEnv = env.addBinding("input", inputVar);
-            String aggsVar = inputEnv.generateVar("aggregations");
-            Env aggsEnv = inputEnv.addBinding("aggregations", aggsVar);
-            String gpVar = aggsEnv.generateVar("groupingPrivate");
-            Env resultEnv = aggsEnv.addBinding("groupingPrivate", gpVar);
-            String gpLine = b(gpVar) + " & (HasConstantGroupingCols " + r(inputVar) + " " + r(gpVar) + ")";
-            String pattern = N(aggType, r(inputVar) + ":(Project * * *)", b(aggsVar), gpLine);
-            return resultEnv.setPattern(pattern).focus(pattern);
-        }
-        if (env.rulename.equals("AggregateProjectMerge")) {
-            String inputVar = env.generateVar("input");
-            Env inputEnv = env.addBinding("input", inputVar);
-            String sourceVar = inputEnv.generateVar("input");
-            Env sBound = inputEnv.addBinding("source", sourceVar);
-            String aggsVar = sBound.generateVar("aggregations");
-            Env aggsEnv = sBound.addBinding("aggregations", aggsVar);
-            String gpVar = aggsEnv.generateVar("groupingPrivate");
-            Env resultEnv = aggsEnv.addBinding("groupingPrivate", gpVar);
-            String innerProject = "(Project\n" + "        " + b(sourceVar) + "\n" + "        *\n" + "        *\n" + "    )";
-            String gpLine = b(gpVar) + " & (CanMergeProjectIntoAggregate " + r(inputVar) + " " + r(gpVar) + ")";
-            String pattern = "(" + aggType + "\n" + "    " + r(inputVar) + ":(" + innerProject.trim() + "\n" + "    " + b(aggsVar) + "\n" + "    " + gpLine + "\n" + ")";
-            pattern = "(" + aggType + "\n" + "    " + r(inputVar) + ":(Project\n" + "        " + b(sourceVar) + "\n" + "        *\n" + "        *\n" + "    )\n" + "    " + b(aggsVar) + "\n" + "    " + gpLine + "\n" + ")";
-            return resultEnv.setPattern(pattern).focus(pattern);
-        }
-        String inputVar = env.generateVar("input");
-        Env inputEnv = env.addBinding("input", inputVar);
-        String projectionsVar = inputEnv.generateVar("projections");
-        Env projEnv = inputEnv.addBinding("projections", projectionsVar);
-        String passthroughVar = projEnv.generateVar("passthrough");
-        Env passEnv = projEnv.addBinding("passthrough", passthroughVar);
-        String aggsVar = passEnv.generateVar("aggregations");
-        Env aggsEnv = passEnv.addBinding("aggregations", aggsVar);
-        String gpVar = aggsEnv.generateVar("groupingPrivate");
-        Env resultEnv = aggsEnv.addBinding("groupingPrivate", gpVar);
-        String gpLine = b(gpVar) + " & (CanRemapGroupingColsThroughProject " + r(gpVar) + " " + r(projectionsVar) + " " + r(passthroughVar) + ")";
-        String innerProject = "(Project\n" + "        " + b(inputVar) + "\n" + "        " + b(projectionsVar) + "\n" + "        " + b(passthroughVar) + "\n" + "    )";
-        String pattern = "(" + aggType + "\n" + "    " + innerProject + "\n" + "    " + b(aggsVar) + "\n" + "    " + gpLine + "\n" + ")";
-        return resultEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env onMatchAggCalls(Env env, Seq<RelRN.AggCall> aggCalls) {
-        Env currentEnv = env;
-        Seq<String> aggPatterns = Seq.empty();
-        boolean hasProjOp = false;
-        for (RelRN.AggCall aggCall : aggCalls) {
-            if (aggCall.operands().size() == 1 && aggCall.operands().get(0) instanceof RexRN.Proj proj) {
-                String projVar = currentEnv.bindings().getOrDefault(proj.operator().getName(), null);
-                if (projVar != null) {
-                    aggPatterns = aggPatterns.appended(b(projVar));
-                    hasProjOp = true;
-                    continue;
+
+    private static void checkScalar(ObjectNode expr, boolean from, Map<String, PredicatePattern> preds, Set<String> projs) {
+        switch (expr.path("op").asText()) {
+            case "field", "joinfield", "true", "false", "int" -> { }
+            case "exists" -> checkRel((ObjectNode) expr.get("input"), from, preds, projs, new HashSet<>(), new HashSet<>());
+            case "any" -> {
+                checkScalar((ObjectNode) expr.get("scalar"), from, preds, projs);
+                checkRel((ObjectNode) expr.get("input"), from, preds, projs, new HashSet<>(), new HashSet<>());
+            }
+            case "null" -> {
+            }
+            case "proj" -> checkProj(expr, from, projs);
+            case "pred" -> {
+                if (from) {
+                    for (var arg : expr.withArray("args")) {
+                    }
+                }
+                checkArgs(expr, from, projs);
+            }
+            case "not" -> {
+                booleanNull((ObjectNode) expr.get("arg"));
+                checkScalar((ObjectNode) expr.get("arg"), from, preds, projs);
+            }
+            case "or" -> {
+                for (var arg : expr.withArray("args")) {
+                    booleanNull((ObjectNode) arg);
+                    checkScalar((ObjectNode) arg, from, preds, projs);
                 }
             }
-            String aggVar = currentEnv.generateVar("agg");
-            currentEnv = currentEnv.addBinding(aggCall.name(), aggVar);
-            aggPatterns = aggPatterns.appended(b(aggVar));
-        }
-        String pattern;
-        if (aggCalls.size() == 1 && hasProjOp) {
-            pattern = aggPatterns.get(0);
-        } else if (aggCalls.size() == 1) {
-            String aggVar = currentEnv.generateVar("aggregations");
-            currentEnv = currentEnv.addBinding("aggregations", aggVar);
-            pattern = b(aggVar);
-        } else {
-            pattern = "[" + aggPatterns.joinToString(" ") + "]";
-        }
-        return currentEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env onMatchGroupSet(Env env, Seq<RexRN> groupSet) {
-        Env currentEnv = env;
-        Seq<String> groupPatterns = Seq.empty();
-        for (RexRN groupCol : groupSet) {
-            Env groupEnv = onMatch(currentEnv, groupCol);
-            groupPatterns = groupPatterns.appended(groupEnv.current());
-            currentEnv = groupEnv;
-        }
-        String pattern = "[" + groupPatterns.joinToString(" ") + "]";
-        return currentEnv.setPattern(pattern).focus(pattern);
-    }
-    private static String determineAggregateType(RelRN.Aggregate aggregate) {
-        return "GroupBy";
-    }
-    private static boolean hasProjectionExpressionsInAggregate(RelRN.Aggregate aggregate) {
-        for (RexRN g : aggregate.groupSet()) {
-            if (g instanceof RexRN.Proj) return true;
-        }
-        for (RelRN.AggCall c : aggregate.aggCalls()) {
-            for (RexRN op : c.operands()) {
-                if (op instanceof RexRN.Proj) return true;
+            case "and", "and_scalar" -> {
+                expr.put("op", "and_scalar");
+                for (var arg : expr.withArray("args")) {
+                    booleanNull((ObjectNode) arg);
+                    checkScalar((ObjectNode) arg, from, preds, projs);
+                }
+            }
+            case "in_single", "not_in_single" -> {
+                for (var arg : expr.withArray("args")) checkScalar((ObjectNode) arg, from, preds, projs);
+            }
+            case "scalar" -> {
+                var operator = expr.path("operator").asText();
+                if (operator.equals("if")) {
+                    for (var arg : expr.withArray("args")) checkScalar((ObjectNode) arg, from, preds, projs);
+                    return;
+                }
+                int arity = Set.of("IS NULL", "IS NOT NULL", "IS NOT FALSE", "IS TRUE", "IS NOT TRUE").contains(operator) ? 1 : operator.equals("-") ? expr.withArray("args").size() : 2;
+                for (var arg : expr.withArray("args")) checkScalar((ObjectNode) arg, from, preds, projs);
             }
         }
-        return false;
     }
-    @Override
-    public Env onMatchEmpty(Env env, RelRN.Empty empty) {
-        String var = env.generateVar("empty");
-        return env.addBinding("empty", var).focus(r(var) + ":(Values)");
+
+    private record PredicatePattern(JsonNode args, boolean scalar) { }
+
+    private static void booleanNull(ObjectNode node) {
+        if (node.path("op").asText().equals("null")) node.put("type", "bool");
     }
-    @Override
-    public Env onMatchField(Env env, RexRN.Field field) {
-        String var = env.generateVar("field");
-        return env.addBinding("field_" + field.ordinal(), var).focus(b(var));
-    }
-    @Override
-    public Env onMatchPred(Env env, RexRN.Pred pred) {
-        String var = env.generateVar("cond");
-        return env.addBinding(pred.operator().getName(), var).focus(b(var));
-    }
-    @Override
-    public Env onMatchProj(Env env, RexRN.Proj proj) {
-        String var = env.generateVar("proj");
-        return env.addBinding(proj.operator().getName(), var).focus(b(var));
-    }
-    public Env onMatchGroupBy(Env env, RexRN.GroupBy groupBy) {
-        if (groupBy.sources().size() == 1 && groupBy.sources().get(0) instanceof RexRN.Proj proj) {
-            String projVar = env.bindings().getOrDefault(proj.operator().getName(), null);
-            if (projVar != null) return env.focus(b(projVar));
-        }
-        String var = env.generateVar("groupBy");
-        return env.addBinding(groupBy.operator().getName(), var).focus(b(var));
-    }
-    @Override
-    public Env onMatchAnd(Env env, RexRN.And and) {
-        Env currentEnv = env;
-        Seq<String> operandPats = Seq.empty();
-        for (RexRN op : and.sources()) {
-            Env opEnv = onMatch(currentEnv, op);
-            operandPats = operandPats.appended(opEnv.current());
-            currentEnv = opEnv;
-        }
-        String pattern = buildNestedAnd(operandPats);
-        return currentEnv.setPattern(pattern).focus(pattern);
-    }
-    private static String buildNestedAnd(Seq<String> operands) {
-        if (operands.isEmpty()) return "(And)";
-        if (operands.size() == 1) return operands.get(0);
-        return "(And " + operands.get(0) + " " + buildNestedAnd(operands.drop(1)) + ")";
-    }
-    @Override
-    public Env onMatchTrue(Env env, RexRN literal) {
-        String var = env.generateVar("true");
-        return env.addBinding("true_" + System.identityHashCode(literal), var) .focus(r(var) + ":True") .setPattern(r(var) + ":True");
-    }
-    @Override
-    public Env onMatchFalse(Env env, RexRN literal) {
-        return env.focus("(False)").setPattern("(False)");
-    }
-    @Override
-    public Env onMatchCustom(Env env, RelRN custom) {
-        if (custom instanceof org.qed.RRuleInstances.AggregateProjectConstantToDummyJoin .AggregateGroupingByConstants aggGrouping) {
-            if (aggGrouping.input() instanceof org.qed.RRuleInstances .AggregateProjectConstantToDummyJoin.ProjectWithConstantLiterals) {
-                String inputVar = env.generateVar("input");
-                Env inputEnv = env.addBinding("input", inputVar);
-                String aggsVar = inputEnv.generateVar("aggregations");
-                Env aggsEnv = inputEnv.addBinding("aggregations", aggsVar);
-                String gpVar = aggsEnv.generateVar("groupingPrivate");
-                Env resultEnv = aggsEnv.addBinding("groupingPrivate", gpVar);
-                String gpLine = b(gpVar) + " & (HasConstantGroupingCols " + r(inputVar) + " " + r(gpVar) + ")";
-                String pattern = N("GroupBy", r(inputVar) + ":(Project * * *)", b(aggsVar), gpLine);
-                return resultEnv.setPattern(pattern).focus(pattern);
+
+    private static boolean sameArguments(JsonNode left, JsonNode right) {
+        if (left.isObject() && right.isObject()) {
+            var names = new HashSet<String>();
+            left.fieldNames().forEachRemaining(names::add);
+            right.fieldNames().forEachRemaining(names::add);
+            for (var name : names) {
+                if (Set.of("of", "left", "right", "rels", "id").contains(name)) continue;
+                if (!sameArguments(left.path(name), right.path(name))) return false;
             }
-            return onMatch(env, aggGrouping.input());
+            return true;
         }
-        if (custom instanceof org.qed.RRuleInstances.AggregateProjectConstantToDummyJoin .ProjectWithConstantLiterals projectWithConstants) {
-            if (projectWithConstants.input() instanceof org.qed.RRuleInstances .AggregateProjectConstantToDummyJoin.SourceTable) {
-                return onMatchScan(env, new RelRN.Scan("Source", org.qed.RexRN.varType("Source_Type", true), false));
+        if (left.isArray() && right.isArray()) {
+            if (left.size() != right.size()) return false;
+            for (int i = 0; i < left.size(); i++) if (!sameArguments(left.get(i), right.get(i))) return false;
+            return true;
+        }
+        return left.equals(right);
+    }
+
+    private static void checkProj(ObjectNode proj, boolean from, Set<String> projs) {
+        if (from) projs.add(proj.path("name").asText());
+        checkArgs(proj, from, projs);
+    }
+
+    private static void checkArgs(ObjectNode symbol, boolean from, Set<String> projs) {
+        for (var arg : symbol.withArray("args")) {
+            switch (arg.path("op").asText()) {
+                case "field", "joinfield", "row" -> { }
+                case "group_key" -> {
+                }
+                case "scalar" -> {
+                    checkScalar((ObjectNode) arg, from, activePreds, projs);
+                }
+                case "proj" -> {
+                    checkProj((ObjectNode) arg, from, projs);
+                }
+                case "true", "false", "int" -> {
+                }
             }
-            return onMatch(env, projectWithConstants.input());
         }
-        if (custom instanceof org.qed.RRuleInstances.AggregateProjectConstantToDummyJoin .SourceTable) {
-            return onMatchScan(env, new RelRN.Scan("Source", org.qed.RexRN.varType("Source_Type", true), false));
-        }
-        if (custom instanceof org.qed.RRuleInstances.ProjectAggregateMerge .ProjectUsingSubsetOfAggregates pusa) {
-            if (pusa.input() instanceof org.qed.RRuleInstances.ProjectAggregateMerge .AggregateWithMultipleCalls amc) {
-                Env srcEnv = onMatch(env, amc.input());
-                String aggInputVar = srcEnv.current().replace("$", "").replace(":*", "").trim();
-                Env aiBound = srcEnv.addBinding("aggInput", aggInputVar);
-                String aggsVar = aiBound.generateVar("aggregations");
-                Env aggsEnv = aiBound.addBinding("aggregations", aggsVar);
-                String gpVar = aggsEnv.generateVar("groupingPrivate");
-                Env gpEnv = aggsEnv.addBinding("groupingPrivate", gpVar);
-                String inputVar = gpEnv.generateVar("input");
-                Env inputEnv = gpEnv.addBinding("input", inputVar);
-                String projVar = inputEnv.generateVar("projections");
-                Env projEnv = inputEnv.addBinding("projections", projVar);
-                String passVar = projEnv.generateVar("passthrough");
-                Env passEnv = projEnv.addBinding("passthrough", passVar);
-                String neededVar = passEnv.generateVar("needed");
-                Env resultEnv = passEnv.addBinding("needed", neededVar);
-                String passCond = b(passVar) + " &\n" + "        (CanPruneAggCols\n" + "            " + r(aggsVar) + "\n" + "            " + r(neededVar) + ":(UnionCols\n" + "                (ProjectionOuterCols " + r(projVar) + ")\n" + "                " + r(passVar) + "\n" + "            )\n" + "        )";
-                String pattern = "(Project\n" + "    " + r(inputVar) + ":(GroupBy\n" + "        " + b(aggInputVar) + "\n" + "        " + b(aggsVar) + "\n" + "        " + b(gpVar) + "\n" + "    )\n" + "    " + b(projVar) + "\n" + "    " + passCond + "\n" + ")";
-                return resultEnv.setPattern(pattern).focus(pattern);
+    }
+
+    private String id(RelRN rel) {
+        var key = rel instanceof RelRN.Empty ? rel.toString() : rel(rel, false).toString();
+        return ids.computeIfAbsent(key, k -> "r" + ids.size());
+    }
+
+    private ObjectNode rel(RelRN rel, boolean tagged) {
+        var node = MAPPER.createObjectNode();
+        switch (rel) {
+            case RelRN.Scan scan -> {
+                node.put("op", "scan");
+                node.put("name", scan.name());
+                if (scan.unique()) node.put("unique", true);
+                if (scan.unique() || !scan.ty().isNullable()) node.put("arity", 1);
+                if (!scan.ty().isNullable()) node.putArray("non_null").add(0);
             }
-            return onMatch(env, pusa.input());
+            case RelRN.ScanMany scan -> {
+                node.put("op", "scan");
+                node.put("name", scan.name());
+                node.put("arity", scan.tys().size());
+                var nonNull = node.putArray("non_null");
+                for (int i = 0; i < scan.tys().size(); i++) if (!scan.tys().get(i).isNullable()) nonNull.add(i);
+                if (nonNull.isEmpty()) node.remove("non_null");
+            }
+            case RelRN.Empty empty -> {
+                node.put("op", "empty");
+                node.put("arity", empty.sourceType().semantics().getRowType().getFieldCount());
+            }
+            case RelRN.Filter filter -> {
+                node.put("op", "filter");
+                node.set("cond", rex(filter.cond(), tagged, filter.source()));
+                node.set("input", rel(filter.source(), tagged));
+            }
+            case RelRN.Project project -> {
+                node.put("op", "project");
+                node.set("exprs", MAPPER.createArrayNode().add(rex(project.map(), tagged, project.source())));
+                node.set("input", rel(project.source(), tagged));
+            }
+            case RelRN.ProjectMany project -> {
+                node.put("op", "project");
+                var exprs = MAPPER.createArrayNode();
+                project.exprs().forEach(e -> exprs.add(rex(e, tagged, project.source())));
+                node.set("exprs", exprs);
+                node.set("input", rel(project.source(), tagged));
+            }
+            case RelRN.Join join -> {
+                if (!(join.ty() instanceof RelRN.Join.JoinType.ConcreteJoinType concrete)) throw unsupported(rel);
+                node.put("op", "join");
+                node.put("type", concrete.type().name().toLowerCase());
+                node.set("cond", rex(join.cond(), tagged, join));
+                node.set("left", rel(join.left(), tagged));
+                node.set("right", rel(join.right(), tagged));
+            }
+            case RelRN.Correlate corr -> {
+                var type = corr.ty().name().toLowerCase();
+                node.put("op", "join");
+                node.put("type", type);
+                node.put("apply", true);
+                node.set("cond", rex(new RexRN.Pred(corr.cond(), corr.left().joinFields(corr.right())), tagged, corr));
+                node.set("left", rel(corr.left(), tagged));
+                node.set("right", rel(corr.right(), tagged));
+            }
+            case RelRN.Union union -> set(node, "union", union.all(), union.sources(), tagged, sources -> new RelRN.Union(union.all(), sources));
+            case RelRN.Intersect intersect -> set(node, "intersect", intersect.all(), intersect.sources(), tagged, sources -> new RelRN.Intersect(intersect.all(), sources));
+            case RelRN.Minus minus -> set(node, "except", minus.all(), minus.sources(), tagged, sources -> new RelRN.Minus(minus.all(), sources));
+            case RelRN.Aggregate aggregate -> {
+                node.put("op", "aggregate");
+                var groups = MAPPER.createArrayNode();
+                aggregate.groupSet().forEach(g -> groups.add(rex(g, tagged, aggregate.source())));
+                node.set("groups", groups);
+                var aggs = MAPPER.createArrayNode();
+                aggregate.aggCalls().forEach(a -> aggs.add(aggCall(a, tagged, aggregate.source())));
+                node.set("aggs", aggs);
+                node.set("input", rel(aggregate.source(), tagged));
+            }
+            default -> {
+                if (!(rel.semantics() instanceof org.apache.calcite.rel.core.Values values)) return lifted(rel, tagged);
+                node.put("op", "values");
+                var rows = node.putArray("rows");
+                for (var tuple : values.getTuples()) {
+                    var row = rows.addArray();
+                    for (var literal : tuple) {
+                        var cell = row.addObject();
+                        if (literal.getType().getSqlTypeName() == org.apache.calcite.sql.type.SqlTypeName.INTEGER) {
+                            cell.put("op", "int");
+                            cell.put("value", literal.getValueAs(Integer.class));
+                        } else if (literal.getType().getSqlTypeName() == org.apache.calcite.sql.type.SqlTypeName.BOOLEAN) {
+                            cell.put("op", Boolean.TRUE.equals(literal.getValueAs(Boolean.class)) ? "true" : "false");
+                        }
+                    }
+                }
+            }
         }
-        if (custom instanceof org.qed.RRuleInstances.ProjectAggregateMerge .AggregateWithMultipleCalls amc) {
-            return onMatch(env, amc.input());
-        }
-        if (custom instanceof org.qed.RRuleInstances.ProjectAggregateMerge.SourceTable) {
-            return onMatchScan(env, new RelRN.Scan("Source", org.qed.RexRN.varType("Source_Type", true), false));
-        }
-        if (custom instanceof org.qed.RRuleInstances.UnionPullUpConstants .UnionWithConstantColumns uwcc) {
-            return onMatchUnion(env, new RelRN.Union(true, Seq.of(uwcc.left(), uwcc.right())));
-        }
-        if (custom instanceof org.qed.RRuleInstances.UnionPullUpConstants .LeftProjectionWithConstants lp) {
-            return onMatchProject(env, new RelRN.Project(lp.input().field(0), lp.input()));
-        }
-        if (custom instanceof org.qed.RRuleInstances.UnionPullUpConstants .RightProjectionWithConstants rp) {
-            return onMatchProject(env, new RelRN.Project(rp.input().field(0), rp.input()));
-        }
-        if (custom instanceof org.qed.RRuleInstances.UnionPullUpConstants.SourceTable) {
-            return onMatchScan(env, new RelRN.Scan("Source", org.qed.RexRN.varType("Source_Type", true), false));
-        }
-        if (custom instanceof org.qed.RRuleInstances.UnionToDistinct.DistinctUnion du) {
-            return onMatchUnion(env, new RelRN.Union(false, Seq.of(du.left(), du.right())));
-        }
-        if (custom instanceof org.qed.RRuleInstances.UnionToDistinct.UnionAll ua) {
-            return onMatchUnion(env, new RelRN.Union(true, Seq.of(ua.left(), ua.right())));
-        }
-        return unimplementedOnMatch(env, custom);
+        if (tagged) node.put("id", id(rel));
+        return node;
     }
-    @Override
-    public Env onMatchCustom(Env env, RexRN custom) {
-        if (custom instanceof RexRN.GroupBy groupBy) return onMatchGroupBy(env, groupBy);
-        return unimplementedOnMatch(env, custom);
+
+    private void set(ObjectNode node, String type, boolean all, Seq<RelRN> sources, boolean tagged, java.util.function.Function<Seq<RelRN>, RelRN> make) {
+        if (sources.size() == 1) {
+            node.setAll(rel(sources.get(0), tagged));
+            return;
+        }
+        if (sources.size() > 2) {
+            var left = make.apply(sources.take(sources.size() - 1));
+            node.setAll(rel(make.apply(Seq.of(left, sources.get(sources.size() - 1))), tagged));
+            return;
+        }
+        node.put("op", "set");
+        node.put("type", type);
+        node.put("all", all);
+        node.set("left", rel(sources.get(0), tagged));
+        node.set("right", rel(sources.get(1), tagged));
     }
-    @Override
-    public Env transformScan(Env env, RelRN.Scan scan) {
-        String var = get(env, scan.name(), "input");
-        String pattern = r(var);
-        return env.setPattern(pattern).focus(pattern);
+
+    private ObjectNode aggCall(RelRN.AggCall agg, boolean tagged, RelRN context) {
+        var node = MAPPER.createObjectNode();
+        node.put("op", "agg");
+        node.put("name", agg.name());
+        node.put("distinct", agg.distinct());
+        node.set("args", arguments(agg.operands(), tagged, false, context));
+        return node;
     }
-    @Override
-    public Env transformFilter(Env env, RelRN.Filter filter) {
-        if (flag(env, "isFilterSetOpTranspose") && filter.source() instanceof RelRN.Union && env.bindings().containsKey("left") && env.bindings().containsKey("right") && env.bindings().containsKey("colmap") && env.bindings().containsKey("filter") && env.bindings().containsKey("item")) {
-            return transformFilterSetOpTranspose(env);
+
+    private ObjectNode rex(RexRN rex, boolean tagged, RelRN context) {
+        var node = MAPPER.createObjectNode();
+        switch (rex) {
+            case RexRN.Pred pred -> {
+                if (pred.operator() instanceof org.qed.RuleBuilder.QedFunction) {
+                    symbol(node, "pred", pred.operator().getName(), pred.sources(), tagged, context);
+                } else {
+                    node.put("op", "scalar");
+                    node.put("operator", pred.operator().getName());
+                    var args = node.putArray("args");
+                    pred.sources().forEach(s -> args.add(rex(s, tagged, context)));
+                }
+            }
+            case RexRN.Proj proj -> {
+                if (proj.operator().getKind() == org.apache.calcite.sql.SqlKind.MINUS_PREFIX || proj.operator().getKind() == org.apache.calcite.sql.SqlKind.MINUS) {
+                    node.put("op", "scalar");
+                    node.put("operator", "-");
+                    var args = node.putArray("args");
+                    proj.sources().forEach(s -> args.add(rex(s, tagged, context)));
+                } else if (proj.operator() instanceof org.qed.RuleBuilder.QedFunction && proj.operator().getName().equals(CASE_OPERATOR) && proj.sources().size() == 3) {
+                    node.put("op", "scalar");
+                    node.put("operator", "if");
+                    var args = node.putArray("args");
+                    proj.sources().forEach(s -> args.add(rex(s, tagged, context)));
+                } else if (!(proj.operator() instanceof org.qed.RuleBuilder.QedFunction)) {
+                    node.put("op", "scalar");
+                    node.put("operator", proj.operator().getName());
+                    var args = node.putArray("args");
+                    proj.sources().forEach(s -> args.add(rex(s, tagged, context)));
+                } else {
+                    symbol(node, "proj", proj.operator().getName(), proj.sources(), tagged, context);
+                }
+            }
+            case RexRN.GroupBy group -> {
+                symbol(node, "group_key", group.operator().getName(), group.sources(), tagged, context);
+            }
+            case RexRN.And and -> list(node, "and", and.sources(), tagged, context);
+            case RexRN.Or or -> {
+                if (or.sources().size() == 1) {
+                    singletonMembership(node, "in_single", or, tagged, context);
+                } else {
+                    list(node, "or", or.sources(), tagged, context);
+                }
+            }
+            case RexRN.Not not -> {
+                if (not.source() instanceof RexRN.Or or && or.sources().size() == 1) {
+                    singletonMembership(node, "not_in_single", or, tagged, context);
+                } else {
+                    node.put("op", "not");
+                    node.set("arg", rex(not.source(), tagged, context));
+                }
+            }
+            case RexRN.True ignored -> node.put("op", "true");
+            case RexRN.False ignored -> node.put("op", "false");
+            case RexRN.Field field -> {
+                node.put("op", "field");
+                node.put("ordinal", field.ordinal());
+                node.put("of", id(field.source()));
+            }
+            case RexRN.JoinField field -> {
+                if (tagged) {
+                    node.put("op", "field");
+                    node.put("ordinal", field.ordinal());
+                    node.put("of", id(context));
+                } else {
+                    node.put("op", "joinfield");
+                    node.put("ordinal", field.ordinal());
+                    node.put("left", id(field.left()));
+                    node.put("right", id(field.right()));
+                }
+            }
+            default -> {
+                if (rex.semantics() instanceof org.apache.calcite.rex.RexInputRef ref) {
+                    node.put("op", "field");
+                    node.put("ordinal", ref.getIndex());
+                    node.put("of", id(context));
+                } else if (endsInExists(rex.semantics())) {
+                    var components = rex.getClass().getRecordComponents();
+                    RelRN body = null;
+                    var guards = new ArrayList<ObjectNode>();
+                    try {
+                        for (var component : components == null ? new java.lang.reflect.RecordComponent[0] : components) {
+                            component.getAccessor().setAccessible(true);
+                            var value = component.getAccessor().invoke(rex);
+                            if (value instanceof RelRN rel && body == null) {
+                                body = rel;
+                            } else if (value instanceof RexRN guard && !guard.semantics().isAlwaysTrue()) {
+                                guards.add(rex(guard, tagged, context));
+                            } else if (!(value instanceof RexRN)) {
+                                body = null;
+                                break;
+                            }
+                        }
+                    } catch (ReflectiveOperationException e) {
+                        throw new UnsupportedOperationException("Unsupported Exists relation access: " + constructName(rex.getClass()), e);
+                    }
+                    var exists = MAPPER.createObjectNode();
+                    exists.put("op", "exists");
+                    exists.set("input", rel(body, tagged));
+                    if (guards.isEmpty()) {
+                        node.setAll(exists);
+                    } else {
+                        node.put("op", "and");
+                        var args = node.putArray("args");
+                        guards.forEach(args::add);
+                        args.add(exists);
+                    }
+                } else if (rex.semantics() instanceof org.apache.calcite.rex.RexLiteral literal && literal.isNull()) {
+                    node.put("op", "null");
+                    var sqlType = literal.getType().getSqlTypeName();
+                    if (sqlType == org.apache.calcite.sql.type.SqlTypeName.BOOLEAN) {
+                        node.put("type", "bool");
+                    } else if (sqlType == org.apache.calcite.sql.type.SqlTypeName.INTEGER) {
+                        node.put("type", "int");
+                    } else if (literal.getType() instanceof org.qed.RelType.VarType) {
+                        var refs = typeRefs.get(literal.getType().toString());
+                        node.put("type", "same_as");
+                        var out = node.putArray("refs");
+                        for (var ref : refs) out.addObject().put("of", ref.of()).put("ordinal", ref.ordinal());
+                    }
+                } else if (rex.semantics() instanceof org.apache.calcite.rex.RexLiteral literal && (literal.getType().getSqlTypeName() == org.apache.calcite.sql.type.SqlTypeName.INTEGER || literal.getType().getSqlTypeName() == org.apache.calcite.sql.type.SqlTypeName.BIGINT)) {
+                    node.put("op", "int");
+                    node.put("value", literal.getValueAs(Integer.class));
+                }
+            }
         }
-        if (env.rulename.equals("JoinExtractFilter") && filter.source() instanceof RelRN.Join && env.bindings().containsKey("left") && env.bindings().containsKey("right") && env.bindings().containsKey("on") && env.bindings().containsKey("private")) {
-            String pattern = N("ConstructJoinExtractFilterResult", r(get(env, "left")), r(get(env, "right")), r(get(env, "on")), r(get(env, "private")) );
-            return env.setPattern(pattern).focus(pattern);
-        }
-        if (flag(env, "isPruneEmptyFilter")) {
-            String pattern = r(get(env, "pruneEmptyInput"));
-            return env.setPattern(pattern).focus(pattern);
-        }
-        if (filter.cond() instanceof RexRN.True) {
-            return transform(env, filter.source());
-        }
-        if (filter.source() instanceof RelRN.Empty) {
-            return transform(env, filter.source());
-        }
-        if (filter.cond() instanceof RexRN.False) {
-            Env srcEnv = transform(env, filter.source());
-            String pattern = "(ConstructEmptyValues (OutputCols " + srcEnv.current() + "))";
-            return srcEnv.setPattern(pattern).focus(pattern);
-        }
-        Env srcEnv = transform(env, filter.source());
-        Env condEnv = transform(srcEnv, filter.cond());
-        String condPat = condEnv.current();
-        String filterPat;
-        if (condPat.startsWith("(ConcatFilters") || (condPat.startsWith("$") && !condPat.contains(" "))) {
-            filterPat = condPat;
-        } else {
-            filterPat = "[" + condPat + "]";
-        }
-        String pattern = N("Select", srcEnv.current(), filterPat);
-        return condEnv.setPattern(pattern).focus(pattern);
+        return node;
     }
-    private Env transformFilterSetOpTranspose(Env env) {
-        String leftVar = get(env, "left");
-        String rightVar = get(env, "right");
-        String colmapVar = get(env, "colmap");
-        String filterVar = get(env, "filter");
-        String itemVar = get(env, "item");
-        String leftSelect = "(Select\n" + "            " + r(leftVar) + "\n" + "            [ (FiltersItem (MapSetOpFilterLeft " + r(itemVar) + " " + r(colmapVar) + ")) ]\n" + "        )";
-        String rightSelect = "(Select\n" + "            " + r(rightVar) + "\n" + "            [ (FiltersItem (MapSetOpFilterRight " + r(itemVar) + " " + r(colmapVar) + ")) ]\n" + "        )";
-        String innerUnion = "(Union\n" + "        " + leftSelect + "\n" + "        " + rightSelect + "\n" + "        " + r(colmapVar) + "\n" + "    )";
-        String pattern = N("Select", innerUnion, "(RemoveFiltersItem " + r(filterVar) + " " + r(itemVar) + ")" );
-        return env.setPattern(pattern).focus(pattern);
+
+    private static boolean endsInExists(org.apache.calcite.rex.RexNode node) {
+        if (node instanceof org.apache.calcite.rex.RexCall call && call.getKind() == org.apache.calcite.sql.SqlKind.AND) node = call.getOperands().get(call.getOperands().size() - 1);
+        return node instanceof org.apache.calcite.rex.RexSubQuery subquery && subquery.getKind() == org.apache.calcite.sql.SqlKind.EXISTS;
     }
-    @Override
-    public Env transformProject(Env env, RelRN.Project project) {
-        if (env.bindings().containsKey("input") && env.bindings().containsKey("cond") && env.bindings().containsKey("proj") && env.bindings().containsKey("passthrough")) {
-            String inputVar = get(env, "input");
-            String condVar = get(env, "cond");
-            String projVar = get(env, "proj");
-            String passthroughVar = get(env, "passthrough");
-            String innerSelect = "(Select\n" + "    " + r(inputVar) + "\n" + "    " + r(condVar) + "\n" + ")";
-            String pattern = N("Project", innerSelect, r(projVar), r(passthroughVar));
-            return env.setPattern(pattern).focus(pattern);
-        }
-        if (env.rulename.equals("ProjectMerge") && env.bindings().containsKey("innerPassthrough") && env.bindings().containsKey("passthrough")) {
-            String innerPassVar = get(env, "innerPassthrough");
-            String outerPassVar = get(env, "passthrough");
-            java.util.List<String> vars = new java.util.ArrayList<>();
-            java.util.regex.Matcher m = java.util.regex.Pattern .compile("\\$([a-zA-Z_][a-zA-Z0-9_]*):\\*").matcher(env.pattern());
-            while (m.find()) vars.add(m.group(1));
-            String input1Var = vars.size() > 0 ? vars.get(0) : "input_1";
-            String proj2Var = vars.size() > 1 ? vars.get(1) : "proj_2";
-            String proj0Var = vars.size() > 3 ? vars.get(3) : "proj_0";
-            String pattern = "(Project\n" + "    " + r(input1Var) + "\n" + "    (MergeProjections\n" + "        " + r(proj0Var) + "\n" + "        " + r(proj2Var) + "\n" + "        " + r(outerPassVar) + "\n" + "    )\n" + "    (DifferenceCols\n" + "        " + r(innerPassVar) + "\n" + "        (ProjectionCols " + r(proj2Var) + ")\n" + "    )\n" + ")";
-            return env.setPattern(pattern).focus(pattern);
-        }
-        Env srcEnv = transform(env, project.source());
-        Env projEnv = transform(srcEnv, project.map());
-        String passVar = get(projEnv, "passthrough", "passthrough");
-        String pattern = N("Project", srcEnv.current(), projEnv.current(), r(passVar));
-        return projEnv.setPattern(pattern).focus(pattern);
-    }
-    private static String findFirstProjVar(Env env) {
-        for (var e : env.bindings().asJava().entrySet()) {
-            String k = e.getKey(), v = e.getValue();
-            if ((k.startsWith("proj") || k.equals("proj")) && !k.contains("innerPass") && !k.contains("pass")) {
+
+    private record Lift(List<RelRN> rels) { }
+
+    private final Map<org.apache.calcite.rel.core.CorrelationId, RelNode> correlations = new HashMap<>();
+
+    private ObjectNode lifted(RelRN custom, boolean tagged) {
+        var rels = new ArrayList<RelRN>();
+        var components = custom.getClass().getRecordComponents();
+        if (components != null) {
+            for (var component : components) {
+                if (!RelRN.class.isAssignableFrom(component.getType())) continue;
                 try {
-                    int n = Integer.parseInt(v.substring(v.lastIndexOf('_') + 1));
-                    if (n < 3) return v;
-                } catch (NumberFormatException ignored) {}
-            }
-        }
-        return "proj_0";
-    }
-    private static String findSecondProjVar(Env env) {
-        for (var e : env.bindings().asJava().entrySet()) {
-            String k = e.getKey(), v = e.getValue();
-            if ((k.startsWith("proj") || k.equals("proj")) && !k.contains("innerPass") && !k.contains("pass")) {
-                try {
-                    int n = Integer.parseInt(v.substring(v.lastIndexOf('_') + 1));
-                    if (n >= 2) return v;
-                } catch (NumberFormatException ignored) {}
-            }
-        }
-        return "proj_2";
-    }
-    private static String findInputVar(Env env) {
-        for (var e : env.bindings().asJava().entrySet()) {
-            String k = e.getKey(), v = e.getValue();
-            if (k.equals("input") || k.startsWith("input_")) {
-                return v;
-            }
-        }
-        return "input_1";
-    }
-    @Override
-    public Env transformJoin(Env env, RelRN.Join join) {
-        String jType = joinType(join.ty().semantics());
-        String privateVar = get(env, "private_" + System.identityHashCode(join), get(env, "last_private", "private"));
-        if (flag(env, "joinReduceTrue")) {
-            Env leftEnv = transform(env, join.left());
-            Env rightEnv = transform(leftEnv, join.right());
-            String onVar = get(rightEnv, "on");
-            String itemVar = get(rightEnv, "item");
-            String pattern = N(jType, leftEnv.current(), rightEnv.current(), "(RemoveFiltersItem " + r(onVar) + " " + r(itemVar) + ")", r(privateVar) );
-            return rightEnv.setPattern(pattern).focus(pattern);
-        }
-        if (flag(env, "joinReduceFalse")) {
-            Env leftEnv = transform(env, join.left());
-            Env rightEnv = transform(leftEnv, join.right());
-            String pattern = N(jType, leftEnv.current(), rightEnv.current(), "[ (FiltersItem (False)) ]", r(privateVar) );
-            return rightEnv.setPattern(pattern).focus(pattern);
-        }
-        if (flag(env, "isJoinAddRedundantSemiJoin") && env.bindings().containsKey("left") && env.bindings().containsKey("right") && env.bindings().containsKey("filters") && env.bindings().containsKey("private")) {
-            String leftVar = get(env, "left");
-            String rightVar = get(env, "right");
-            String filtersVar = get(env, "filters");
-            String privVar = get(env, "private");
-            String semiJoin = "(SemiJoin\n" + "        " + r(leftVar) + "\n" + "        " + r(rightVar) + "\n" + "        " + r(filtersVar) + "\n" + "        (EmptyJoinPrivate)\n" + "    )";
-            String pattern = N("InnerJoin", semiJoin, r(rightVar), r(filtersVar), r(privVar) );
-            return env.setPattern(pattern).focus(pattern);
-        }
-        if (flag(env, "isJoinCommute")) {
-            String leftVar = get(env, "left");
-            String rightVar = get(env, "right");
-            String onVar = get(env, "on");
-            String privVar = get(env, "private");
-            String innerJoin = "(InnerJoin\n" + "        " + r(rightVar) + "\n" + "        " + r(leftVar) + "\n" + "        " + r(onVar) + "\n" + "        (CommuteJoinFlags " + r(privVar) + ")\n" + "    )";
-            String swapCols = "(SwapJoinOutputColumns\n" + "        (OutputCols " + r(leftVar) + ")\n" + "        (OutputCols " + r(rightVar) + ")\n" + "    )";
-            String pattern = N("Project", innerJoin, swapCols, "(MakeEmptyColSet)");
-            return env.setPattern(pattern).focus(pattern);
-        }
-        if (flag(env, "isJoinConditionPush") && join.ty().semantics() == org.apache.calcite.rel.core.JoinRelType.INNER && env.bindings().containsKey("left") && env.bindings().containsKey("right") && env.bindings().containsKey("on") && env.bindings().containsKey("private") && !flag(env, "joinReduceTrue") && !flag(env, "joinReduceFalse") && !flag(env, "isJoinCommute") && !flag(env, "isJoinExtractFilter")) {
-            String leftVar = get(env, "left");
-            String rightVar = get(env, "right");
-            String onVar = get(env, "on");
-            String privVar = get(env, "private");
-            String leftSel = "(Select " + r(leftVar) + " (ExtractBoundConditions " + r(onVar) + " (OutputCols " + r(leftVar) + ")))";
-            String rightSel = "(Select " + r(rightVar) + " (ExtractBoundConditions " + r(onVar) + " (OutputCols " + r(rightVar) + ")))";
-            String unboundCond = "(ExtractUnboundConditions\n" + "        (ExtractUnboundConditions " + r(onVar) + " (OutputCols " + r(leftVar) + "))\n" + "        (OutputCols " + r(rightVar) + ")\n" + "    )";
-            String pattern = N("InnerJoin", leftSel, rightSel, unboundCond, r(privVar));
-            return env.setPattern(pattern).focus(pattern);
-        }
-        Env leftEnv = transform(env, join.left());
-        Env rightEnv = transform(leftEnv, join.right());
-        Env condEnv = transform(rightEnv, join.cond());
-        String pattern = N(jType, leftEnv.current(), rightEnv.current(), condEnv.current(), r(privateVar));
-        return condEnv.setPattern(pattern).focus(pattern);
-    }
-    @Override
-    public Env transformJoinWithPushedConds(Env env, RelRN.JoinWithPushedConds join) {
-        if (flag(env, "isJoinConditionPush") && env.bindings().containsKey("left") && env.bindings().containsKey("right") && env.bindings().containsKey("on") && env.bindings().containsKey("private")) {
-            String leftVar = get(env, "left");
-            String rightVar = get(env, "right");
-            String onVar = get(env, "on");
-            String privVar = get(env, "private");
-            String leftSel = "(Select " + r(leftVar) + " (ExtractBoundConditions " + r(onVar) + " (OutputCols " + r(leftVar) + ")))";
-            String rightSel = "(Select " + r(rightVar) + " (ExtractBoundConditions " + r(onVar) + " (OutputCols " + r(rightVar) + ")))";
-            String unboundCond = "(ExtractUnboundConditions\n" + "        (ExtractUnboundConditions " + r(onVar) + " (OutputCols " + r(leftVar) + "))\n" + "        (OutputCols " + r(rightVar) + ")\n" + "    )";
-            String pattern = N("InnerJoin", leftSel, rightSel, unboundCond, r(privVar));
-            return env.setPattern(pattern).focus(pattern);
-        }
-        Env leftEnv = transform(env, join.left());
-        Env rightEnv = transform(leftEnv, join.right());
-        Env condEnv = transform(rightEnv, join.cond());
-        String privVar = condEnv.generateVar("private");
-        String jType = joinType(join.ty().semantics());
-        String pattern = N(jType, leftEnv.current(), rightEnv.current(), condEnv.current(), r(privVar));
-        return condEnv.setPattern(pattern).focus(pattern);
-    }
-    @Override
-    public Env transformUnion(Env env, RelRN.Union union) {
-        if (flag(env, "isFilterSetOpTranspose")) {
-            return transformFilterSetOpTranspose(env);
-        }
-        if (flag(env, "isUnionMerge") && env.bindings().containsKey("leftLeft") && env.bindings().containsKey("leftRight") && env.bindings().containsKey("right") && env.bindings().containsKey("innerLeftCols") && env.bindings().containsKey("innerRightCols") && env.bindings().containsKey("innerOutCols") && env.bindings().containsKey("outerRightCols") && env.bindings().containsKey("outerOutCols")) {
-            String llVar = get(env, "leftLeft");
-            String lrVar = get(env, "leftRight");
-            String rVar = get(env, "right");
-            String ilcVar = get(env, "innerLeftCols");
-            String ircVar = get(env, "innerRightCols");
-            String iocVar = get(env, "innerOutCols");
-            String orcVar = get(env, "outerRightCols");
-            String oocVar = get(env, "outerOutCols");
-            String uType = union.all() ? "UnionAll" : "Union";
-            String inner = "(" + uType + "\n" + "        " + r(lrVar) + "\n" + "        " + r(rVar) + "\n" + "        (MakeSetPrivate " + r(ircVar) + " " + r(orcVar) + " " + r(iocVar) + ")\n" + "    )";
-            String pattern = "(" + uType + "\n" + "    " + r(llVar) + "\n" + "    " + inner + "\n" + "    (MakeSetPrivate " + r(ilcVar) + " " + r(iocVar) + " " + r(oocVar) + ")\n" + ")";
-            return env.setPattern(pattern).focus(pattern);
-        }
-        if (env.bindings().containsKey("left") && env.bindings().containsKey("right") && env.bindings().containsKey("leftProjections") && env.bindings().containsKey("rightProjections") && env.bindings().containsKey("private") && env.bindings().containsKey("leftInput") && env.bindings().containsKey("rightInput") && env.bindings().containsKey("leftPassthrough") && env.bindings().containsKey("rightPassthrough")) {
-            String leftVar = get(env, "left");
-            String rightVar = get(env, "right");
-            String leftProjectionsVar = get(env, "leftProjections");
-            String rightProjectionsVar = get(env, "rightProjections");
-            String privateVar = get(env, "private");
-            String leftInputVar = get(env, "leftInput");
-            String rightInputVar = get(env, "rightInput");
-            String leftPassthroughVar = get(env, "leftPassthrough");
-            String rightPassthroughVar = get(env, "rightPassthrough");
-            String pattern = "(UnionPullUpConstantsReplace\n" + "    " + r(leftVar) + "\n" + "    " + r(rightVar) + "\n" + "    " + r(leftProjectionsVar) + "\n" + "    " + r(rightProjectionsVar) + "\n" + "    " + r(privateVar) + "\n" + "    " + r(leftInputVar) + "\n" + "    " + r(rightInputVar) + "\n" + "    " + r(leftPassthroughVar) + "\n" + "    " + r(rightPassthroughVar) + "\n" + ")";
-            return env.setPattern(pattern).focus(pattern);
-        }
-        if (flag(env, "hasZeroRows")) {
-            String leftVar = get(env, "zeroInput", "input");
-            String pattern = "(ConstructEmptyValues (OutputCols " + r(leftVar) + "))";
-            return env.setPattern(pattern).focus(pattern);
-        }
-        Env currentEnv = env;
-        Seq<String> sourcePatterns = Seq.empty();
-        for (RelRN source : union.sources()) {
-            Env srcEnv = transform(currentEnv, source);
-            sourcePatterns = sourcePatterns.appended(srcEnv.current());
-            currentEnv = srcEnv;
-        }
-        String privateVar = get(currentEnv, "union_private", "private");
-        String uType = union.all() ? "UnionAll" : "Union";
-        String pattern;
-        if (sourcePatterns.size() == 2) {
-            pattern = N(uType, sourcePatterns.get(0), sourcePatterns.get(1), r(privateVar));
-        } else {
-            String nestedPrivate = get(currentEnv, "inner_union_private", privateVar);
-            String nested = buildNestedUnionTransform(uType, sourcePatterns.drop(1), nestedPrivate);
-            pattern = N(uType, sourcePatterns.get(0), nested, r(privateVar));
-        }
-        return currentEnv.setPattern(pattern).focus(pattern);
-    }
-    private String buildNestedUnionTransform(String uType, Seq<String> sources, String privVar) {
-        if (sources.size() == 2) return N(uType, sources.get(0), sources.get(1), r(privVar));
-        return N(uType, sources.get(0), buildNestedUnionTransform(uType, sources.drop(1), privVar), r(privVar));
-    }
-    @Override
-    public Env transformIntersect(Env env, RelRN.Intersect intersect) {
-        if (flag(env, "isIntersectMerge") && env.bindings().containsKey("leftLeft") && env.bindings().containsKey("leftRight") && env.bindings().containsKey("right") && env.bindings().containsKey("innerLeftCols") && env.bindings().containsKey("innerRightCols") && env.bindings().containsKey("outerRightCols") && env.bindings().containsKey("outerOutCols")) {
-            String llVar = get(env, "leftLeft");
-            String lrVar = get(env, "leftRight");
-            String rVar = get(env, "right");
-            String ilcVar = get(env, "innerLeftCols");
-            String ircVar = get(env, "innerRightCols");
-            String orcVar = get(env, "outerRightCols");
-            String oocVar = get(env, "outerOutCols");
-            String iType = intersect.all() ? "IntersectAll" : "Intersect";
-            String inner = "(" + iType + "\n" + "        " + r(lrVar) + "\n" + "        " + r(rVar) + "\n" + "        (MakeSetPrivate " + r(ircVar) + " " + r(orcVar) + " " + r(ircVar) + ")\n" + "    )";
-            String pattern = N(iType, r(llVar), inner, "(MakeSetPrivate " + r(ilcVar) + " " + r(ircVar) + " " + r(oocVar) + ")" );
-            return env.setPattern(pattern).focus(pattern);
-        }
-        if (flag(env, "isPruneEmptyIntersect")) {
-            String leftVar = get(env, "pruneEmptyLeft");
-            String pattern = "(ConstructEmptyValues (OutputCols " + r(leftVar) + "))";
-            return env.setPattern(pattern).focus(pattern);
-        }
-        Env currentEnv = env;
-        Seq<String> sourcePatterns = Seq.empty();
-        for (RelRN source : intersect.sources()) {
-            Env srcEnv = transform(currentEnv, source);
-            sourcePatterns = sourcePatterns.appended(srcEnv.current());
-            currentEnv = srcEnv;
-        }
-        String privateVar = get(currentEnv, "intersect_private", "private");
-        String iType = intersect.all() ? "IntersectAll" : "Intersect";
-        String pattern;
-        if (sourcePatterns.size() == 2) {
-            pattern = N(iType, sourcePatterns.get(0), sourcePatterns.get(1), r(privateVar));
-        } else {
-            String nestedPrivate = get(currentEnv, "inner_intersect_private", privateVar);
-            String nested = buildNestedIntersectTransform(iType, sourcePatterns.drop(1), nestedPrivate);
-            pattern = N(iType, sourcePatterns.get(0), nested, r(privateVar));
-        }
-        return currentEnv.setPattern(pattern).focus(pattern);
-    }
-    private String buildNestedIntersectTransform(String iType, Seq<String> sources, String privVar) {
-        if (sources.size() == 2) return N(iType, sources.get(0), sources.get(1), r(privVar));
-        return N(iType, sources.get(0), buildNestedIntersectTransform(iType, sources.drop(1), privVar), r(privVar));
-    }
-    @Override
-    public Env transformMinus(Env env, RelRN.Minus minus) {
-        if (flag(env, "isPruneEmptyMinus")) {
-            String leftVar = get(env, "pruneEmptyLeft");
-            String pattern = "(ConstructEmptyValues (OutputCols " + r(leftVar) + "))";
-            return env.setPattern(pattern).focus(pattern);
-        }
-        if (flag(env, "isMinusMerge") && env.bindings().containsKey("leftLeft") && env.bindings().containsKey("leftRight") && env.bindings().containsKey("right") && env.bindings().containsKey("innerPrivate") && env.bindings().containsKey("outerPrivate")) {
-            String llVar = get(env, "leftLeft");
-            String lrVar = get(env, "leftRight");
-            String rVar = get(env, "right");
-            String ipVar = get(env, "innerPrivate");
-            String opVar = get(env, "outerPrivate");
-            String pattern = N("ConstructMinusMergeResult", r(llVar), r(lrVar), r(rVar), r(ipVar), r(opVar));
-            return env.setPattern(pattern).focus(pattern);
-        }
-        String pattern = "(Except\n" + "    $left\n" + "    (Union\n" + "        $rightB\n" + "        $rightC\n" + "        (MakeUnionPrivateForExcept $pInner $pOuter)\n" + "    )\n" + "    $pOuter\n" + ")";
-        return env.setPattern(pattern).focus(pattern);
-    }
-    @Override
-    public Env transformAggregate(Env env, RelRN.Aggregate aggregate) {
-        String aggType = determineAggregateType(aggregate);
-        if (env.bindings().containsKey("left") && env.bindings().containsKey("aggregations") && env.bindings().containsKey("groupingPrivate") && !env.bindings().containsKey("topOn") && !env.bindings().containsKey("topPrivate")) {
-            String leftVar = get(env, "left");
-            String aggsVar = get(env, "aggregations");
-            String gpVar = get(env, "groupingPrivate");
-            if (env.bindings().containsKey("rightFilters")) {
-                String rightVar = get(env, "right");
-                String rfVar = get(env, "rightFilters");
-                String lj = "(LeftJoin\n" + "        " + r(leftVar) + "\n" + "        " + r(rightVar) + "\n" + "        " + r(rfVar) + "\n" + "        (EmptyJoinPrivate)\n" + "    )";
-                String pattern = N("DistinctOn", lj, r(aggsVar), r(gpVar));
-                return env.setPattern(pattern).focus(pattern);
-            }
-            String pattern = N("DistinctOn", r(leftVar), r(aggsVar), r(gpVar));
-            return env.setPattern(pattern).focus(pattern);
-        }
-        if (env.rulename.equals("AggregateProjectConstantToDummyJoin") && env.bindings().containsKey("input") && env.bindings().containsKey("aggregations") && env.bindings().containsKey("groupingPrivate") && !env.bindings().containsKey("projectInput")) {
-            String inputVar = get(env, "input");
-            String aggsVar = get(env, "aggregations");
-            String gpVar = get(env, "groupingPrivate");
-            String pattern = N("ConstructAggregateProjectConstantToDummyJoin", r(inputVar), r(aggsVar), r(gpVar));
-            return env.setPattern(pattern).focus(pattern);
-        }
-        if (env.rulename.equals("AggregateProjectMerge") && env.bindings().containsKey("input") && env.bindings().containsKey("source") && env.bindings().containsKey("aggregations") && env.bindings().containsKey("groupingPrivate") && !env.bindings().containsKey("projections")) {
-            String inputVar = get(env, "input");
-            String srcVar = get(env, "source");
-            String aggsVar = get(env, "aggregations");
-            String gpVar = get(env, "groupingPrivate");
-            String pattern = N(aggType, r(srcVar), "(MergeProjectIntoAggregate " + r(inputVar) + " " + r(aggsVar) + ")", r(gpVar) );
-            return env.setPattern(pattern).focus(pattern);
-        }
-        if (env.bindings().containsKey("input") && env.bindings().containsKey("projections") && env.bindings().containsKey("passthrough") && env.bindings().containsKey("aggregations") && env.bindings().containsKey("groupingPrivate")) {
-            String inputVar = get(env, "input");
-            String projVar = get(env, "projections");
-            String passVar = get(env, "passthrough");
-            String aggsVar = get(env, "aggregations");
-            String gpVar = get(env, "groupingPrivate");
-            String remapAggs = "(RemapAggregationsThroughProject " + r(aggsVar) + " " + r(projVar) + ")";
-            String remapGp = "(RemapGroupingColsThroughProject " + r(gpVar) + " " + r(projVar) + " " + r(passVar) + ")";
-            String pattern = N(aggType, r(inputVar), remapAggs, remapGp);
-            return env.setPattern(pattern).focus(pattern);
-        }
-        if (flag(env, "isAggregateExtractProject")) {
-            String inputVar = get(env, "input", "input");
-            String aggsVar = get(env, "aggregations", "aggregations");
-            String gpVar = get(env, "groupingPrivate", "groupingPrivate");
-            String pattern = "(ConstructAggregateExtractProject\n" + "    " + r(inputVar) + "\n" + "    " + r(aggsVar) + "\n" + "    " + r(gpVar) + "\n" + ")";
-            return env.setPattern(pattern).focus(pattern);
-        }
-        Env srcEnv = transform(env, aggregate.source());
-        Env groupEnv = transformGroupSet(srcEnv, aggregate.groupSet());
-        Env aggsEnv = transformAggCalls(groupEnv, aggregate.aggCalls());
-        String privVar = get(aggsEnv, "aggregate_private", "private");
-        String pattern = N(aggType, srcEnv.current(), aggsEnv.current(), r(privVar));
-        return aggsEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env transformAggCalls(Env env, Seq<RelRN.AggCall> aggCalls) {
-        Env currentEnv = env;
-        Seq<String> aggPatterns = Seq.empty();
-        for (RelRN.AggCall aggCall : aggCalls) {
-            String aggVar = get(currentEnv, aggCall.name(), "agg");
-            aggPatterns = aggPatterns.appended(r(aggVar));
-            currentEnv = currentEnv.focus(r(aggVar));
-        }
-        String pattern;
-        if (aggCalls.size() == 1) {
-            String aggVar = get(currentEnv, "aggregations", "aggregations");
-            pattern = r(aggVar);
-        } else {
-            pattern = "[" + aggPatterns.joinToString(" ") + "]";
-        }
-        return currentEnv.setPattern(pattern).focus(pattern);
-    }
-    private Env transformGroupSet(Env env, Seq<RexRN> groupSet) {
-        Env currentEnv = env;
-        Seq<String> groupPatterns = Seq.empty();
-        for (RexRN g : groupSet) {
-            Env ge = transform(currentEnv, g);
-            groupPatterns = groupPatterns.appended(ge.current());
-            currentEnv = ge;
-        }
-        String pattern = "[" + groupPatterns.joinToString(" ") + "]";
-        return currentEnv.setPattern(pattern).focus(pattern);
-    }
-    @Override
-    public Env transformEmpty(Env env, RelRN.Empty empty) {
-        if (flag(env, "isPruneEmptyMinus")) {
-            String leftVar = get(env, "pruneEmptyLeft");
-            return env.setPattern("(ConstructEmptyValues (OutputCols " + r(leftVar) + "))") .focus("(ConstructEmptyValues (OutputCols " + r(leftVar) + "))");
-        }
-        if (flag(env, "hasZeroRows")) {
-            if (env.bindings().containsKey("projections") && env.bindings().containsKey("passthrough")) {
-                String projVar = get(env, "projections");
-                String passVar = get(env, "passthrough");
-                String pattern = "(ConstructEmptyValues (UnionCols (ProjectionCols " + r(projVar) + ") " + r(passVar) + "))";
-                return env.setPattern(pattern).focus(pattern);
-            }
-            String inputVar = get(env, "zeroInput", "input");
-            String matchPat = env.pattern();
-            if (matchPat != null && matchPat.contains("Union") && matchPat.contains("$left")) {
-                String pattern = "(ConstructEmptyValues (OutputCols " + r(inputVar) + "))";
-                return env.setPattern(pattern).focus(pattern);
-            }
-            String pattern = r(inputVar);
-            return env.setPattern(pattern).focus(pattern);
-        }
-        if (flag(env, "isPruneEmptyFilter")) {
-            String inputVar = get(env, "pruneEmptyInput");
-            return env.setPattern(r(inputVar)).focus(r(inputVar));
-        }
-        String pattern = "(ConstructEmptyValues (OutputCols $input_0))";
-        return env.setPattern(pattern).focus(pattern);
-    }
-    @Override
-    public Env transformField(Env env, RexRN.Field field) {
-        String var = get(env, "field_" + field.ordinal(), "field");
-        return env.setPattern(r(var)).focus(r(var));
-    }
-    @Override
-    public Env transformPred(Env env, RexRN.Pred pred) {
-        String var = get(env, pred.operator().getName(), "cond");
-        return env.setPattern(r(var)).focus(r(var));
-    }
-    @Override
-    public Env transformProj(Env env, RexRN.Proj proj) {
-        String var = get(env, proj.operator().getName(), "proj");
-        return env.setPattern(r(var)).focus(r(var));
-    }
-    public Env transformGroupBy(Env env, RexRN.GroupBy groupBy) {
-        if (groupBy.sources().size() == 1 && groupBy.sources().get(0) instanceof RexRN.Proj proj) {
-            String projVar = env.bindings().get(proj.operator().getName());
-            if (projVar != null) return env.setPattern(r(projVar)).focus(r(projVar));
-        }
-        String var = get(env, groupBy.operator().getName(), "groupBy");
-        return env.setPattern(r(var)).focus(r(var));
-    }
-    @Override
-    public Env transformAnd(Env env, RexRN.And and) {
-        Env currentEnv = env;
-        Seq<String> operandPats = Seq.empty();
-        for (RexRN op : and.sources()) {
-            Env opEnv = transform(currentEnv, op);
-            operandPats = operandPats.appended(opEnv.current());
-            currentEnv = opEnv;
-        }
-        String pattern = "(ConcatFilters " + operandPats.joinToString(" ") + ")";
-        return currentEnv.setPattern(pattern).focus(pattern);
-    }
-    @Override
-    public Env transformTrue(Env env, RexRN literal) {
-        String var = get(env, "true_" + System.identityHashCode(literal), "true");
-        return env.setPattern(r(var)).focus(r(var));
-    }
-    @Override
-    public Env transformFalse(Env env, RexRN literal) {
-        return env.setPattern("(False)").focus("(False)");
-    }
-    @Override
-    public Env transformCustom(Env env, RelRN custom) {
-        if (custom instanceof org.qed.RRuleInstances.JoinCommute.ProjectionRelRN proj) {
-            return transform(env, proj.source());
-        }
-        if (custom instanceof org.qed.RRuleInstances.AggregateProjectConstantToDummyJoin .AggregateGroupingByDummyFields aggGrouping) {
-            if (env.rulename.equals("AggregateProjectConstantToDummyJoin") && env.bindings().containsKey("input") && env.bindings().containsKey("aggregations") && env.bindings().containsKey("groupingPrivate") && !env.bindings().containsKey("projectInput")) {
-                String inputVar = get(env, "input");
-                String aggsVar = get(env, "aggregations");
-                String gpVar = get(env, "groupingPrivate");
-                String pattern = N("ConstructAggregateProjectConstantToDummyJoin", r(inputVar), r(aggsVar), r(gpVar));
-                return env.setPattern(pattern).focus(pattern);
-            }
-            return transform(env, aggGrouping.input());
-        }
-        if (custom instanceof org.qed.RRuleInstances.AggregateProjectConstantToDummyJoin .ProjectWithDummyFields pwd) {
-            return transform(env, pwd.input());
-        }
-        if (custom instanceof org.qed.RRuleInstances.AggregateProjectConstantToDummyJoin .SourceTable) {
-            return transformScan(env, new RelRN.Scan("Source", org.qed.RexRN.varType("Source_Type", true), false));
-        }
-        if (custom instanceof org.qed.RRuleInstances.ProjectAggregateMerge .ProjectOptimized projectOptimized) {
-            if (env.rulename.equals("ProjectAggregateMerge") && env.bindings().containsKey("aggInput") && env.bindings().containsKey("aggregations") && env.bindings().containsKey("groupingPrivate") && env.bindings().containsKey("projections") && env.bindings().containsKey("passthrough") && env.bindings().containsKey("needed")) {
-                if (projectOptimized.input() instanceof org.qed.RRuleInstances.ProjectAggregateMerge .AggregateWithUsedCallsOnly aggregateOptimized) {
-                    Env aggInputEnv = transform(env, aggregateOptimized.input());
-                    String aggInputPat = aggInputEnv.current();
-                    String aggsVar = get(env, "aggregations");
-                    String gpVar = get(env, "groupingPrivate");
-                    String projVar = get(env, "projections");
-                    String passVar = get(env, "passthrough");
-                    String neededVar = get(env, "needed");
-                    String pattern = "(Project\n" + "    (GroupBy\n" + "        " + aggInputPat + "\n" + "        (PruneAggCols " + r(aggsVar) + " " + r(neededVar) + ")\n" + "        " + r(gpVar) + "\n" + "    )\n" + "    " + r(projVar) + "\n" + "    " + r(passVar) + "\n" + ")";
-                    return aggInputEnv.setPattern(pattern).focus(pattern);
+                    var accessor = component.getAccessor();
+                    accessor.setAccessible(true);
+                    rels.add((RelRN) accessor.invoke(custom));
+                } catch (ReflectiveOperationException e) {
+                    throw new UnsupportedOperationException("Unsupported relation component: " + constructName(custom.getClass()), e);
                 }
             }
-            return transform(env, projectOptimized.input());
         }
-        if (custom instanceof org.qed.RRuleInstances.ProjectAggregateMerge .ProjectUsingSubsetOfAggregates pusa) {
-            if (env.bindings().containsKey("input") && env.bindings().containsKey("aggregations") && env.bindings().containsKey("groupingPrivate") && env.bindings().containsKey("projections") && env.bindings().containsKey("passthrough")) {
-                String inputVar = get(env, "input");
-                String projVar = get(env, "projections");
-                String passVar = get(env, "passthrough");
-                String aggsVar = get(env, "aggregations");
-                String gpVar = get(env, "groupingPrivate");
-                String remapAggs = "(RemapAggregationsThroughProject " + r(aggsVar) + " " + r(projVar) + ")";
-                String remapGp = "(RemapGroupingColsThroughProject " + r(gpVar) + " " + r(projVar) + " " + r(passVar) + ")";
-                String pattern = N("GroupBy", r(inputVar), remapAggs, remapGp);
-                return env.setPattern(pattern).focus(pattern);
-            }
-            return transform(env, pusa.input());
-        }
-        if (custom instanceof org.qed.RRuleInstances.ProjectAggregateMerge .AggregateWithMultipleCalls amc) {
-            return transform(env, amc.input());
-        }
-        if (custom instanceof org.qed.RRuleInstances.ProjectAggregateMerge.SourceTable) {
-            return transformScan(env, new RelRN.Scan("Source", org.qed.RexRN.varType("Source_Type", true), false));
-        }
-        if (custom instanceof org.qed.RRuleInstances.UnionPullUpConstants .TopProjectionWithConstants topProj) {
-            if (env.rulename.equals("UnionPullUpConstants") && env.bindings().containsKey("left") && env.bindings().containsKey("right") && env.bindings().containsKey("leftProjections") && env.bindings().containsKey("rightProjections") && env.bindings().containsKey("private") && env.bindings().containsKey("leftInput") && env.bindings().containsKey("rightInput") && env.bindings().containsKey("leftPassthrough") && env.bindings().containsKey("rightPassthrough")) {
-                String leftVar = get(env, "left");
-                String rightVar = get(env, "right");
-                String leftProjVar = get(env, "leftProjections");
-                String rightProjVar = get(env, "rightProjections");
-                String privateVar = get(env, "private");
-                String leftInputVar = get(env, "leftInput");
-                String rightInputVar = get(env, "rightInput");
-                String leftPassVar = get(env, "leftPassthrough");
-                String rightPassVar = get(env, "rightPassthrough");
-                String pattern = "(UnionPullUpConstantsReplace\n" + "    " + r(leftVar) + "\n" + "    " + r(rightVar) + "\n" + "    " + r(leftProjVar) + "\n" + "    " + r(rightProjVar) + "\n" + "    " + r(privateVar) + "\n" + "    " + r(leftInputVar) + "\n" + "    " + r(rightInputVar) + "\n" + "    " + r(leftPassVar) + "\n" + "    " + r(rightPassVar) + "\n" + ")";
-                return env.setPattern(pattern).focus(pattern);
-            }
-            return transform(env, topProj.input());
-        }
-        if (custom instanceof org.qed.RRuleInstances.UnionPullUpConstants .UnionWithConstantColumns uwcc) {
-            return transformUnion(env, new RelRN.Union(true, Seq.of(uwcc.left(), uwcc.right())));
-        }
-        if (custom instanceof org.qed.RRuleInstances.UnionPullUpConstants .LeftProjectionWithConstants lp) {
-            return transformProject(env, new RelRN.Project(lp.input().field(0), lp.input()));
-        }
-        if (custom instanceof org.qed.RRuleInstances.UnionPullUpConstants .RightProjectionWithConstants rp) {
-            return transformProject(env, new RelRN.Project(rp.input().field(0), rp.input()));
-        }
-        if (custom instanceof org.qed.RRuleInstances.UnionPullUpConstants.SourceTable) {
-            return transformScan(env, new RelRN.Scan("Source", org.qed.RexRN.varType("Source_Type", true), false));
-        }
-        if (custom instanceof org.qed.RRuleInstances.UnionToDistinct.DistinctAggregate da) {
-            if (env.rulename.equals("UnionToDistinct") && env.bindings().containsKey("left") && env.bindings().containsKey("right") && env.bindings().containsKey("private") && env.bindings().containsKey("leftCols") && env.bindings().containsKey("rightCols") && env.bindings().containsKey("outCols") && env.bindings().containsKey("keyCols")) {
-                String leftVar = get(env, "left");
-                String rightVar = get(env, "right");
-                String privVar = get(env, "private");
-                String lcVar = get(env, "leftCols");
-                String rcVar = get(env, "rightCols");
-                String ocVar = get(env, "outCols");
-                String kcVar = get(env, "keyCols");
-                String translateCols = "(TranslateColSet\n" + "            (DifferenceCols (OutputCols " + r(leftVar) + ") " + r(kcVar) + ")\n" + "            " + r(lcVar) + "\n" + "            " + r(ocVar) + "\n" + "        )";
-                String makeAgg = "(MakeAggCols\n" + "        ConstAgg\n" + "        " + translateCols + "\n" + "    )";
-                String translateKeyCols = "(TranslateColSet " + r(kcVar) + " " + r(lcVar) + " " + r(ocVar) + ")";
-                String makeGrouping = "(MakeGrouping\n" + "        " + translateKeyCols + "\n" + "        (EmptyOrdering)\n" + "    )";
-                String unionAllPat = "(UnionAll " + r(leftVar) + " " + r(rightVar) + " " + r(privVar) + ")";
-                String pattern = N("DistinctOn", unionAllPat, makeAgg, makeGrouping);
-                return env.setPattern(pattern).focus(pattern);
-            }
-            return transform(env, da.input());
-        }
-        if (custom instanceof org.qed.RRuleInstances.UnionToDistinct.UnionAll ua) {
-            Env leftEnv = transform(env, ua.left());
-            Env rightEnv = transform(leftEnv, ua.right());
-            return rightEnv;
-        }
-        return unimplementedTransform(env, custom);
+        return liftRel(custom.semantics(), new Lift(rels), tagged);
     }
-    @Override
-    public Env transformCustom(Env env, RexRN custom) {
-        if (custom instanceof RexRN.GroupBy groupBy) return transformGroupBy(env, groupBy);
-        return unimplementedTransform(env, custom);
+
+    private String liftId(RelNode node, Lift lift) {
+        return ids.computeIfAbsent(liftRel(node, lift, false).toString(), k -> "r" + ids.size());
     }
-    @Override
-    public String translate(String name, Env onMatch, Env transform) {
-        String match = postProcessMatch(onMatch.pattern());
-        String out = postProcessTransform(transform.pattern(), match);
-        return "[" + name + ", Normalize]\n" + match + "\n=>\n" + out + "\n";
+
+    private ObjectNode liftRel(RelNode node, Lift lift, boolean tagged) {
+        for (var slot : lift.rels()) if (slot.semantics().deepEquals(node)) return rel(slot, tagged);
+        var out = MAPPER.createObjectNode();
+        switch (node) {
+            case TableScan scan -> {
+                var table = scan.getTable().getQualifiedName();
+                out.put("op", "scan");
+                out.put("name", table.get(table.size() - 1));
+                var columns = scan.getRowType().getFieldList();
+                out.put("arity", columns.size());
+                var nonNull = MAPPER.createArrayNode();
+                for (int i = 0; i < columns.size(); i++) if (!columns.get(i).getType().isNullable()) nonNull.add(i);
+                if (!nonNull.isEmpty()) out.set("non_null", nonNull);
+            }
+            case LogicalFilter filter -> {
+                filter.getVariablesSet().forEach(id -> correlations.put(id, filter.getInput()));
+                out.put("op", "filter");
+                out.set("cond", liftRex(filter.getCondition(), filter.getInput(), lift, tagged));
+                out.set("input", liftRel(filter.getInput(), lift, tagged));
+            }
+            default -> {
+                var join = (LogicalJoin) node;
+                join.getVariablesSet().forEach(id -> correlations.put(id, join));
+                out.put("op", "join");
+                out.put("type", join.getJoinType().name().toLowerCase());
+                out.set("cond", liftRex(join.getCondition(), join, lift, tagged));
+                out.set("left", liftRel(join.getLeft(), lift, tagged));
+                out.set("right", liftRel(join.getRight(), lift, tagged));
+            }
+        }
+        if (tagged) out.put("id", liftId(node, lift));
+        return out;
     }
-    private static String postProcessMatch(String match) {
-        if (match == null) return "";
-        if (match.contains("HasZeroRows")) {
-            match = normalizeVars(match, "projections", "passthrough", "filters");
-        }
-        if (match.startsWith("(Union\n") || match.startsWith("(UnionAll\n")) {
-            String[] lines = match.split("\n");
-            if (lines.length >= 3 && lines[1].contains(":(Values)") && lines[2].contains(":(Values)")) {
-                String leftVar = extractVar(lines[1]);
-                String rightVar = extractVar(lines[2]);
-                String uType = lines[0].startsWith("(UnionAll") ? "UnionAll" : "Union";
-                match = "(" + uType + "\n" + "    " + b(leftVar) + " & (HasZeroRows " + r(leftVar) + ")\n" + "    " + b(rightVar) + " & (HasZeroRows " + r(rightVar) + ")\n" + ")";
-            }
-        }
-        if (match.contains("HasZeroRows") && match.contains("SetPrivate")) {
-            match = match.replaceAll("\\s+\\$private_\\d+:\\*\\s*\\)", "\n)") .replaceAll("\\s+\\$private_\\d+:\\*\\)", ")");
-        }
-        return match;
-    }
-    private static String postProcessTransform(String out, String match) {
-        if (out == null) return "";
-        if (out.startsWith("(ConstructEmptyValues (OutputCols $")) {
-            int startIdx = "(ConstructEmptyValues (OutputCols $".length();
-            String var = extractVarFromPos(out, startIdx);
-            if (var.equals("input")) {
-                String numbered = findFirstVar(match);
-                if (numbered != null) {
-                    out = out.replace( "(ConstructEmptyValues (OutputCols $input)", "(ConstructEmptyValues (OutputCols $" + numbered + ")");
-                }
-            }
-        } else if (out.equals("$input")) {
-            String numbered = findFirstVar(match);
-            if (numbered != null) out = "$" + numbered;
-        }
-        if (match.contains("HasZeroRows") && match.contains("SetPrivate") && match.contains("outCols") && out.contains("ConstructEmptyValues")) {
-            java.util.regex.Matcher m = java.util.regex.Pattern .compile("\\$outCols_(\\d+)").matcher(match);
-            if (m.find()) {
-                String outColsVar = "$outCols_" + m.group(1);
-                int si = out.indexOf("(ConstructEmptyValues (OutputCols $");
-                if (si >= 0) {
-                    int vi = si + "(ConstructEmptyValues (OutputCols $".length();
-                    int vend = vi + extractVarFromPos(out, vi).length();
-                    out = out.substring(0, si) + "(ConstructEmptyValues (ColListToSet " + outColsVar + "))" + out.substring(vend + 2);
-                }
-            }
-        } else if (match.contains("HasZeroRows") && match.contains("$left") && out.contains("ConstructEmptyValues")) {
-            int leftIdx = match.indexOf("$left");
-            if (leftIdx >= 0) {
-                String leftVar = extractVarFromPos(match, leftIdx + 1);
-                out = out.replaceAll( "(OutputCols \\$)[a-zA-Z_][a-zA-Z0-9_]*", "$1" + leftVar);
-            }
-        }
-        java.util.Map<String, String> varMap = extractNumberedVarMap(match);
-        if (!varMap.isEmpty()) {
-            var sorted = new java.util.ArrayList<>(varMap.entrySet());
-            sorted.sort((a, bx) -> Integer.compare(bx.getKey().length(), a.getKey().length()));
-            for (var e : sorted) {
-                out = out.replaceAll( "\\$" + java.util.regex.Pattern.quote(e.getKey()) + "(?![A-Za-z0-9_])", java.util.regex.Matcher.quoteReplacement(e.getValue()));
-            }
-        }
-        if (match.contains("HasZeroRows")) {
-            out = normalizeVars(out, "projections", "passthrough", "filters");
+
+    private ObjectNode liftField(RelNode context, int ordinal, Lift lift, boolean tagged) {
+        var out = MAPPER.createObjectNode();
+        if (context instanceof LogicalJoin join && !tagged) {
+            out.put("op", "joinfield");
+            out.put("ordinal", ordinal);
+            out.put("left", liftId(join.getLeft(), lift));
+            out.put("right", liftId(join.getRight(), lift));
+        } else {
+            out.put("op", "field");
+            out.put("ordinal", ordinal);
+            out.put("of", liftId(context, lift));
         }
         return out;
     }
-    private static String normalizeVars(String str, String... varNames) {
-        for (String v : varNames) {
-            if (str.contains("$" + v + "_")) {
-                str = str.replaceAll( "\\$" + v + "_\\d+", java.util.regex.Matcher.quoteReplacement("$" + v));
+
+    private ObjectNode liftRex(RexNode rex, RelNode context, Lift lift, boolean tagged) {
+        var out = MAPPER.createObjectNode();
+        switch (rex) {
+            case RexInputRef ref -> {
+                return liftField(context, ref.getIndex(), lift, tagged);
+            }
+            case RexFieldAccess access when access.getReferenceExpr() instanceof RexCorrelVariable variable -> {
+                var owner = correlations.get(variable.id);
+                return liftField(owner, access.getField().getIndex(), lift, tagged);
+            }
+            case RexLiteral literal -> literal(out, literal);
+            case RexSubQuery subQuery -> {
+                switch (subQuery.getKind()) {
+                    case EXISTS -> {
+                        out.put("op", "exists");
+                        out.set("input", liftRel(subQuery.rel, lift, tagged));
+                    }
+                    case IN -> {
+                        out.put("op", "any");
+                        out.put("cmp", "=");
+                        out.set("scalar", liftRex(subQuery.getOperands().get(0), context, lift, tagged));
+                        out.set("input", liftRel(subQuery.rel, lift, tagged));
+                    }
+                }
+            }
+            default -> {
+                var call = (RexCall) rex;
+                var args = MAPPER.createArrayNode();
+                for (var operand : call.getOperands()) args.add(liftRex(operand, context, lift, tagged));
+                switch (call.getKind()) {
+                    case NOT -> {
+                        out.put("op", "not");
+                        out.set("arg", args.get(0));
+                    }
+                    case OR -> {
+                        out.put("op", "or");
+                        out.set("args", args);
+                    }
+                    case AND -> {
+                        out.put("op", "and");
+                        out.set("args", args);
+                    }
+                    default -> {
+                        out.put("op", "scalar");
+                        out.put("operator", call.getOperator().getName());
+                        out.set("args", args);
+                    }
+                }
             }
         }
-        return str;
+        return out;
     }
-    private static String extractVar(String line) {
-        int i = line.indexOf('$');
-        if (i < 0) return null;
-        return extractVarFromPos(line, i + 1);
-    }
-    private static String extractVarFromPos(String str, int pos) {
-        int end = pos;
-        while (end < str.length() && (Character.isLetterOrDigit(str.charAt(end)) || str.charAt(end) == '_')) {
-            end++;
-        }
-        return str.substring(pos, end);
-    }
-    private static String findFirstVar(String match) {
-        for (String line : match.split("\n")) {
-            if (line.contains("$private")) continue;
-            if (line.contains("$")) {
-                String v = extractVar(line);
-                if (v != null) return v;
+
+    private void literal(ObjectNode node, RexLiteral literal) {
+        var sqlType = literal.getType().getSqlTypeName();
+        if (literal.isNull()) {
+            node.put("op", "null");
+            if (sqlType == org.apache.calcite.sql.type.SqlTypeName.BOOLEAN) {
+                node.put("type", "bool");
+            } else if (sqlType == org.apache.calcite.sql.type.SqlTypeName.INTEGER) {
+                node.put("type", "int");
+            } else if (literal.getType() instanceof org.qed.RelType.VarType) {
+                var refs = typeRefs.get(literal.getType().toString());
+                node.put("type", "same_as");
+                var out = node.putArray("refs");
+                for (var ref : refs) out.addObject().put("of", ref.of()).put("ordinal", ref.ordinal());
             }
+        } else if (sqlType == org.apache.calcite.sql.type.SqlTypeName.INTEGER) {
+            node.put("op", "int");
+            node.put("value", literal.getValueAs(Integer.class));
+        } else if (sqlType == org.apache.calcite.sql.type.SqlTypeName.BOOLEAN) {
+            node.put("op", Boolean.TRUE.equals(literal.getValueAs(Boolean.class)) ? "true" : "false");
+        }
+    }
+
+    private void singletonMembership(ObjectNode node, String op, RexRN.Or or, boolean tagged, RelRN context) {
+        var pred = (RexRN.Pred) or.sources().get(0);
+        node.put("op", op);
+        var args = node.putArray("args");
+        pred.sources().forEach(s -> args.add(rex(s, tagged, context)));
+    }
+
+    private void list(ObjectNode node, String op, Seq<RexRN> sources, boolean tagged, RelRN context) {
+        node.put("op", op);
+        var args = MAPPER.createArrayNode();
+        sources.forEach(s -> args.add(rex(s, tagged, context)));
+        node.set("args", args);
+    }
+
+    private void symbol(ObjectNode node, String op, String name, Seq<RexRN> sources, boolean tagged, RelRN context) {
+        node.put("op", op);
+        node.put("name", name);
+        node.set("args", arguments(sources, tagged, op.equals("pred"), context));
+    }
+
+    private ArrayNode arguments(Seq<RexRN> sources, boolean tagged, boolean wholePredicateRow, RelRN context) {
+        var args = MAPPER.createArrayNode();
+        var row = wholePredicateRow ? wholeRow(sources) : null;
+        if (row != null) {
+            var node = MAPPER.createObjectNode();
+            node.put("op", "row");
+            var of = MAPPER.createArrayNode();
+            if (tagged && sources.get(0) instanceof RexRN.JoinField) {
+                of.add(id(context));
+            } else {
+                row.forEach(r -> of.add(id(r)));
+            }
+            node.set("rels", of);
+            args.add(node);
+            return args;
+        }
+        sources.forEach(s -> args.add(rex(s, tagged, context)));
+        return args;
+    }
+
+    private static java.util.List<RelRN> wholeRow(Seq<RexRN> sources) {
+        if (sources.isEmpty()) return null;
+        if (sources.allMatch(s -> s instanceof RexRN.Field)) {
+            var source = ((RexRN.Field) sources.get(0)).source();
+            var count = source.semantics().getRowType().getFieldCount();
+            for (var i = 0; i < sources.size(); i++) {
+                var field = (RexRN.Field) sources.get(i);
+                if (!field.source().equals(source) || field.ordinal() != i) return null;
+            }
+            return sources.size() == count ? java.util.List.of(source) : null;
+        }
+        if (sources.allMatch(s -> s instanceof RexRN.JoinField)) {
+            var first = (RexRN.JoinField) sources.get(0);
+            var total = first.left().semantics().getRowType().getFieldCount() + first.right().semantics().getRowType().getFieldCount();
+            for (var i = 0; i < sources.size(); i++) {
+                var field = (RexRN.JoinField) sources.get(i);
+                if (!field.left().equals(first.left()) || !field.right().equals(first.right()) || field.ordinal() != i) return null;
+            }
+            return sources.size() == total ? java.util.List.of(first.left(), first.right()) : null;
         }
         return null;
     }
-    private static java.util.Map<String, String> extractNumberedVarMap(String match) {
-        java.util.Map<String, String> map = new java.util.HashMap<>();
-        java.util.regex.Matcher m =
-            java.util.regex.Pattern.compile("\\$([A-Za-z][A-Za-z0-9_]*)_([0-9]+)").matcher(match);
-        while (m.find()) {
-            String base = m.group(1);
-            String numbered = "$" + base + "_" + m.group(2);
-            map.putIfAbsent(base, numbered);
-        }
-        return map;
+
+    private static UnsupportedOperationException unsupported(RelRN rel) {
+        return new UnsupportedOperationException("Unsupported relational operator: " + constructName(rel.getClass()));
     }
-    public record Env( AtomicInteger varId, String pattern, ImmutableMap<String, String> bindings, String currentVar, String rulename ) {
-        public static Env empty(String rulename) {
-            return new Env(new AtomicInteger(), "", ImmutableMap.empty(), "", rulename);
-        }
-        public Env focus(String target) {
-            return new Env(varId, pattern, bindings, target, rulename);
-        }
-        public Env setPattern(String newPattern) {
-            return new Env(varId, newPattern, bindings, currentVar, rulename);
-        }
-        public Env addBinding(String key, String value) {
-            return new Env(varId, pattern, bindings.putted(key, value), currentVar, rulename);
-        }
-        public String generateVar(String prefix) {
-            return prefix + "_" + varId.getAndIncrement();
-        }
-        public String current() { return currentVar; }
-        public String pattern() { return pattern; }
-        public ImmutableMap<String, String> bindings() { return bindings; }
-        public String rulename() { return rulename; }
+
+    private static String constructName(Class<?> type) {
+        if (type.isSynthetic()) return "Java lambda";
+        if (type.isAnonymousClass()) return "anonymous " + type.getInterfaces()[0].getSimpleName();
+        return type.getSimpleName();
     }
 }

@@ -1,0 +1,58 @@
+{
+  "name" : "SimplifyIntersectLeft",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "set",
+    "type" : "intersect",
+    "all" : false,
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "unique" : true,
+      "arity" : 1,
+      "non_null" : [ 0 ],
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "R",
+      "arity" : 1,
+      "non_null" : [ 0 ],
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "semi",
+    "cond" : {
+      "op" : "scalar",
+      "operator" : "IS NOT DISTINCT FROM",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r3"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r3"
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "unique" : true,
+      "arity" : 1,
+      "non_null" : [ 0 ],
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "R",
+      "arity" : 1,
+      "non_null" : [ 0 ],
+      "id" : "r1"
+    },
+    "id" : "r3"
+  }
+}

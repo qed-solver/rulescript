@@ -1,0 +1,21 @@
+{
+  "name" : "EliminateSelect",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "true"
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "scan",
+    "name" : "Source",
+    "id" : "r0"
+  }
+}

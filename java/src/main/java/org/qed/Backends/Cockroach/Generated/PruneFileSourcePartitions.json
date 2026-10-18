@@ -1,0 +1,129 @@
+{
+  "name" : "PruneFileSourcePartitions",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "Pi",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r1"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r1"
+      }, {
+        "op" : "field",
+        "ordinal" : 2,
+        "of" : "r1"
+      } ]
+    } ],
+    "input" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "and",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "P",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r0"
+          }, {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r0"
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "D",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "Source",
+        "arity" : 3,
+        "id" : "r0"
+      },
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "Pi",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r3"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r3"
+      }, {
+        "op" : "field",
+        "ordinal" : 2,
+        "of" : "r3"
+      } ]
+    } ],
+    "input" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "and",
+        "args" : [ {
+          "op" : "pred",
+          "name" : "P",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r0"
+          }, {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r0"
+          } ]
+        }, {
+          "op" : "pred",
+          "name" : "D",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        } ]
+      },
+      "input" : {
+        "op" : "filter",
+        "cond" : {
+          "op" : "pred",
+          "name" : "P",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r0"
+          }, {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r0"
+          } ]
+        },
+        "input" : {
+          "op" : "scan",
+          "name" : "Source",
+          "arity" : 3,
+          "id" : "r0"
+        },
+        "id" : "r4"
+      },
+      "id" : "r3"
+    },
+    "id" : "r5"
+  }
+}

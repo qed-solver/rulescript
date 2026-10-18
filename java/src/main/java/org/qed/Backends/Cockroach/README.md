@@ -1,43 +1,60 @@
 # CockroachDB
 
-This directory contains CockroachDB-specific artifacts generated from RuleScript rules.
+Each rule is written as a JSON file (`from` and `to` patterns), which a Go package inside CockroachDB applies to
+optimizer expressions.
 
-## Generate Rules
+## Layout
 
-Run the Cockroach generator from the repository root:
+- `Rules/` — the RuleScript rules.
+- `CockroachGenerator.java` — translates a rule into a JSON file.
+- `Generated/` — generated JSON rules, one per rule.
+- `Runtime/` — Go package that applies a generated rule; copied into CockroachDB as `pkg/sql/opt/rulescript`.
+- `Tests/` — Go tests, one per rule, plus shared helpers.
+- `cockroach.patch` — the change to CockroachDB that lets the runtime run.
+- `CockroachTester.java` — generates all rules into `Generated/`.
+
+## Generate Rules and Execute Tests
+
+From `java/`, once (clones CockroachDB into `java/vendor/cockroach`; needs `bazelisk`):
 
 ```sh
-./mvnw -q compile exec:java@cockroach-codegen
+./scripts/setup-cockroach.sh
 ```
 
-Generated optgen rules are written to:
+Then:
 
-- `src/main/java/org/qed/Backends/Cockroach/Generated/*.opt`
+```sh
+./scripts/test-cockroach.sh
+./scripts/test-cockroach.sh -f TestMergeSelects
+./mvnw -q compile exec:java@cockroach-codegen -Dexec.args="MergeSelects MergeSelectInnerJoin"
+```
 
-Cockroach test cases are maintained in:
+The first generates, copies into CockroachDB and runs the tests (`-f` filters them); the last only generates the listed rules.
 
-- `src/main/java/org/qed/Backends/Cockroach/CockroachTests`
+## Use in a CockroachDB server
 
-## Running against CockroachDB
+Build CockroachDB after `setup-cockroach.sh` (`cd vendor/cockroach && ./dev build cockroach-short`). The server loads every
+`*.json` rule file from the directory in `COCKROACH_RULESCRIPT_DIR`; any rule you want in the optimizer is just a file there.
 
-1. Clone [cockroachdb/cockroach](https://github.com/cockroachdb/cockroach) and check out commit:
-
-   ```text
-   4b80cd59c6299f26b2b4f02a96064d5127ccad94
-   ```
-
-2. Copy RuleScript outputs into the Cockroach tree:
-
-   - Rule files from `Generated/*.opt` -> `pkg/sql/opt/norm/rules/`
-   - `CockroachTests` -> `pkg/sql/opt/norm/testdata/rules/CockroachTests`
-   - Replace `pkg/sql/opt/norm/reject_null_funcs.go` in the CockroachDB repository with the current copy from this repo (`src/main/java/org/qed/Backends/Cockroach/reject_null_funcs.go`), because the original code near line 257 performs an unchecked type assertion `agg.Child(0).(*memo.VariableExpr)`; when `AggregateProjectMerge` fires and merges directly, that child can be a `PlusExpr`, which causes a panic, and the patched version adds a safe type check.
-
-3. In the Cockroach repository:
+1. Generate the rules (`./mvnw -q compile exec:java@cockroach-codegen`); they are written to `Generated/`.
+2. Make a directory holding only the rules you want, for example a few by name or every rule of one origin:
 
    ```sh
-   ./dev doctor
-   ./dev build
-   ./dev test pkg/sql/opt/norm -f=TestNormRules/CockroachTests -v
+   mkdir my-rules
+   cp Generated/MergeSelects.json Generated/UnionToDistinct.json my-rules/
+   for f in ../../RRuleInstances/*.java; do grep -q '^// ORIGIN: Calcite' "$f" && cp Generated/$(basename "$f" .java).json my-rules/; done
    ```
 
-This validates that generated rules compile and behave as expected in Cockroach's optimizer test harness.
+3. Start CockroachDB with that directory:
+
+   ```sh
+   COCKROACH_RULESCRIPT_DIR=$PWD/my-rules ./cockroach-short demo
+   ```
+
+   On startup it prints `rulescript: loaded N rules from ...` and one `rulescript: skipped ...` line per file it did not load.
+   A rule is skipped when its output contains its own pattern (it would keep growing the plan).
+4. Every query is now optimized with the rules, as `ExternalNormalizeRule`. Turn them off for a session with
+   `SET disable_optimizer_rules = 'ExternalNormalizeRule'`. Without `COCKROACH_RULESCRIPT_DIR` the server is unchanged.
+
+To see which rules fire, also set `COCKROACH_RULESCRIPT_LOG=<file>`; each time a rule rewrites an expression its name is
+appended to that file (`sort <file> | uniq -c` gives the counts).

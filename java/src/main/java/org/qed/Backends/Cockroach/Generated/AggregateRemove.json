@@ -1,0 +1,28 @@
+{
+  "name" : "AggregateRemove",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "aggregate",
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    } ],
+    "aggs" : [ ],
+    "input" : {
+      "op" : "scan",
+      "name" : "S",
+      "unique" : true,
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "scan",
+    "name" : "S",
+    "unique" : true,
+    "arity" : 1,
+    "id" : "r0"
+  }
+}

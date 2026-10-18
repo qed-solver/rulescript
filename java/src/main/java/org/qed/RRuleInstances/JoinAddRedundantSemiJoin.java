@@ -1,21 +1,26 @@
 package org.qed.RRuleInstances;
 
 import org.apache.calcite.rel.core.JoinRelType;
-import org.qed.RelRN;
 import org.qed.RRule;
+import org.qed.RelRN;
+import org.qed.RexRN;
 
+// ORIGIN: Calcite
+// SCOPE: FULL
 public record JoinAddRedundantSemiJoin() implements RRule {
-    static final RelRN left = RelRN.scan("Left", "Left_Type");
-    static final RelRN right = RelRN.scan("Right", "Right_Type");
-    static final String pred = "pred";
+    static final RelRN X = RelRN.scan("X", "X_Type");
+    static final RelRN Y = RelRN.scan("Y", "Y_Type");
+
+    static final RexRN cond = X.joinPred("cond", Y);
 
     @Override
     public RelRN before() {
-        return left.join(JoinRelType.INNER, pred, right);
+        return X.join(JoinRelType.INNER, cond, Y);
     }
 
     @Override
     public RelRN after() {
-        return left.join(JoinRelType.SEMI, pred, right).join(JoinRelType.INNER, pred, right);
+        return X.join(JoinRelType.SEMI, cond, Y)
+                .join(JoinRelType.INNER, cond, Y);
     }
 }

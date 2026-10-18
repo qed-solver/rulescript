@@ -1,7 +1,0 @@
-[FilterReduceTrue, Normalize]
-(Select
-    $input_0:*
-    []
-)
-=>
-$input_0

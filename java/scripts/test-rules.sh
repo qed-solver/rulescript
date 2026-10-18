@@ -1,7 +1,5 @@
 #!/bin/bash
 
-# Test all generated rules with qed-prover
-
 if [ -z "${GITHUB_STEP_SUMMARY:-}" ]; then
     GITHUB_STEP_SUMMARY="tmp-rules/qed-prover-step-summary.md"
 fi

@@ -1,0 +1,33 @@
+{
+  "name" : "PropagateEmptyRelation",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "pred",
+      "name" : "join",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r2" ]
+      } ]
+    },
+    "left" : {
+      "op" : "empty",
+      "arity" : 2,
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "Right",
+      "arity" : 2,
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "empty",
+    "arity" : 4,
+    "id" : "r3"
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "name" : "HoistUnboundJoinFilterFromExistsSubquery",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "exists",
+      "input" : {
+        "op" : "join",
+        "type" : "inner",
+        "cond" : {
+          "op" : "and",
+          "args" : [ {
+            "op" : "pred",
+            "name" : "unbound_cond",
+            "args" : [ ]
+          }, {
+            "op" : "pred",
+            "name" : "other_join_cond",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r3" ]
+            } ]
+          } ]
+        },
+        "left" : {
+          "op" : "scan",
+          "name" : "Left",
+          "id" : "r1"
+        },
+        "right" : {
+          "op" : "scan",
+          "name" : "Right",
+          "id" : "r2"
+        },
+        "id" : "r3"
+      }
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Outer",
+      "id" : "r0"
+    },
+    "id" : "r4"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "exists",
+        "input" : {
+          "op" : "join",
+          "type" : "inner",
+          "cond" : {
+            "op" : "pred",
+            "name" : "other_join_cond",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r5" ]
+            } ]
+          },
+          "left" : {
+            "op" : "scan",
+            "name" : "Left",
+            "id" : "r1"
+          },
+          "right" : {
+            "op" : "scan",
+            "name" : "Right",
+            "id" : "r2"
+          },
+          "id" : "r5"
+        }
+      }, {
+        "op" : "pred",
+        "name" : "unbound_cond",
+        "args" : [ ]
+      } ]
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Outer",
+      "id" : "r0"
+    },
+    "id" : "r6"
+  }
+}

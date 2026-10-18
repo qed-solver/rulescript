@@ -38,9 +38,6 @@ import java.util.List;
 
 import static java.util.Objects.requireNonNull;
 
-/**
- * A copy of the PlannerImpl that disables all rewrite rules.
- */
 public class RawPlanner implements RelOptTable.ViewExpander {
     private final SqlOperatorTable operatorTable;
     private final ImmutableList<Program> programs;
@@ -48,26 +45,20 @@ public class RawPlanner implements RelOptTable.ViewExpander {
     private final Context context;
     private final CalciteConnectionConfig connectionConfig;
 
-    /**
-     * Holds the trait definitions to be registered with planner. May be null.
-     */
     private final @Nullable ImmutableList<RelTraitDef> traitDefs;
 
     private final SqlParser.Config parserConfig;
     private final SqlValidator.Config sqlValidatorConfig;
     private final SqlToRelConverter.Config sqlToRelConverterConfig;
     private final SqlRexConvertletTable convertletTable;
-    // set in STATE_2_READY
     private @Nullable
     final SchemaPlus defaultSchema;
     private @Nullable
     final RexExecutor executor;
-    // set in STATE_1_RESET
     @SuppressWarnings("unused")
     private boolean open;
     private @Nullable JavaTypeFactory typeFactory;
     private @Nullable RelOptPlanner planner;
-    // set in STATE_4_VALIDATE
     private @Nullable SqlValidator validator;
 
     public RawPlanner(SchemaPlus schema) {
@@ -127,8 +118,6 @@ public class RawPlanner implements RelOptTable.ViewExpander {
                 Hook.ENABLE_BINDABLE.get(false));
         planner.setExecutor(executor);
 
-        // If user specify own traitDef, instead of default default trait,
-        // register the trait def specified in traitDefs.
         if (this.traitDefs == null) {
             planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
             if (CalciteSystemProperty.ENABLE_COLLATION_TRAIT.value()) {

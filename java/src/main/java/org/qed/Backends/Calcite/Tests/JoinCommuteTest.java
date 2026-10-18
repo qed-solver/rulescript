@@ -1,73 +1,58 @@
 package org.qed.Backends.Calcite.Tests;
 
-import kala.collection.Seq;
-import kala.tuple.Tuple;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.tools.RelBuilder;
+import org.qed.Backends.Calcite.CalciteRuntime;
 import org.qed.Backends.Calcite.CalciteTester;
-import org.qed.RelType;
+import org.qed.RRuleInstances.JoinCommute;
 import org.qed.RuleBuilder;
 
 public class JoinCommuteTest {
-
     public static void runTest() {
-        var tester = new CalciteTester();
-        var builder = RuleBuilder.create();
+        var rule = new JoinCommute();
+        RuleChecks.rewritesPattern(rule);
+        RuleChecks.rewritesConcretePredicates(rule);
+        RuleChecks.rejectsNearMisses(rule);
+        handBuiltJoinRewrites();
+        rejectsOuterJoin();
+        if (CalciteTester.failures() != 0) {
+            throw new AssertionError("JoinCommute checks failed");
+        }
+    }
 
-        var empTable = builder.createQedTable(Seq.of(
-            Tuple.of(RelType.fromString("INTEGER", true), false),
-            Tuple.of(RelType.fromString("VARCHAR", true), false),
-            Tuple.of(RelType.fromString("VARCHAR", true), false),
-            Tuple.of(RelType.fromString("INTEGER", true), false),
-            Tuple.of(RelType.fromString("DATE", true), false),
-            Tuple.of(RelType.fromString("DECIMAL", true), false),
-            Tuple.of(RelType.fromString("DECIMAL", true), false),
-            Tuple.of(RelType.fromString("INTEGER", true), false)
-        ));
-        builder.addTable(empTable);
+    private static void handBuiltJoinRewrites() {
+        RuleBuilder builder = RuleBuilder.create();
+        var left = RuleChecks.table(builder, 1, false);
+        var right = RuleChecks.table(builder, 1, false);
+        var rel = builder.scan(left).scan(right)
+                .join(JoinRelType.INNER, builder.call(SqlStdOperatorTable.EQUALS,
+                        builder.field(2, 0, 0), builder.field(2, 1, 0)))
+                .build();
+        RuleBuilder expectedBuilder = RuleBuilder.create();
+        var expectedLeft = RuleChecks.table(expectedBuilder, 1, false);
+        var expectedRight = RuleChecks.table(expectedBuilder, 1, false);
+        var expected = expectedBuilder.scan(expectedRight).scan(expectedLeft)
+                .join(JoinRelType.INNER, expectedBuilder.call(SqlStdOperatorTable.EQUALS,
+                        expectedBuilder.field(2, 0, 0), expectedBuilder.field(2, 1, 0)))
+                .project(expectedBuilder.fields(java.util.List.of(1, 0))).build();
+        RuleChecks.rewrites(rule(), rel, expected);
+    }
 
-        var deptTable = builder.createQedTable(Seq.of(
-            Tuple.of(RelType.fromString("INTEGER", true), false),
-            Tuple.of(RelType.fromString("VARCHAR", true), false),
-            Tuple.of(RelType.fromString("VARCHAR", true), false)
-        ));
-        builder.addTable(deptTable);
+    private static void rejectsOuterJoin() {
+        RuleBuilder builder = RuleBuilder.create();
+        var left = RuleChecks.table(builder, 2, false);
+        var right = RuleChecks.table(builder, 2, false);
+        RelNode plan = builder.scan(left).scan(right)
+                .join(JoinRelType.LEFT, builder.call(SqlStdOperatorTable.EQUALS,
+                        builder.field(2, 0, 0), builder.field(2, 1, 0)))
+                .build();
+        RuleChecks.doesNotApply(rule(), plan);
+    }
 
-        var empScan = builder.scan(empTable.getName()).build();
-        var deptScan = builder.scan(deptTable.getName()).build();
-        
-        var before = builder
-            .push(empScan)
-            .push(deptScan)
-            .join(JoinRelType.INNER, builder.call(builder.genericPredicateOp("equals", true), 
-                  builder.field(2, 0, 7),
-                  builder.field(2, 1, 0)
-            ))
-            .build();
-
-        var after = builder
-            .push(deptScan)
-            .push(empScan)
-            .join(JoinRelType.INNER, builder.call(builder.genericPredicateOp("equals", true),
-                  builder.field(2, 1, 7),
-                  builder.field(2, 0, 0)
-            ))
-            .project(
-                builder.field(3),
-                builder.field(4),
-                builder.field(5),
-                builder.field(6),
-                builder.field(7),
-                builder.field(8),
-                builder.field(9),
-                builder.field(10),
-                builder.field(0),
-                builder.field(1),
-                builder.field(2)
-            )
-            .build();
-            
-        var runner = CalciteTester.loadRule(org.qed.Backends.Calcite.Generated.JoinCommute.Config.DEFAULT.toRule(), 1);
-        tester.verify(runner, before, after);
+    private static JoinCommute rule() {
+        return new JoinCommute();
     }
 
     public static void main(String[] args) {

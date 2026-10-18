@@ -1,58 +1,46 @@
 package org.qed.Backends.Calcite.Tests;
 
-import kala.collection.Seq;
-import kala.tuple.Tuple;
 import org.qed.Backends.Calcite.CalciteTester;
-import org.qed.RelType;
+import org.qed.RRuleInstances.AggregateExtractProject;
 import org.qed.RuleBuilder;
 
 public class AggregateExtractProjectTest {
-
     public static void runTest() {
-        var tester = new CalciteTester();
+        var rule = new AggregateExtractProject();
+        RuleChecks.rewritesPattern(rule);
+        RuleChecks.rewritesConcretePredicates(rule);
+        RuleChecks.rejectsNearMisses(rule);
+
         var builder = RuleBuilder.create();
-        
-        var empTable = builder.createQedTable(Seq.of(
-            Tuple.of(RelType.fromString("INTEGER", true), false),  // EMPNO (index 0)
-            Tuple.of(RelType.fromString("VARCHAR", true), false),  // ENAME (index 1)
-            Tuple.of(RelType.fromString("VARCHAR", true), false),  // JOB (index 2)
-            Tuple.of(RelType.fromString("INTEGER", true), false),  // MGR (index 3)
-            Tuple.of(RelType.fromString("DATE", true), false),     // HIREDATE (index 4)
-            Tuple.of(RelType.fromString("DECIMAL", true), false),  // SAL (index 5)
-            Tuple.of(RelType.fromString("DECIMAL", true), false),  // COMM (index 6)
-            Tuple.of(RelType.fromString("INTEGER", true), false)   // DEPTNO (index 7)
-        ));
-        builder.addTable(empTable);
-        
-        var empScan = builder.scan(empTable.getName()).build();
+        var a = RuleChecks.table(builder, 1, false);
+        var b = RuleChecks.table(builder, 1, false);
+        var c = RuleChecks.table(builder, 1, false);
+        var beforeBuilder = RuleChecks.ruleBuilder(builder);
+        var before = beforeBuilder.scan(a).scan(b).join(org.apache.calcite.rel.core.JoinRelType.INNER,
+                beforeBuilder.literal(true)).scan(c).join(org.apache.calcite.rel.core.JoinRelType.INNER,
+                beforeBuilder.literal(true)).aggregate(beforeBuilder.groupKey(beforeBuilder.field(0)),
+                beforeBuilder.aggregateCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.SUM,
+                        false, null, "EXPR$0", beforeBuilder.field(1))).build();
+        var expectedBuilder = RuleChecks.ruleBuilder(builder);
+        var expected = expectedBuilder.scan(a).scan(b).join(org.apache.calcite.rel.core.JoinRelType.INNER,
+                expectedBuilder.literal(true)).scan(c).join(org.apache.calcite.rel.core.JoinRelType.INNER,
+                expectedBuilder.literal(true)).project(expectedBuilder.field(0), expectedBuilder.field(1))
+                .aggregate(expectedBuilder.groupKey(expectedBuilder.field(0)),
+                        expectedBuilder.aggregateCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.SUM,
+                                false, null, "EXPR$0", expectedBuilder.field(1))).build();
+        RuleChecks.rewrites(rule, before, expected);
 
-        var before = builder
-            .push(empScan)
-            .aggregate(
-                builder.groupKey(builder.field(0), builder.field(7)), // Group by EMPNO, DEPTNO
-                builder.sum(builder.field(5))  // SUM(SAL)
-            )
-            .build();
-
-        var after = builder
-            .push(empScan)
-            .project(
-                builder.field(0),  // DEPTNO -> X (position 0 in projection)
-                builder.field(5),  // EMPNO -> Y (position 1 in projection)  
-                builder.field(7)   // SAL -> Z (position 2 in projection)
-            )
-            .aggregate(
-                builder.groupKey(builder.field(0), builder.field(2)), // Group by X, Y
-                builder.sum(builder.field(1))  // SUM(Z)
-            )
-            .build();
-            
-        var runner = CalciteTester.loadRule(org.qed.Backends.Calcite.Generated.AggregateExtractProject.Config.DEFAULT.toRule());
-        tester.verify(runner, before, after);
+        var nearMissBuilder = RuleChecks.ruleBuilder(builder);
+        var nearMiss = nearMissBuilder.scan(a).scan(b).join(org.apache.calcite.rel.core.JoinRelType.LEFT,
+                nearMissBuilder.literal(true)).scan(c).join(org.apache.calcite.rel.core.JoinRelType.INNER,
+                nearMissBuilder.literal(true)).aggregate(nearMissBuilder.groupKey(nearMissBuilder.field(0)),
+                nearMissBuilder.aggregateCall(org.apache.calcite.sql.fun.SqlStdOperatorTable.SUM,
+                        false, null, "EXPR$0", nearMissBuilder.field(1))).build();
+        RuleChecks.doesNotApply(rule, nearMiss);
     }
 
     public static void main(String[] args) {
-        System.out.println("Running AggregateExtractProject comprehensive test...");
+        System.out.println("Running AggregateExtractProject test...");
         runTest();
     }
 }

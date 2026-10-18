@@ -1,0 +1,168 @@
+{
+  "name" : "MarkToSemiOrAntiJoin",
+  "from" : {
+    "op" : "project",
+    "input" : {
+      "op" : "filter",
+      "input" : {
+        "op" : "set",
+        "kind" : "union",
+        "all" : true,
+        "inputs" : [ {
+          "op" : "project",
+          "input" : {
+            "op" : "join",
+            "type" : "semi",
+            "left" : {
+              "op" : "scan",
+              "name" : "L",
+              "arity" : 1,
+              "id" : "r0"
+            },
+            "right" : {
+              "op" : "scan",
+              "name" : "R",
+              "arity" : 1,
+              "id" : "r1"
+            },
+            "cond" : {
+              "op" : "pred",
+              "name" : "cond",
+              "args" : [ {
+                "op" : "row",
+                "rels" : [ "r0", "r1" ]
+              } ]
+            },
+            "id" : "r2"
+          },
+          "exprs" : [ {
+            "op" : "joinfield",
+            "ordinal" : 0,
+            "left" : "r0",
+            "right" : "r1"
+          }, {
+            "op" : "true"
+          } ],
+          "id" : "r3"
+        }, {
+          "op" : "project",
+          "input" : {
+            "op" : "join",
+            "type" : "anti",
+            "left" : {
+              "op" : "scan",
+              "name" : "L",
+              "arity" : 1,
+              "id" : "r0"
+            },
+            "right" : {
+              "op" : "scan",
+              "name" : "R",
+              "arity" : 1,
+              "id" : "r1"
+            },
+            "cond" : {
+              "op" : "pred",
+              "name" : "cond",
+              "args" : [ {
+                "op" : "row",
+                "rels" : [ "r0", "r1" ]
+              } ]
+            },
+            "id" : "r4"
+          },
+          "exprs" : [ {
+            "op" : "joinfield",
+            "ordinal" : 0,
+            "left" : "r0",
+            "right" : "r1"
+          }, {
+            "op" : "false"
+          } ],
+          "id" : "r5"
+        } ],
+        "id" : "r6"
+      },
+      "cond" : {
+        "op" : "and",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r6"
+        }, {
+          "op" : "pred",
+          "name" : "P",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r6"
+          } ]
+        } ]
+      },
+      "id" : "r7"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "p",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r6"
+      } ]
+    } ],
+    "id" : "r8"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "filter",
+      "input" : {
+        "op" : "join",
+        "type" : "semi",
+        "left" : {
+          "op" : "scan",
+          "name" : "L",
+          "arity" : 1,
+          "id" : "r0"
+        },
+        "right" : {
+          "op" : "scan",
+          "name" : "R",
+          "arity" : 1,
+          "id" : "r1"
+        },
+        "cond" : {
+          "op" : "pred",
+          "name" : "cond",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0", "r1" ]
+          } ]
+        },
+        "id" : "r2"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "P",
+        "args" : [ {
+          "op" : "joinfield",
+          "ordinal" : 0,
+          "left" : "r0",
+          "right" : "r1"
+        } ]
+      },
+      "id" : "r9"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "p",
+      "args" : [ {
+        "op" : "joinfield",
+        "ordinal" : 0,
+        "left" : "r0",
+        "right" : "r1"
+      } ]
+    } ],
+    "id" : "r10"
+  }
+}

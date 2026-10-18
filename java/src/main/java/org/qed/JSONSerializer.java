@@ -74,7 +74,7 @@ public record JSONSerializer(Env env) {
                     array(qedTable.getColumnTypes().map(JSONSerializer::type)), "nullable",
                     array(qedTable.getColumnTypes().map(type -> bool(type.isNullable()))), "key",
                     array(Seq.from(qedTable.getKeys().map(key -> array(Seq.from(key).map(JSONSerializer::integer))))),
-                    "guaranteed", array(qedTable.getConstraints().map(visitor::serialize).toImmutableSeq())));
+                    "guaranteed", array(qedTable.getConstraints().map(visitor::serialize).toSeq())));
         }));
 
         return object(Map.of("schemas", schemas, "queries", queries, "help", helps));
@@ -171,7 +171,7 @@ public record JSONSerializer(Env env) {
 
         private record Env(int lvl, ImmutableMap<CorrelationId, Integer> globals, MutableList<RelOptTable> tables) {
             Env recorded(Set<CorrelationId> ids) {
-                return new Env(lvl, Seq.from(ids).foldLeft(globals, (g, id) -> g.putted(id, lvl)), tables);
+                return new Env(lvl, Seq.from(ids).foldLeft(globals, (g, id) -> g.updated(id, lvl)), tables);
             }
 
             Env lifted(int d) {

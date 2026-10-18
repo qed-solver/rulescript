@@ -1,0 +1,38 @@
+{
+  "name" : "MergeProjectWithValues",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    }, {
+      "op" : "int",
+      "value" : 3
+    } ],
+    "input" : {
+      "op" : "values",
+      "rows" : [ [ {
+        "op" : "int",
+        "value" : 1
+      }, {
+        "op" : "int",
+        "value" : 2
+      } ] ],
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "values",
+    "rows" : [ [ {
+      "op" : "int",
+      "value" : 1
+    }, {
+      "op" : "int",
+      "value" : 3
+    } ] ],
+    "id" : "r2"
+  }
+}

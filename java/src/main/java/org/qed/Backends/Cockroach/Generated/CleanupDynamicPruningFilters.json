@@ -1,0 +1,82 @@
+{
+  "name" : "CleanupDynamicPruningFilters",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "dpp",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "pred",
+        "name" : "extra",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r2" ]
+        } ]
+      } ]
+    },
+    "left" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "pred",
+        "name" : "dpp",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "input" : {
+        "op" : "scan",
+        "name" : "L",
+        "id" : "r0"
+      },
+      "id" : "r3"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "R",
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "inner",
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "dpp",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "pred",
+        "name" : "extra",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r4" ]
+        } ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "id" : "r0"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "R",
+      "id" : "r1"
+    },
+    "id" : "r4"
+  }
+}

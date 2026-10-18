@@ -1,0 +1,14 @@
+{
+  "name" : "UnionEliminator",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "scan",
+    "name" : "Input",
+    "id" : "r0"
+  },
+  "to" : {
+    "op" : "scan",
+    "name" : "Input",
+    "id" : "r0"
+  }
+}

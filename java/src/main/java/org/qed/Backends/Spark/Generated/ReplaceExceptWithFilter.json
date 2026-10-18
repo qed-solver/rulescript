@@ -1,0 +1,143 @@
+{
+  "name" : "ReplaceExceptWithFilter",
+  "from" : {
+    "op" : "set",
+    "kind" : "except",
+    "all" : false,
+    "inputs" : [ {
+      "op" : "filter",
+      "input" : {
+        "op" : "scan",
+        "name" : "Base",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "P_L",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "id" : "r1"
+    }, {
+      "op" : "filter",
+      "input" : {
+        "op" : "scan",
+        "name" : "Base",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "P_R",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "id" : "r2"
+    } ],
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "set",
+    "kind" : "intersect",
+    "all" : false,
+    "inputs" : [ {
+      "op" : "filter",
+      "input" : {
+        "op" : "filter",
+        "input" : {
+          "op" : "scan",
+          "name" : "Base",
+          "arity" : 1,
+          "id" : "r0"
+        },
+        "cond" : {
+          "op" : "pred",
+          "name" : "P_L",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        },
+        "id" : "r1"
+      },
+      "cond" : {
+        "op" : "or",
+        "args" : [ {
+          "op" : "not",
+          "arg" : {
+            "op" : "pred",
+            "name" : "P_R",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r0" ]
+            } ]
+          }
+        }, {
+          "op" : "scalar",
+          "operator" : "IS NULL",
+          "args" : [ {
+            "op" : "pred",
+            "name" : "P_R",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r0" ]
+            } ]
+          } ]
+        } ]
+      },
+      "id" : "r4"
+    }, {
+      "op" : "filter",
+      "input" : {
+        "op" : "filter",
+        "input" : {
+          "op" : "scan",
+          "name" : "Base",
+          "arity" : 1,
+          "id" : "r0"
+        },
+        "cond" : {
+          "op" : "pred",
+          "name" : "P_L",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r0" ]
+          } ]
+        },
+        "id" : "r1"
+      },
+      "cond" : {
+        "op" : "or",
+        "args" : [ {
+          "op" : "not",
+          "arg" : {
+            "op" : "pred",
+            "name" : "P_R",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r0" ]
+            } ]
+          }
+        }, {
+          "op" : "scalar",
+          "operator" : "IS NULL",
+          "args" : [ {
+            "op" : "pred",
+            "name" : "P_R",
+            "args" : [ {
+              "op" : "row",
+              "rels" : [ "r0" ]
+            } ]
+          } ]
+        } ]
+      },
+      "id" : "r4"
+    } ],
+    "id" : "r5"
+  }
+}

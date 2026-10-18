@@ -1,0 +1,126 @@
+{
+  "name" : "AggregateExtractProject",
+  "from" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "left" : {
+        "op" : "join",
+        "type" : "inner",
+        "left" : {
+          "op" : "scan",
+          "name" : "A",
+          "arity" : 1,
+          "id" : "r0"
+        },
+        "right" : {
+          "op" : "scan",
+          "name" : "B",
+          "arity" : 1,
+          "id" : "r1"
+        },
+        "cond" : {
+          "op" : "true"
+        },
+        "id" : "r3"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "C",
+        "arity" : 1,
+        "id" : "r2"
+      },
+      "cond" : {
+        "op" : "true"
+      },
+      "id" : "r4"
+    },
+    "groups" : [ {
+      "op" : "joinfield",
+      "ordinal" : 0,
+      "left" : "r3",
+      "right" : "r2"
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "f",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "joinfield",
+        "ordinal" : 1,
+        "left" : "r3",
+        "right" : "r2"
+      } ]
+    } ],
+    "id" : "r5"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "project",
+      "input" : {
+        "op" : "join",
+        "type" : "inner",
+        "left" : {
+          "op" : "join",
+          "type" : "inner",
+          "left" : {
+            "op" : "scan",
+            "name" : "A",
+            "arity" : 1,
+            "id" : "r0"
+          },
+          "right" : {
+            "op" : "scan",
+            "name" : "B",
+            "arity" : 1,
+            "id" : "r1"
+          },
+          "cond" : {
+            "op" : "true"
+          },
+          "id" : "r3"
+        },
+        "right" : {
+          "op" : "scan",
+          "name" : "C",
+          "arity" : 1,
+          "id" : "r2"
+        },
+        "cond" : {
+          "op" : "true"
+        },
+        "id" : "r4"
+      },
+      "exprs" : [ {
+        "op" : "joinfield",
+        "ordinal" : 0,
+        "left" : "r3",
+        "right" : "r2"
+      }, {
+        "op" : "joinfield",
+        "ordinal" : 1,
+        "left" : "r3",
+        "right" : "r2"
+      } ],
+      "id" : "r6"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r6"
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "f",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r6"
+      } ]
+    } ],
+    "id" : "r7"
+  }
+}

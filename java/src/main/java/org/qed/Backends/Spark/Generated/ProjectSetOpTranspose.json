@@ -1,0 +1,73 @@
+{
+  "name" : "ProjectSetOpTranspose",
+  "from" : {
+    "op" : "project",
+    "input" : {
+      "op" : "set",
+      "kind" : "union",
+      "all" : true,
+      "inputs" : [ {
+        "op" : "scan",
+        "name" : "L",
+        "arity" : 1,
+        "id" : "r0"
+      }, {
+        "op" : "scan",
+        "name" : "R",
+        "arity" : 1,
+        "id" : "r1"
+      } ],
+      "id" : "r2"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "F",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r2" ]
+      } ]
+    } ],
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "set",
+    "kind" : "union",
+    "all" : true,
+    "inputs" : [ {
+      "op" : "project",
+      "input" : {
+        "op" : "scan",
+        "name" : "L",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "exprs" : [ {
+        "op" : "proj",
+        "name" : "F",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ],
+      "id" : "r4"
+    }, {
+      "op" : "project",
+      "input" : {
+        "op" : "scan",
+        "name" : "R",
+        "arity" : 1,
+        "id" : "r1"
+      },
+      "exprs" : [ {
+        "op" : "proj",
+        "name" : "F",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r1" ]
+        } ]
+      } ],
+      "id" : "r5"
+    } ],
+    "id" : "r6"
+  }
+}

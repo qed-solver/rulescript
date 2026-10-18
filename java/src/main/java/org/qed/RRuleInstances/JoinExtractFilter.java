@@ -2,13 +2,16 @@ package org.qed.RRuleInstances;
 
 import org.apache.calcite.rel.core.JoinRelType;
 import org.qed.RelRN;
-import org.qed.RexRN;
 import org.qed.RRule;
+import org.qed.RexRN;
 
+// ORIGIN: Calcite
+// SCOPE: FULL
 public record JoinExtractFilter() implements RRule {
-    static final RelRN left = RelRN.scan("Left", "Left_Type");
-    static final RelRN right = RelRN.scan("Right", "Right_Type");
-    static final RexRN joinCond = left.joinPred("join", right);
+    static final RelRN left = RelRN.scan("L", "L_Type");
+    static final RelRN right = RelRN.scan("R", "R_Type");
+
+    static final RexRN joinCond = left.joinPred("join_cond", right);
 
     @Override
     public RelRN before() {

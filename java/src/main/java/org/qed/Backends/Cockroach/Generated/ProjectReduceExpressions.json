@@ -1,0 +1,38 @@
+{
+  "name" : "ProjectReduceExpressions",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "and_scalar",
+      "args" : [ {
+        "op" : "false"
+      }, {
+        "op" : "pred",
+        "name" : "P",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ]
+    } ],
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "false"
+    } ],
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "id" : "r0"
+    },
+    "id" : "r2"
+  }
+}

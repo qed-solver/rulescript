@@ -1,0 +1,38 @@
+{
+  "name" : "FoldNonNullIsNotNull",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "scalar",
+      "operator" : "IS NOT NULL",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ]
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 1,
+      "non_null" : [ 0 ],
+      "id" : "r0"
+    },
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "true"
+    },
+    "input" : {
+      "op" : "scan",
+      "name" : "Source",
+      "arity" : 1,
+      "non_null" : [ 0 ],
+      "id" : "r0"
+    },
+    "id" : "r2"
+  }
+}

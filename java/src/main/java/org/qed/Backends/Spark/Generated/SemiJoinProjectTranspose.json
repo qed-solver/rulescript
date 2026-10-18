@@ -1,0 +1,140 @@
+{
+  "name" : "SemiJoinProjectTranspose",
+  "from" : {
+    "op" : "join",
+    "type" : "semi",
+    "left" : {
+      "op" : "project",
+      "input" : {
+        "op" : "scan",
+        "name" : "X",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "exprs" : [ {
+        "op" : "proj",
+        "name" : "P0",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "proj",
+        "name" : "P1",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ],
+      "id" : "r2"
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "Y",
+      "arity" : 2,
+      "id" : "r1"
+    },
+    "cond" : {
+      "op" : "pred",
+      "name" : "C",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r2", "r1" ]
+      } ]
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "project",
+    "input" : {
+      "op" : "join",
+      "type" : "semi",
+      "left" : {
+        "op" : "scan",
+        "name" : "X",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "Y",
+        "arity" : 2,
+        "id" : "r1"
+      },
+      "cond" : {
+        "op" : "pred",
+        "name" : "C",
+        "args" : [ {
+          "op" : "proj",
+          "name" : "P0",
+          "args" : [ {
+            "op" : "joinfield",
+            "ordinal" : 0,
+            "left" : "r0",
+            "right" : "r1"
+          }, {
+            "op" : "joinfield",
+            "ordinal" : 1,
+            "left" : "r0",
+            "right" : "r1"
+          } ]
+        }, {
+          "op" : "proj",
+          "name" : "P1",
+          "args" : [ {
+            "op" : "joinfield",
+            "ordinal" : 0,
+            "left" : "r0",
+            "right" : "r1"
+          }, {
+            "op" : "joinfield",
+            "ordinal" : 1,
+            "left" : "r0",
+            "right" : "r1"
+          } ]
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 2,
+          "left" : "r0",
+          "right" : "r1"
+        }, {
+          "op" : "joinfield",
+          "ordinal" : 3,
+          "left" : "r0",
+          "right" : "r1"
+        } ]
+      },
+      "id" : "r4"
+    },
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "P0",
+      "args" : [ {
+        "op" : "joinfield",
+        "ordinal" : 0,
+        "left" : "r0",
+        "right" : "r1"
+      }, {
+        "op" : "joinfield",
+        "ordinal" : 1,
+        "left" : "r0",
+        "right" : "r1"
+      } ]
+    }, {
+      "op" : "proj",
+      "name" : "P1",
+      "args" : [ {
+        "op" : "joinfield",
+        "ordinal" : 0,
+        "left" : "r0",
+        "right" : "r1"
+      }, {
+        "op" : "joinfield",
+        "ordinal" : 1,
+        "left" : "r0",
+        "right" : "r1"
+      } ]
+    } ],
+    "id" : "r5"
+  }
+}

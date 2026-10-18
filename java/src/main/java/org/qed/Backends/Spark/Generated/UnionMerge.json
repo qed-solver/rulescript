@@ -1,0 +1,63 @@
+{
+  "name" : "UnionMerge",
+  "from" : {
+    "op" : "set",
+    "kind" : "union",
+    "all" : true,
+    "inputs" : [ {
+      "op" : "scan",
+      "name" : "A",
+      "arity" : 1,
+      "id" : "r0"
+    }, {
+      "op" : "set",
+      "kind" : "union",
+      "all" : true,
+      "inputs" : [ {
+        "op" : "scan",
+        "name" : "B",
+        "arity" : 1,
+        "id" : "r1"
+      }, {
+        "op" : "scan",
+        "name" : "C",
+        "arity" : 1,
+        "id" : "r2"
+      } ],
+      "id" : "r4"
+    }, {
+      "op" : "scan",
+      "name" : "D",
+      "arity" : 1,
+      "id" : "r3"
+    } ],
+    "id" : "r5"
+  },
+  "to" : {
+    "op" : "set",
+    "kind" : "union",
+    "all" : true,
+    "inputs" : [ {
+      "op" : "scan",
+      "name" : "A",
+      "arity" : 1,
+      "id" : "r0"
+    }, {
+      "op" : "scan",
+      "name" : "B",
+      "arity" : 1,
+      "id" : "r1"
+    }, {
+      "op" : "scan",
+      "name" : "C",
+      "arity" : 1,
+      "id" : "r2"
+    }, {
+      "op" : "scan",
+      "name" : "D",
+      "arity" : 1,
+      "id" : "r3"
+    } ],
+    "id" : "r6"
+  }
+}

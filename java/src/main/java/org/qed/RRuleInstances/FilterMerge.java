@@ -1,9 +1,11 @@
 package org.qed.RRuleInstances;
 
+import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
-import org.qed.RRule;
 
+// ORIGIN: Calcite
+// SCOPE: FULL
 public record FilterMerge() implements RRule {
     static final RelRN source = RelRN.scan("Source", "Source_Type");
     static final RexRN inner = source.pred("inner");

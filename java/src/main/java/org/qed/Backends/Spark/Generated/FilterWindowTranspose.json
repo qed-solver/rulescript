@@ -1,0 +1,101 @@
+{
+  "name" : "FilterWindowTranspose",
+  "from" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "aggregate",
+      "input" : {
+        "op" : "scan",
+        "name" : "B",
+        "arity" : 2,
+        "id" : "r0"
+      },
+      "groups" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ],
+      "aggs" : [ {
+        "op" : "agg",
+        "name" : "f",
+        "distinct" : false,
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        } ]
+      } ],
+      "id" : "r1"
+    },
+    "cond" : {
+      "op" : "and",
+      "args" : [ {
+        "op" : "pred",
+        "name" : "P",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        } ]
+      }, {
+        "op" : "pred",
+        "name" : "Q",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r1" ]
+        } ]
+      } ]
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "filter",
+    "input" : {
+      "op" : "aggregate",
+      "input" : {
+        "op" : "filter",
+        "input" : {
+          "op" : "scan",
+          "name" : "B",
+          "arity" : 2,
+          "id" : "r0"
+        },
+        "cond" : {
+          "op" : "pred",
+          "name" : "P",
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 0,
+            "of" : "r0"
+          } ]
+        },
+        "id" : "r3"
+      },
+      "groups" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ],
+      "aggs" : [ {
+        "op" : "agg",
+        "name" : "f",
+        "distinct" : false,
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        } ]
+      } ],
+      "id" : "r4"
+    },
+    "cond" : {
+      "op" : "pred",
+      "name" : "Q",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r1" ]
+      } ]
+    },
+    "id" : "r5"
+  }
+}

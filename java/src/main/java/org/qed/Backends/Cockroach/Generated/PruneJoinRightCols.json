@@ -1,0 +1,102 @@
+{
+  "name" : "PruneJoinRightCols",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "G",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r2"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r2"
+      } ]
+    } ],
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "pred",
+        "name" : "C",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r2"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r2"
+        } ]
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "L",
+        "id" : "r0",
+        "arity" : 1
+      },
+      "right" : {
+        "op" : "scan",
+        "name" : "R",
+        "arity" : 2,
+        "id" : "r1"
+      },
+      "id" : "r2"
+    },
+    "id" : "r3"
+  },
+  "to" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "proj",
+      "name" : "G",
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r5"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r5"
+      } ]
+    } ],
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "pred",
+        "name" : "C",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r5" ]
+        } ]
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "L",
+        "id" : "r0",
+        "arity" : 1
+      },
+      "right" : {
+        "op" : "project",
+        "exprs" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r1"
+        } ],
+        "input" : {
+          "op" : "scan",
+          "name" : "R",
+          "arity" : 2,
+          "id" : "r1"
+        },
+        "id" : "r4"
+      },
+      "id" : "r5"
+    },
+    "id" : "r6"
+  }
+}

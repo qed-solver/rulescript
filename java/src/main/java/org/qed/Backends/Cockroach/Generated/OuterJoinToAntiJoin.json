@@ -1,0 +1,78 @@
+{
+  "name" : "OuterJoinToAntiJoin",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r3"
+    } ],
+    "input" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "scalar",
+        "operator" : "IS NULL",
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r2"
+        } ]
+      },
+      "input" : {
+        "op" : "join",
+        "type" : "left",
+        "cond" : {
+          "op" : "pred",
+          "name" : "cond",
+          "args" : [ {
+            "op" : "row",
+            "rels" : [ "r2" ]
+          } ]
+        },
+        "left" : {
+          "op" : "scan",
+          "name" : "L",
+          "id" : "r0",
+          "arity" : 1
+        },
+        "right" : {
+          "op" : "scan",
+          "name" : "R",
+          "arity" : 1,
+          "non_null" : [ 0 ],
+          "id" : "r1"
+        },
+        "id" : "r2"
+      },
+      "id" : "r3"
+    },
+    "id" : "r4"
+  },
+  "to" : {
+    "op" : "join",
+    "type" : "anti",
+    "cond" : {
+      "op" : "pred",
+      "name" : "cond",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r5" ]
+      } ]
+    },
+    "left" : {
+      "op" : "scan",
+      "name" : "L",
+      "id" : "r0",
+      "arity" : 1
+    },
+    "right" : {
+      "op" : "scan",
+      "name" : "R",
+      "arity" : 1,
+      "non_null" : [ 0 ],
+      "id" : "r1"
+    },
+    "id" : "r5"
+  }
+}

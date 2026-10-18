@@ -1,0 +1,38 @@
+{
+  "name" : "EliminateZeroCardSelect",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "f2",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r1" ]
+      } ]
+    },
+    "input" : {
+      "op" : "filter",
+      "cond" : {
+        "op" : "pred",
+        "name" : "f1",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      },
+      "input" : {
+        "op" : "empty",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "empty",
+    "arity" : 1,
+    "id" : "r0"
+  }
+}

@@ -1,0 +1,116 @@
+{
+  "name" : "TryDecorrelateGroupBy",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "on",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r2" ]
+      } ]
+    },
+    "input" : {
+      "op" : "join",
+      "type" : "inner",
+      "cond" : {
+        "op" : "true"
+      },
+      "left" : {
+        "op" : "scan",
+        "name" : "L",
+        "unique" : true,
+        "arity" : 1,
+        "non_null" : [ 0 ],
+        "id" : "r0"
+      },
+      "right" : {
+        "op" : "aggregate",
+        "groups" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r1"
+        } ],
+        "aggs" : [ {
+          "op" : "agg",
+          "name" : "f",
+          "distinct" : false,
+          "args" : [ {
+            "op" : "field",
+            "ordinal" : 1,
+            "of" : "r1"
+          } ]
+        } ],
+        "input" : {
+          "op" : "scan",
+          "name" : "R",
+          "arity" : 2,
+          "non_null" : [ 0, 1 ],
+          "id" : "r1"
+        },
+        "id" : "r3"
+      },
+      "id" : "r2"
+    },
+    "id" : "r4"
+  },
+  "to" : {
+    "op" : "filter",
+    "cond" : {
+      "op" : "pred",
+      "name" : "on",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r5" ]
+      } ]
+    },
+    "input" : {
+      "op" : "aggregate",
+      "groups" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r6"
+      }, {
+        "op" : "field",
+        "ordinal" : 1,
+        "of" : "r6"
+      } ],
+      "aggs" : [ {
+        "op" : "agg",
+        "name" : "f",
+        "distinct" : false,
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 2,
+          "of" : "r6"
+        } ]
+      } ],
+      "input" : {
+        "op" : "join",
+        "type" : "inner",
+        "cond" : {
+          "op" : "true"
+        },
+        "left" : {
+          "op" : "scan",
+          "name" : "L",
+          "unique" : true,
+          "arity" : 1,
+          "non_null" : [ 0 ],
+          "id" : "r0"
+        },
+        "right" : {
+          "op" : "scan",
+          "name" : "R",
+          "arity" : 2,
+          "non_null" : [ 0, 1 ],
+          "id" : "r1"
+        },
+        "id" : "r6"
+      },
+      "id" : "r5"
+    },
+    "id" : "r7"
+  }
+}

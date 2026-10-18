@@ -1,8 +1,0 @@
-[PruneEmptyProject, Normalize]
-(Project
-    $input_0:* & (HasZeroRows $input_0)
-    $projections:*
-    $passthrough:*
-)
-=>
-(ConstructEmptyValues (UnionCols (ProjectionCols $projections) $passthrough))

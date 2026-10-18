@@ -1,0 +1,97 @@
+{
+  "name" : "PushAggDistinctIntoGroupBy",
+  "from" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "scan",
+      "name" : "S",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "groups" : [ {
+      "op" : "group_key",
+      "name" : "k1",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0" ]
+      } ]
+    }, {
+      "op" : "group_key",
+      "name" : "k2",
+      "args" : [ {
+        "op" : "row",
+        "rels" : [ "r0" ]
+      } ]
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "f",
+      "distinct" : true,
+      "args" : [ {
+        "op" : "group_key",
+        "name" : "x",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ]
+    } ],
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "aggregate",
+      "input" : {
+        "op" : "scan",
+        "name" : "S",
+        "arity" : 1,
+        "id" : "r0"
+      },
+      "groups" : [ {
+        "op" : "group_key",
+        "name" : "k1",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "group_key",
+        "name" : "k2",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      }, {
+        "op" : "group_key",
+        "name" : "x",
+        "args" : [ {
+          "op" : "row",
+          "rels" : [ "r0" ]
+        } ]
+      } ],
+      "aggs" : [ ],
+      "id" : "r2"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r2"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r2"
+    } ],
+    "aggs" : [ {
+      "op" : "agg",
+      "name" : "f",
+      "distinct" : false,
+      "args" : [ {
+        "op" : "field",
+        "ordinal" : 2,
+        "of" : "r2"
+      } ]
+    } ],
+    "id" : "r3"
+  }
+}

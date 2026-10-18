@@ -1,0 +1,123 @@
+{
+  "name" : "PruneGroupByCols",
+  "mode" : "normalize",
+  "from" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r1"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r1"
+    }, {
+      "op" : "field",
+      "ordinal" : 2,
+      "of" : "r1"
+    } ],
+    "input" : {
+      "op" : "aggregate",
+      "groups" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r0"
+      } ],
+      "aggs" : [ {
+        "op" : "agg",
+        "name" : "f",
+        "distinct" : false,
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        } ]
+      }, {
+        "op" : "agg",
+        "name" : "g",
+        "distinct" : false,
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 2,
+          "of" : "r0"
+        } ]
+      } ],
+      "input" : {
+        "op" : "scan",
+        "name" : "S",
+        "arity" : 4,
+        "id" : "r0"
+      },
+      "id" : "r1"
+    },
+    "id" : "r2"
+  },
+  "to" : {
+    "op" : "project",
+    "exprs" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r4"
+    }, {
+      "op" : "field",
+      "ordinal" : 1,
+      "of" : "r4"
+    }, {
+      "op" : "field",
+      "ordinal" : 2,
+      "of" : "r4"
+    } ],
+    "input" : {
+      "op" : "aggregate",
+      "groups" : [ {
+        "op" : "field",
+        "ordinal" : 0,
+        "of" : "r3"
+      } ],
+      "aggs" : [ {
+        "op" : "agg",
+        "name" : "f",
+        "distinct" : false,
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r3"
+        } ]
+      }, {
+        "op" : "agg",
+        "name" : "g",
+        "distinct" : false,
+        "args" : [ {
+          "op" : "field",
+          "ordinal" : 2,
+          "of" : "r3"
+        } ]
+      } ],
+      "input" : {
+        "op" : "project",
+        "exprs" : [ {
+          "op" : "field",
+          "ordinal" : 0,
+          "of" : "r0"
+        }, {
+          "op" : "field",
+          "ordinal" : 1,
+          "of" : "r0"
+        }, {
+          "op" : "field",
+          "ordinal" : 2,
+          "of" : "r0"
+        } ],
+        "input" : {
+          "op" : "scan",
+          "name" : "S",
+          "arity" : 4,
+          "id" : "r0"
+        },
+        "id" : "r3"
+      },
+      "id" : "r4"
+    },
+    "id" : "r5"
+  }
+}

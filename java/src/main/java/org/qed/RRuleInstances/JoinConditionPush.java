@@ -3,54 +3,39 @@ package org.qed.RRuleInstances;
 import kala.collection.Seq;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.sql.SqlOperator;
+import org.qed.RRule;
 import org.qed.RelRN;
 import org.qed.RexRN;
-import org.qed.RRule;
 import org.qed.RuleBuilder;
 
+// ORIGIN: Calcite
+// SCOPE: PARTIAL — INNER join with no filter above, single-column inputs, one left-only conjunct, one right-only conjunct and one cross conjunct
 public record JoinConditionPush() implements RRule {
-    static final RelRN left = RelRN.scan("Left", "Left_Type");
-    static final RelRN right = RelRN.scan("Right", "Right_Type");
-    
+    static final RelRN left = RelRN.scan("L", "L_Type");
+    static final RelRN right = RelRN.scan("R", "R_Type");
+
+    static final SqlOperator leftOp = RuleBuilder.create().genericPredicateOp("left_conj", true);
+    static final SqlOperator rightOp = RuleBuilder.create().genericPredicateOp("right_conj", true);
+    static final SqlOperator crossOp = RuleBuilder.create().genericPredicateOp("cross_conj", true);
+
+    static final RexRN lJoinRef = left.joinField(0, right);
+    static final RexRN rJoinRef = left.joinField(1, right);
+
+    static final RexRN leftJoinCond = new RexRN.Pred(leftOp, Seq.of(lJoinRef));
+    static final RexRN rightJoinCond = new RexRN.Pred(rightOp, Seq.of(rJoinRef));
+    static final RexRN crossCond = new RexRN.Pred(crossOp, Seq.of(lJoinRef, rJoinRef));
+
+    static final RexRN leftRowCond = left.field(0).pred(leftOp);
+    static final RexRN rightRowCond = right.field(0).pred(rightOp);
+
     @Override
     public RelRN before() {
-        SqlOperator joinOp = RuleBuilder.create().genericPredicateOp("joinCond", true);
-        RexRN crossTableCond = new RexRN.Pred(joinOp, Seq.of(
-            new RexRN.JoinField(0, left, right),   
-            new RexRN.JoinField(1, left, right)    
-        ));
-        SqlOperator leftOp = RuleBuilder.create().genericPredicateOp("leftCond", true);
-        RexRN leftOnlyCond = new RexRN.Pred(leftOp, Seq.of(
-            new RexRN.JoinField(0, left, right)    
-        ));
-        SqlOperator rightOp = RuleBuilder.create().genericPredicateOp("rightCond", true);
-        RexRN rightOnlyCond = new RexRN.Pred(rightOp, Seq.of(
-            new RexRN.JoinField(1, left, right)    
-        ));
-        return left.joinWithSeparateConds(JoinRelType.INNER, 
-            RexRN.and(crossTableCond, leftOnlyCond, rightOnlyCond), right);
+        return left.join(JoinRelType.INNER, RexRN.and(leftJoinCond, rightJoinCond, crossCond), right);
     }
-    
+
     @Override
     public RelRN after() {
-        SqlOperator joinOp = RuleBuilder.create().genericPredicateOp("joinCond", true);
-        RexRN crossTableCond = new RexRN.Pred(joinOp, Seq.of(
-            new RexRN.JoinField(0, left, right),   
-            new RexRN.JoinField(1, left, right)   
-        ));
-    
-        SqlOperator leftOp = RuleBuilder.create().genericPredicateOp("leftCond", true);
-        RexRN leftFilterCond = new RexRN.Pred(leftOp, Seq.of(
-            new RexRN.Field(0, left) 
-        ));
-        RelRN filteredLeft = left.filter(leftFilterCond);
-        
-        SqlOperator rightOp = RuleBuilder.create().genericPredicateOp("rightCond", true);
-        RexRN rightFilterCond = new RexRN.Pred(rightOp, Seq.of(
-            new RexRN.Field(0, right)  
-        ));
-        RelRN filteredRight = right.filter(rightFilterCond);
-        
-        return filteredLeft.joinWithPushedConds(JoinRelType.INNER, crossTableCond, filteredRight);
+        return left.filter(leftRowCond)
+                .join(JoinRelType.INNER, crossCond, right.filter(rightRowCond));
     }
 }

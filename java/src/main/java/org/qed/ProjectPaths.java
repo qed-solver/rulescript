@@ -2,10 +2,6 @@ package org.qed;
 
 import java.nio.file.Path;
 
-/**
- * Repo-relative paths for codegen and tests. Defaults to {@code user.dir} (run from repository root).
- * Optional override: {@code -Drulescript.basedir=/path}.
- */
 public final class ProjectPaths {
     private ProjectPaths() {}
 

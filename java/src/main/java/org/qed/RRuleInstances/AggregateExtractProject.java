@@ -1,23 +1,42 @@
 package org.qed.RRuleInstances;
 
-import org.qed.RelRN;
+import kala.collection.Seq;
+import org.apache.calcite.rel.core.JoinRelType;
 import org.qed.RRule;
+import org.qed.RelRN;
 import org.qed.RexRN;
 
+// ORIGIN: Calcite
+// SCOPE: PARTIAL — the aggregate's input is a three-column relation (three one-column scans inner-joined with true conditions), it has one plain-field group key and one plain non-distinct aggregate call over a second plain field, and a third column is unused (neither a group key nor an aggregate argument) so the extracted projection drops it.
 public record AggregateExtractProject() implements RRule {
-    static final RelRN source = RelRN.scan("Source", "Source_Type");
-    static final RexRN proj = source.proj("proj", "Project_Type");
+    static final RelRN scanA = RelRN.scan("A", "A_Type");
+    static final RelRN scanB = RelRN.scan("B", "B_Type");
+    static final RelRN scanC = RelRN.scan("C", "C_Type");
+    static final RelRN base =
+            scanA.join(JoinRelType.INNER, RexRN.trueLiteral(), scanB)
+                 .join(JoinRelType.INNER, RexRN.trueLiteral(), scanC);
+
+    static final RelRN beforeAgg = new RelRN.Aggregate(
+            base,
+            Seq.of(base.field(0)),
+            Seq.of(base.field(1).aggCall("f")));
+
+    static final RelRN project = base.project(Seq.of(
+            base.field(0),
+            base.field(1)));
+
+    static final RelRN afterAgg = new RelRN.Aggregate(
+            project,
+            Seq.of(project.field(0)),
+            Seq.of(project.field(1).aggCall("f")));
 
     @Override
     public RelRN before() {
-        return source.aggregate(
-            proj.groupBy("groupByName"),
-            proj.aggCall("aggName")
-        );
+        return beforeAgg;
     }
 
     @Override
     public RelRN after() {
-        return source.project(proj).aggregate("groupByName", "aggName");
+        return afterAgg;
     }
 }

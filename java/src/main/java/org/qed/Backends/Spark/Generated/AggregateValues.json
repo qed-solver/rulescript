@@ -1,0 +1,36 @@
+{
+  "name" : "AggregateValues",
+  "from" : {
+    "op" : "aggregate",
+    "input" : {
+      "op" : "scan",
+      "name" : "S",
+      "arity" : 1,
+      "id" : "r0"
+    },
+    "groups" : [ {
+      "op" : "field",
+      "ordinal" : 0,
+      "of" : "r0"
+    } ],
+    "aggs" : [ ],
+    "id" : "r1"
+  },
+  "to" : {
+    "op" : "set",
+    "kind" : "union",
+    "all" : false,
+    "inputs" : [ {
+      "op" : "scan",
+      "name" : "S",
+      "arity" : 1,
+      "id" : "r0"
+    }, {
+      "op" : "scan",
+      "name" : "S",
+      "arity" : 1,
+      "id" : "r0"
+    } ],
+    "id" : "r2"
+  }
+}
