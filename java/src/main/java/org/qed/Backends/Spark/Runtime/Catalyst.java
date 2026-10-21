@@ -55,7 +55,15 @@ final class Catalyst {
     }
 
     static LogicalPlan fresh(LogicalPlan plan) {
-        return fresh(plan, new java.util.HashMap<>());
+        if (renewable(plan)) return fresh(plan, new java.util.HashMap<>());
+        var self = new org.apache.spark.sql.catalyst.plans.logical.Join(plan, plan,
+                org.apache.spark.sql.catalyst.plans.Inner$.MODULE$, Option.<Expression>empty(),
+                org.apache.spark.sql.catalyst.plans.logical.JoinHint$.MODULE$.NONE());
+        return ((org.apache.spark.sql.catalyst.plans.logical.Join) org.apache.spark.sql.catalyst.analysis.DeduplicateRelations$.MODULE$.apply(self)).right();
+    }
+    private static boolean renewable(LogicalPlan plan) {
+        if (plan instanceof org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation) return true;
+        return (plan instanceof Filter || plan instanceof Project || plan instanceof Aggregate) && renewable(plan.children().head());
     }
 
     private static LogicalPlan fresh(LogicalPlan plan, Map<ExprId, Expression> renamed) {
